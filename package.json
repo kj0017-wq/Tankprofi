@@ -1,0 +1,16 @@
+{
+  "name": "tankprofi",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "emulators": "firebase emulators:start --project tankprofi",
+    "deploy": "firebase deploy --project tankprofi",
+    "serve:node": "node server.mjs",
+    "serve:python": "python server.py",
+    "check": "node --check public/assets/js/app.js && node --check public/assets/js/firebase-app.js && node --check functions/index.js && node --check server.mjs"
+  },
+  "devDependencies": {
+    "firebase-tools": "^13.29.3"
+  }
+}

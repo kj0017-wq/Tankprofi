@@ -1,0 +1,20 @@
+{
+  "name": "tankprofi-functions",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "serve": "firebase emulators:start --only functions,hosting,firestore",
+    "deploy": "firebase deploy --only functions,hosting,firestore:rules,firestore:indexes"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.1.2"
+  },
+  "devDependencies": {
+    "firebase-functions-test": "^3.4.1"
+  }
+}

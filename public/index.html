@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0b1f3a">
+    <title>Tankprofi</title>
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260620-iphone">
+</head>
+<body>
+    <div class="app-shell view-list" id="appShell">
+        <aside class="control-pane" aria-label="Suche und Ergebnisse">
+            <header class="brand-bar">
+                <div>
+                    <p class="eyebrow">Live Tankpreise</p>
+                    <h1>Tankprofi</h1>
+                </div>
+                <div class="header-actions">
+                    <span class="status-pill" id="statusPill">Bereit</span>
+                </div>
+            </header>
+
+            <section class="search-panel" aria-label="Suchfilter">
+                <div class="field-group autocomplete-wrap">
+                    <label class="sr-only" for="searchInput">Adresse, Ort oder PLZ</label>
+                    <div class="search-row">
+                        <input id="searchInput" type="search" autocomplete="off" placeholder="Adresse, Ort oder PLZ" inputmode="search">
+                        <button class="icon-button primary" id="searchButton" type="button" aria-label="Suchen" title="Suchen">⌕</button>
+                    </div>
+                    <div class="suggestions" id="suggestions" role="listbox"></div>
+                </div>
+
+                <button class="location-button" id="locationButton" type="button">
+                    <span aria-hidden="true">◎</span>
+                    Aktuellen Standort verwenden
+                </button>
+
+            </section>
+
+            <section class="result-summary" aria-live="polite">
+                <div>
+                    <strong id="resultCount">Keine Suche</strong>
+                    <span id="resultMeta">Waehle Standort und Kraftstoff.</span>
+                </div>
+                <div class="sort-toggle" aria-label="Sortierung">
+                    <button class="sort-toggle-button active" type="button" data-sort="price">Preis</button>
+                    <button class="sort-toggle-button" type="button" data-sort="distance">Entfernung</button>
+                </div>
+                <button class="text-button" id="refreshButton" type="button">Neu laden</button>
+            </section>
+
+            <div class="app-content">
+                <section class="map-pane" aria-label="Karte">
+                    <div id="map"></div>
+                    <div class="map-legend" aria-label="Marker Legende">
+                        <span><i class="dot cheap"></i>guenstig</span>
+                        <span><i class="dot mid"></i>mittel</span>
+                        <span><i class="dot high"></i>teuer</span>
+                        <span><i class="dot muted"></i>geschlossen</span>
+                    </div>
+                </section>
+
+                <main class="results" id="results" aria-label="Trefferliste"></main>
+
+                <section class="station-detail" id="stationDetail" aria-live="polite">
+                    <div class="empty-state">Tankstelle antippen, um Details zu sehen.</div>
+                </section>
+            </div>
+
+            <nav class="bottom-nav" aria-label="Hauptnavigation">
+                <button class="bottom-nav-button active" type="button" data-action="list">
+                    <span class="tab-icon" aria-hidden="true">☰</span>
+                    <span>Liste</span>
+                </button>
+                <button class="bottom-nav-button" type="button" data-action="map">
+                    <span class="tab-icon" aria-hidden="true">⌖</span>
+                    <span>Karte</span>
+                </button>
+                <button class="bottom-nav-button" type="button" data-action="favorites">
+                    <span class="tab-icon" aria-hidden="true">★</span>
+                    <span>Favoriten</span>
+                </button>
+                <button class="bottom-nav-button" type="button" data-action="settings">
+                    <span class="tab-icon" aria-hidden="true">⚙</span>
+                    <span>Einstellungen</span>
+                </button>
+            </nav>
+
+            <div class="settings-backdrop" id="settingsBackdrop"></div>
+            <section class="settings-box" id="settingsSheet" aria-label="Einstellungen">
+                <div class="settings-sheet-header">
+                    <strong>Einstellungen</strong>
+                    <button type="button" id="settingsCloseButton" aria-label="Einstellungen schliessen">×</button>
+                </div>
+                <div class="settings-body" id="settingsBody">
+                    <div class="filter-grid">
+                        <div class="field-group">
+                            <label for="radiusSelect">Radius</label>
+                            <select id="radiusSelect">
+                                <option value="2">2 km</option>
+                                <option value="5" selected>5 km</option>
+                                <option value="10">10 km</option>
+                                <option value="15">15 km</option>
+                                <option value="20">20 km</option>
+                                <option value="25">25 km</option>
+                            </select>
+                        </div>
+                        <div class="field-group">
+                            <label for="fuelSelect">Kraftstoff</label>
+                            <select id="fuelSelect">
+                                <option value="e10">E10</option>
+                                <option value="e5">E5</option>
+                                <option value="diesel">Diesel</option>
+                            </select>
+                        </div>
+                        <div class="field-group">
+                            <label for="limitSelect">Treffer</label>
+                            <select id="limitSelect">
+                                <option value="10">10</option>
+                                <option value="25" selected>25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
+                        <div class="field-group sort-field">
+                            <label for="brandSelect">Marke</label>
+                            <select id="brandSelect">
+                                <option value="all" selected>Alle Marken</option>
+                                <option value="aral">Aral</option>
+                                <option value="shell">Shell</option>
+                                <option value="esso">Esso</option>
+                                <option value="total">TotalEnergies</option>
+                                <option value="jet">Jet</option>
+                                <option value="hem">HEM</option>
+                                <option value="avia">Avia</option>
+                                <option value="star">Star</option>
+                                <option value="bft">BFT</option>
+                                <option value="agip">Agip / Eni</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="switch-row">
+                        <label class="switch-label">
+                            <input id="openOnly" type="checkbox" checked>
+                            <span>Nur offen</span>
+                        </label>
+                        <label class="switch-label">
+                            <input id="pricedOnly" type="checkbox" checked>
+                            <span>Aktuelle Preise</span>
+                        </label>
+                    </div>
+
+                    <section class="share-panel" aria-label="App weitergeben">
+                        <button class="share-toggle" id="shareToggleButton" type="button" aria-expanded="false">
+                            <span>QR / App teilen</span>
+                            <strong>https://tankprofi.web.app</strong>
+                        </button>
+                        <div class="share-content" id="shareContent" hidden>
+                            <img src="tankprofi-qr.png" width="210" height="210" alt="QR-Code fuer Tankprofi Webapp">
+                            <label class="field-group">
+                                <span>Webapp-Link</span>
+                                <input id="shareLinkInput" type="text" readonly value="https://tankprofi.web.app">
+                            </label>
+                            <button class="text-button share-copy" id="shareCopyButton" type="button">Link kopieren</button>
+                        </div>
+                    </section>
+                </div>
+            </section>
+        </aside>
+    </div>
+
+    <template id="stationTemplate">
+        <article class="station-item" tabindex="0">
+            <div class="rank"></div>
+            <div class="station-main">
+                <div class="station-topline">
+                    <strong class="station-name"></strong>
+                </div>
+                <p class="station-list-address"></p>
+            </div>
+            <div class="brand-logo"></div>
+            <span class="station-distance"></span>
+            <div class="station-list-price"></div>
+        </article>
+    </template>
+
+    <script type="module" src="assets/js/firebase-app.js?v=20260620-iphone"></script>
+    <script src="assets/js/app.js?v=20260620-iphone" defer></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "price_history",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "fuel_type",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "recorded_at",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
