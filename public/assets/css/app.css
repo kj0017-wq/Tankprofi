@@ -1,11 +1,19 @@
 :root {
-    --navy-950: #07172b;
-    --navy-900: #0b1f3a;
-    --navy-800: #12345b;
-    --blue-600: #2563eb;
-    --green-500: #19a974;
-    --yellow-500: #f4b740;
+    --navy-950: #101419;
+    --navy-900: #101419;
+    --navy-800: #1f4fbf;
+    --blue-600: #1f4fbf;
+    --green-100: #dff7df;
+    --green-300: #65cf76;
+    --green-500: #18a86b;
+    --yellow-100: #fff4b8;
+    --yellow-300: #ffd230;
+    --yellow-500: #f0a900;
+    --red-100: #ffe0db;
+    --red-300: #ff7a68;
     --red-500: #df4d43;
+    --cream-100: #fff7df;
+    --ink: #101419;
     --gray-950: #101419;
     --gray-700: #4d5867;
     --gray-500: #7b8794;
@@ -32,6 +40,160 @@ body {
 
 body {
     overflow: hidden;
+}
+
+.splash-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    align-items: center;
+    justify-items: center;
+    gap: 14px;
+    padding: max(22px, env(safe-area-inset-top)) 20px max(26px, env(safe-area-inset-bottom));
+    color: var(--navy-900);
+    background: #fff7df;
+    transition: opacity 420ms ease, visibility 420ms ease;
+}
+
+.splash-screen.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.splash-art-wrap {
+    width: min(72vw, 360px);
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+    align-self: end;
+}
+
+.splash-art-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    filter: drop-shadow(0 18px 24px rgba(7, 23, 43, 0.18));
+}
+
+.splash-copy {
+    display: grid;
+    gap: 5px;
+    text-align: center;
+}
+
+.splash-copy strong {
+    font-size: 2rem;
+    line-height: 1;
+    letter-spacing: 0;
+}
+
+.splash-copy span {
+    color: var(--gray-700);
+    font-size: 0.92rem;
+    font-weight: 800;
+}
+
+.splash-loader {
+    width: min(220px, 62vw);
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(7, 23, 43, 0.14);
+}
+
+.home-install-button {
+    min-height: 58px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    width: 100%;
+    border: 3px solid #101419;
+    border-radius: 8px;
+    padding: 7px 14px;
+    color: #101419;
+    background: linear-gradient(90deg, #ffd230 0%, #fff7df 100%);
+    box-shadow: 5px 5px 0 #df4d43;
+    font-size: 0.92rem;
+    font-weight: 950;
+    letter-spacing: 0;
+    text-align: left;
+}
+
+.home-install-icon,
+.home-install-button > span[aria-hidden="true"] {
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 3px solid #101419;
+    border-radius: 50%;
+    color: var(--white);
+    background: var(--blue-600);
+    box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.28);
+    font-size: 1.05rem;
+    line-height: 1;
+}
+
+.home-install-copy {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.home-install-copy strong {
+    color: var(--ink);
+    font-size: 0.96rem;
+    line-height: 1.05;
+}
+
+.home-install-copy small {
+    color: var(--gray-700);
+    font-size: 0.72rem;
+    font-weight: 850;
+    line-height: 1.15;
+}
+
+.home-install-button:active {
+    transform: translate(2px, 2px);
+    box-shadow: 3px 3px 0 #df4d43;
+}
+
+.splash-install-button {
+    width: min(310px, 82vw);
+}
+
+.home-install-button.is-installed {
+    color: var(--ink);
+    background: linear-gradient(90deg, var(--green-500) 0%, var(--green-100) 100%);
+    box-shadow: 5px 5px 0 var(--navy-900);
+}
+
+.splash-loader::before {
+    content: "";
+    display: block;
+    width: 46%;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--red-500);
+    animation: splashLoad 1.05s ease-in-out infinite;
+}
+
+@keyframes splashLoad {
+    0% { transform: translateX(-110%); }
+    100% { transform: translateX(240%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .splash-loader::before {
+        animation: none;
+        width: 100%;
+    }
 }
 
 button,
@@ -75,16 +237,32 @@ button {
 .brand-bar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 16px;
+    justify-content: flex-start;
+    gap: 12px;
     padding: 18px 18px 12px;
-    color: var(--white);
-    background: linear-gradient(135deg, var(--navy-950), var(--navy-800));
+    color: var(--ink);
+    background: var(--yellow-500);
+    border-bottom: 4px solid var(--ink);
+}
+
+.brand-logo-mark {
+    width: 56px;
+    height: 56px;
+    flex: 0 0 auto;
+    border: 3px solid var(--ink);
+    border-radius: 12px;
+    background: var(--cream-100);
+    box-shadow: 4px 4px 0 var(--red-500);
+    object-fit: cover;
+}
+
+.brand-title {
+    min-width: 0;
 }
 
 .eyebrow {
     margin: 0 0 4px;
-    color: #bfd2e9;
+    color: var(--blue-600);
     font-size: 0.76rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -178,7 +356,7 @@ select:focus {
 }
 
 .icon-button.primary {
-    color: var(--white);
+    color: var(--ink);
     background: var(--blue-600);
     font-size: 1.3rem;
 }
@@ -188,7 +366,7 @@ select:focus {
     align-items: center;
     justify-content: center;
     gap: 9px;
-    color: var(--white);
+    color: var(--ink);
     background: var(--navy-900);
 }
 
@@ -261,21 +439,26 @@ select:focus {
 }
 
 .settings-sheet-header button {
-    width: 38px;
-    height: 38px;
-    border: 0;
-    border-radius: 999px;
-    color: var(--white);
-    background: var(--navy-900);
-    font-size: 1.35rem;
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 2px solid var(--ink);
+    border-radius: 12px;
+    color: var(--blue-700);
+    background: var(--white);
+    box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.18);
+    font-size: 1.55rem;
     font-weight: 900;
+    line-height: 1;
 }
 
 .settings-toggle {
     min-height: 42px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 10px;
     border: 1px solid var(--gray-200);
     border-radius: 8px;
@@ -330,7 +513,7 @@ select:focus {
     border: 0;
     border-radius: 8px;
     padding: 8px 10px;
-    color: var(--white);
+    color: var(--ink);
     background: var(--navy-900);
     text-align: left;
 }
@@ -371,6 +554,30 @@ select:focus {
     width: 100%;
 }
 
+.tankprofi-stats-panel {
+    background: var(--white);
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    color: var(--gray-700);
+    font-weight: 850;
+}
+
+.stats-grid b {
+    color: var(--blue-700);
+    font-size: 1.15rem;
+}
+
+.tankprofi-stats-panel > span {
+    color: var(--gray-600);
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
 .share-copy {
     width: 100%;
 }
@@ -409,10 +616,12 @@ select:focus {
 }
 
 .result-summary {
+    position: relative;
+    overflow: hidden;
     display: flex;
     flex: 0 0 auto;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 8px;
     min-height: 50px;
     text-align: left;
@@ -452,59 +661,635 @@ select:focus {
 }
 
 .sort-toggle-button.active {
-    color: var(--white);
+    color: var(--ink);
     background: var(--navy-900);
 }
 
 .bottom-nav {
     flex: 0 0 auto;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 4px;
-    padding: 6px 10px max(8px, env(safe-area-inset-bottom));
+    padding: 6px 10px max(18px, calc(env(safe-area-inset-bottom) + 10px));
     border-top: 1px solid var(--gray-200);
     background: rgba(255, 255, 255, 0.97);
     backdrop-filter: blur(12px);
     box-shadow: 0 -8px 24px rgba(7, 23, 43, 0.08);
 }
 
-.bottom-nav-button {
-    min-height: 50px;
+.city-mode .search-panel,
+.directory-mode .search-panel {
+    display: none;
+}
+
+.city-mode .sort-toggle,
+.city-mode #refreshButton,
+.directory-mode .sort-toggle,
+.directory-mode #refreshButton {
+    display: none;
+}
+
+.city-dashboard {
     display: grid;
-    place-items: center;
-    gap: 2px;
+    gap: 10px;
+    min-width: 0;
+}
+
+.city-toolbar {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    background: var(--white);
+}
+
+.global-progress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 4px;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    background: rgba(31, 79, 191, 0.12);
+    transition: opacity 160ms ease;
+}
+
+.global-progress i {
+    display: block;
+    width: 42%;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--blue-600), var(--green-500), var(--yellow-500));
+    transform: translateX(-120%);
+    animation: globalProgressSlide 1.05s ease-in-out infinite;
+}
+
+.data-loading .global-progress {
+    opacity: 1;
+}
+
+@keyframes globalProgressSlide {
+    0% { transform: translateX(-120%); }
+    100% { transform: translateX(250%); }
+}
+
+.city-toolbar strong {
+    color: var(--navy-900);
+    font-size: 1rem;
+}
+
+.city-view-tabs,
+.city-fuel-tabs {
+    display: grid;
+    gap: 4px;
+    padding: 3px;
+    border-radius: 8px;
+    background: var(--cream-100);
+}
+
+.city-view-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.city-fuel-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.city-view-tabs button,
+.city-fuel-tabs button {
+    min-height: 34px;
     border: 0;
-    border-radius: 12px;
+    border-radius: 6px;
     color: var(--gray-700);
     background: transparent;
-    font-size: 0.68rem;
     font-weight: 950;
 }
 
-.bottom-nav-button.active {
+.city-view-tabs button.active,
+.city-fuel-tabs button.active {
+    color: var(--ink);
+    background: var(--navy-900);
+}
+
+.autobahn-filter {
+    display: grid;
+    gap: 0;
+    color: var(--gray-700);
+    font-size: 0.7rem;
+    font-weight: 900;
+}
+
+.autobahn-filter select {
+    width: 100%;
+    min-height: 54px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    padding: 0 14px;
+    color: var(--ink);
+    background: var(--cream-100);
+    font-size: 1rem;
+    font-weight: 950;
+}
+
+.autobahn-compact-toolbar {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 8px;
+    padding: 8px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    background: var(--cream-100);
+    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.14);
+}
+
+.autobahn-tab-button {
+    min-height: 54px;
+    font-size: 1rem;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    background: var(--cream-100);
+    color: var(--ink);
+    font-weight: 950;
+    cursor: pointer;
+}
+
+.autobahn-tab-button.active {
+    background: var(--yellow);
+    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.22);
+}
+
+.autobahn-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 2px 0;
+    color: var(--gray-700);
+    font-size: 0.78rem;
+    font-weight: 900;
+}
+
+.autobahn-summary strong {
+    color: var(--ink);
+    white-space: nowrap;
+}
+
+.city-overview {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.city-overview span {
+    min-height: 58px;
+    display: grid;
+    gap: 4px;
+    padding: 9px 10px;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    color: var(--gray-700);
+    background: var(--white);
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.city-overview strong {
+    color: var(--gray-950);
+    font-size: 1.05rem;
+}
+
+.city-update-progress {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    color: var(--ink);
+    background: var(--yellow-100);
+    box-shadow: 4px 4px 0 rgba(16, 20, 25, 0.16);
+}
+
+.city-update-progress strong,
+.city-update-progress span {
+    display: block;
+}
+
+.city-update-progress strong {
+    font-size: 0.92rem;
+    font-weight: 950;
+}
+
+.city-update-progress span {
+    margin-top: 3px;
+    color: var(--gray-700);
+    font-size: 0.76rem;
+    font-weight: 850;
+    line-height: 1.25;
+}
+
+.city-progress-bar {
+    height: 8px;
+    overflow: hidden;
+    border: 2px solid var(--ink);
+    border-radius: 999px;
+    background: var(--cream-100);
+}
+
+.city-progress-bar i {
+    display: block;
+    height: 100%;
+    min-width: 12%;
+    border-radius: inherit;
+    background: var(--green-500);
+    transition: width 360ms ease;
+}
+
+.city-table {
+    display: grid;
+    gap: 6px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: visible;
+    padding-bottom: 2px;
+    overscroll-behavior-x: contain;
+}
+
+.city-row {
+    min-width: 720px;
+    display: grid;
+    grid-template-columns: 40px minmax(108px, 1fr) repeat(3, 74px) 70px 70px 70px 112px;
+    align-items: center;
+    gap: 6px;
+    min-height: 52px;
+    padding: 8px 10px;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    color: var(--gray-950);
+    background: var(--white);
+    text-align: left;
+    box-shadow: 0 6px 16px rgba(7, 23, 43, 0.05);
+}
+
+button.city-row:hover,
+button.city-row:focus {
+    border-color: var(--blue-600);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.city-head {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    min-height: 38px;
+    color: var(--gray-700);
+    background: #eaf1f9;
+    box-shadow: 0 6px 14px rgba(7, 23, 43, 0.08);
+    font-size: 0.76rem;
+    font-weight: 950;
+}
+
+.city-row span,
+.city-row strong {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.city-data::before {
+    content: attr(data-label) ": ";
+    display: none;
+    color: var(--gray-700);
+    font-size: 0.68rem;
+    font-weight: 850;
+}
+
+.city-row.cheapest {
+    border-color: rgba(25, 169, 116, 0.45);
+    background: #f0fbf6;
+}
+
+.city-row.expensive {
+    border-color: rgba(223, 77, 67, 0.42);
+    background: #fff3f2;
+}
+
+.city-admin-panel {
+    align-items: stretch;
+}
+
+.city-admin-panel strong {
+    color: var(--navy-900);
+}
+
+.city-admin-panel span {
+    color: var(--gray-700);
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.city-station-list {
+    display: grid;
+    gap: 8px;
+}
+
+.city-station-row {
+    min-height: 64px;
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) 38px 64px;
+    grid-template-areas:
+        "rank main logo price"
+        "rank main logo meta";
+    align-items: center;
+    gap: 4px 8px;
+    padding: 8px 10px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    color: var(--ink);
+    background: var(--cream-100);
+    box-shadow: 4px 4px 0 rgba(16, 20, 25, 0.14);
+    text-align: left;
+}
+
+.city-station-row .rank {
+    grid-area: rank;
+}
+
+.city-station-row .brand-logo {
+    grid-area: logo;
+    width: 34px;
+    height: 34px;
+    font-size: 0.58rem;
+}
+
+.city-station-main {
+    grid-area: main;
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+}
+
+.city-station-main strong,
+.city-station-main small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.city-station-main small {
+    color: var(--gray-700);
+    font-size: 0.74rem;
+    font-weight: 800;
+}
+
+.city-station-price {
+    grid-area: price;
+    color: var(--red-500);
+    font-size: 1rem;
+    font-weight: 950;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.city-station-meta {
+    grid-area: meta;
+    color: var(--gray-700);
+    font-size: 0.72rem;
+    font-weight: 850;
+    text-align: right;
+    white-space: nowrap;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.autobahn-dashboard {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+}
+
+.autobahn-list {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+}
+
+.autobahn-group {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+}
+
+.autobahn-group h2 {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0;
+    padding: 8px 10px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    color: var(--white);
+    background: var(--blue-600);
+    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.14);
+    font-size: 0.95rem;
+    line-height: 1.1;
+}
+
+.autobahn-group h2 span {
+    min-width: 28px;
+    padding: 3px 7px;
+    border: 2px solid var(--white);
+    border-radius: 999px;
+    color: var(--white);
+    background: rgba(255, 255, 255, 0.14);
+    text-align: center;
+    font-size: 0.76rem;
+}
+
+.autobahn-row {
+    min-height: 66px;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) 38px 78px;
+    grid-template-areas:
+        "rank main logo meta"
+        "rank main logo services";
+    align-items: center;
+    gap: 4px 8px;
+    padding: 8px 10px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    color: var(--ink);
+    background: var(--cream-100);
+    box-shadow: 4px 4px 0 rgba(16, 20, 25, 0.14);
+    text-align: left;
+}
+
+.autobahn-row .rank {
+    grid-area: rank;
+    color: var(--white) !important;
+    background: var(--blue-600) !important;
+    box-shadow: 2px 2px 0 var(--ink) !important;
+}
+
+.autobahn-row .rank.autohof-rank {
+    color: var(--ink) !important;
+    background: var(--yellow-300) !important;
+}
+
+.autobahn-row .rank.raststaette-rank {
+    color: var(--white) !important;
+    background: var(--blue-600) !important;
+}
+
+.tank-rast-badge {
+    display: inline-grid;
+    justify-self: start;
+    max-width: 100%;
+    padding: 2px 7px;
+    border: 2px solid var(--blue-600);
+    border-radius: 6px;
+    color: var(--blue-700);
+    background: var(--white);
+    font-size: 0.68rem;
+    font-weight: 950;
+    line-height: 1.1;
+    white-space: nowrap;
+}
+
+.autobahn-row .brand-logo {
+    grid-area: logo;
+    width: 34px;
+    height: 34px;
+    font-size: 0.58rem;
+}
+
+.autobahn-main {
+    grid-area: main;
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.autobahn-main strong,
+.autobahn-main small,
+.autobahn-meta,
+.autobahn-services {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.autobahn-main small {
+    color: var(--gray-700);
+    font-size: 0.74rem;
+    font-weight: 800;
+}
+
+.autobahn-meta {
+    grid-area: meta;
     color: var(--blue-600);
-    background: rgba(37, 99, 235, 0.1);
+    font-size: 0.72rem;
+    font-weight: 950;
+    text-align: right;
+}
+
+.autobahn-services {
+    grid-area: services;
+    color: var(--gray-700);
+    font-size: 0.72rem;
+    font-weight: 850;
+    text-align: right;
+}
+
+.user-location-marker {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border: 3px solid var(--ink);
+    border-radius: 50%;
+    background: var(--blue-600);
+    box-shadow: 0 0 0 5px rgba(31, 79, 191, 0.22), 4px 4px 0 rgba(16, 20, 25, 0.2);
+}
+
+.user-location-marker i {
+    width: 10px;
+    height: 10px;
+    display: block;
+    border: 2px solid var(--ink);
+    border-radius: 50%;
+    background: var(--yellow-300);
+}
+
+.bottom-nav-button {
+    height: 52px;
+    display: grid;
+    grid-template-rows: 25px 15px;
+    align-items: center;
+    justify-items: center;
+    gap: 1px;
+    padding: 5px 2px 4px;
+    border: 2px solid transparent;
+    border-radius: 12px;
+    color: var(--gray-700);
+    background: transparent;
+    font-size: 0.64rem;
+    font-weight: 950;
+    line-height: 1;
+    overflow: hidden;
+}
+
+.bottom-nav-button.active {
+    color: var(--blue-700);
+    border-color: transparent;
+    background: #eef5ff;
+    box-shadow: inset 0 0 0 2px rgba(34, 103, 199, 0.22);
 }
 
 .tab-icon {
     display: grid;
     place-items: center;
     width: 26px;
-    height: 22px;
-    font-size: 1.25rem;
+    height: 24px;
+    font-size: 1.12rem;
     line-height: 1;
 }
 
+.bottom-nav-button > span:last-child {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .bottom-nav-button.active .tab-icon {
-    color: var(--white);
-    background: var(--blue-600);
+    color: var(--blue-700);
+    border: 2px solid var(--blue-700);
     border-radius: 999px;
+    background: var(--white);
+    box-shadow: none;
     font-size: 1rem;
 }
 
 .favorite-item {
     display: grid;
-    grid-template-columns: 28px 38px minmax(0, 1fr) 58px 34px;
+    grid-template-columns: 28px minmax(0, 1fr) 38px 58px 34px;
     align-items: center;
     gap: 6px;
     min-height: 62px;
@@ -602,7 +1387,7 @@ select:focus {
 }
 
 .text-button.active {
-    color: var(--white);
+    color: var(--ink);
     background: var(--navy-900);
 }
 
@@ -673,7 +1458,7 @@ select:focus {
     border: 3px solid var(--white);
     border-radius: 999px;
     box-shadow: 0 5px 16px rgba(7, 23, 43, 0.28);
-    color: var(--white);
+    color: var(--ink);
     background: var(--gray-500);
     font-size: 0.68rem;
     font-weight: 950;
@@ -760,9 +1545,26 @@ select:focus {
     display: grid;
     place-items: center;
     border-radius: 8px;
-    color: var(--white);
+    color: var(--ink);
     background: var(--navy-900);
     font-weight: 900;
+}
+
+.rank.cheap {
+    background: var(--green-500);
+}
+
+.rank.mid {
+    color: #2e250b;
+    background: var(--yellow-500);
+}
+
+.rank.high {
+    background: var(--red-500);
+}
+
+.rank.muted {
+    background: var(--gray-500);
 }
 
 .station-main {
@@ -787,7 +1589,7 @@ select:focus {
     place-items: center;
     border: 1px solid var(--gray-200);
     border-radius: 8px;
-    color: var(--white);
+    color: var(--ink);
     background: var(--navy-900);
     font-size: 0.64rem;
     font-weight: 950;
@@ -935,12 +1737,12 @@ select:focus {
 .detail-back,
 .detail-close {
     min-height: 38px;
-    border: 0;
+    border: 2px solid var(--ink);
     border-radius: 8px;
     padding: 0 12px;
-    color: var(--white);
-    background: var(--navy-900);
-    font-weight: 900;
+    color: var(--ink);
+    background: var(--yellow-300);
+    font-weight: 950;
 }
 
 .detail-back {
@@ -959,6 +1761,7 @@ select:focus {
 
 .detail-close::before {
     content: "x";
+    color: var(--ink);
     font-size: 1.15rem;
     line-height: 1;
 }
@@ -1001,6 +1804,51 @@ select:focus {
     line-height: 1;
 }
 
+.detail-price-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+    margin-top: 10px;
+}
+
+.detail-price-grid span {
+    display: grid;
+    gap: 3px;
+    padding: 8px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    color: var(--gray-700);
+    background: var(--cream-100);
+    font-size: 0.72rem;
+    font-weight: 900;
+}
+
+.detail-price-grid strong {
+    color: var(--red-500);
+    font-size: 0.95rem;
+}
+
+.detail-price-grid span.selected {
+    padding: 10px;
+    color: var(--ink);
+    background: var(--yellow-300);
+    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.18);
+    transform: translateY(-1px);
+}
+
+.detail-price-grid span.selected strong {
+    font-size: 1.45rem;
+    line-height: 1;
+}
+
+.detail-note {
+    margin: 7px 0 0;
+    color: var(--gray-700);
+    font-size: 0.76rem;
+    font-weight: 800;
+    line-height: 1.25;
+}
+
 .detail-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1030,6 +1878,20 @@ select:focus {
     color: var(--gray-950);
     font-weight: 900;
     overflow-wrap: anywhere;
+}
+
+.detail-highway {
+    display: inline-grid;
+    min-width: 48px;
+    min-height: 30px;
+    place-items: center;
+    padding: 3px 10px;
+    border: 2px solid var(--white);
+    border-radius: 8px;
+    color: var(--white);
+    background: var(--blue-600);
+    box-shadow: 0 0 0 2px var(--blue-600);
+    letter-spacing: 0;
 }
 
 .detail-footer-nav {
@@ -1062,7 +1924,7 @@ select:focus {
 }
 
 .detail-footer-nav button.active {
-    color: var(--white);
+    color: var(--ink);
     background: var(--blue-600);
 }
 
@@ -1110,7 +1972,7 @@ select:focus {
     border: 3px solid var(--white);
     border-radius: 50%;
     box-shadow: 0 4px 14px rgba(7, 23, 43, 0.22);
-    color: var(--white);
+    color: var(--ink);
     font-size: 0.68rem;
     font-weight: 900;
 }
@@ -1214,9 +2076,142 @@ select:focus {
     }
 }
 
+@media (max-width: 640px) {
+    .city-table {
+        overflow-x: hidden;
+    }
+
+    .city-row {
+        min-width: 0;
+        width: 100%;
+        grid-template-columns: 38px minmax(86px, 108px) minmax(0, 1fr);
+        grid-template-areas:
+            "rank city diesel"
+            "rank city e5"
+            "rank city e10"
+            "rank city stations"
+            "rank city min"
+            "rank city max"
+            "rank city stand";
+        gap: 2px 8px;
+        min-height: 92px;
+        padding: 8px;
+    }
+
+    .city-row > span:nth-child(1) {
+        grid-area: rank;
+    }
+
+    .city-row > strong:nth-child(2) {
+        grid-area: city;
+    }
+
+    .city-row > span:nth-child(3) {
+        grid-area: diesel;
+    }
+
+    .city-row > span:nth-child(4) {
+        grid-area: e5;
+    }
+
+    .city-row > span:nth-child(5) {
+        grid-area: e10;
+    }
+
+    .city-row > span:nth-child(6) {
+        grid-area: stations;
+    }
+
+    .city-row > span:nth-child(7) {
+        grid-area: min;
+    }
+
+    .city-row > span:nth-child(8) {
+        grid-area: max;
+    }
+
+    .city-row > span:nth-child(9) {
+        grid-area: stand;
+    }
+
+    .city-head {
+        display: none;
+    }
+
+    .city-row span,
+    .city-row strong {
+        font-size: 0.68rem;
+        line-height: 1.15;
+    }
+
+    .city-row .city-data {
+        display: flex;
+        align-items: baseline;
+        justify-content: flex-start;
+        gap: 4px;
+        padding: 1px 3px;
+        border-radius: 5px;
+        letter-spacing: 0;
+    }
+
+    .city-row .city-data::before {
+        display: inline;
+        flex: 0 0 74px;
+        color: var(--gray-700);
+    }
+
+    .city-row strong {
+        align-self: center;
+        font-size: 0.9rem;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .city-row.fuel-diesel > span:nth-child(3),
+    .city-row.fuel-e5 > span:nth-child(4),
+    .city-row.fuel-e10 > span:nth-child(5) {
+        border: 2px solid var(--ink);
+        background: var(--yellow-300);
+        font-weight: 950;
+    }
+
+    .city-station-row {
+        grid-template-columns: 28px minmax(0, 1fr) 34px 58px;
+        gap: 4px 6px;
+        padding: 8px;
+    }
+
+    .city-station-price {
+        font-size: 0.9rem;
+    }
+
+    .city-station-meta {
+        font-size: 0.66rem;
+    }
+
+    .autobahn-compact-toolbar {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        padding: 7px;
+    }
+
+    .autobahn-filter select,
+    .autobahn-tab-button {
+        min-height: 48px;
+        font-size: 0.9rem;
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+
+    .autobahn-summary {
+        padding-top: 2px;
+        font-size: 0.74rem;
+    }
+}
+
 @media (max-width: 420px) {
     .favorite-item {
-        grid-template-columns: 26px 34px minmax(0, 1fr) 54px 32px;
+        grid-template-columns: 26px minmax(0, 1fr) 34px 54px 32px;
         gap: 6px;
         padding: 8px;
     }
@@ -1262,4 +2257,553 @@ select:focus {
         padding-left: 10px;
         padding-right: 10px;
     }
+}
+
+/* Pop-art visual pass */
+.status-pill {
+    margin-left: auto;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    color: var(--ink);
+    background: var(--cream-100);
+    box-shadow: 3px 3px 0 var(--blue-600);
+}
+
+.station-item,
+.favorite-item,
+.city-row {
+    border: 2px solid var(--ink);
+    background: var(--cream-100);
+    box-shadow: 4px 4px 0 rgba(16, 20, 25, 0.16);
+}
+
+.station-item:hover,
+.station-item:focus,
+.station-item.selected,
+.favorite-item.selected,
+button.city-row:hover,
+button.city-row:focus {
+    border-color: var(--ink);
+    box-shadow: 4px 4px 0 var(--blue-600);
+}
+
+.city-head {
+    color: var(--ink);
+    background: var(--yellow-500);
+    box-shadow: 4px 4px 0 rgba(16, 20, 25, 0.18);
+}
+
+.rank {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+    border: 2px solid var(--ink);
+    box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.24);
+}
+
+.city-row .rank {
+    justify-self: center;
+}
+
+.station-list-price,
+.favorite-price,
+.popup-price,
+.detail-price {
+    color: var(--red-500);
+}
+
+/* Final price ranking override. Keep this last so visual-pass defaults cannot win. */
+.price-rank-cheap,
+.price-rank-cheap strong {
+    color: var(--green-500) !important;
+}
+
+.price-rank-mid,
+.price-rank-mid strong {
+    color: var(--yellow-500) !important;
+}
+
+.price-rank-high,
+.price-rank-high strong {
+    color: var(--red-500) !important;
+}
+
+.price-rank-muted,
+.price-rank-muted strong {
+    color: var(--gray-500) !important;
+}
+
+/* Final flowing price scale. Keep this last so visual-pass defaults cannot win. */
+.price-rank-green-dark,
+.price-rank-green-dark strong {
+    color: #087a43 !important;
+}
+
+.price-rank-green-light,
+.price-rank-green-light strong {
+    color: #18a86b !important;
+}
+
+.price-rank-yellow-dark,
+.price-rank-yellow-dark strong {
+    color: #b87900 !important;
+}
+
+.price-rank-yellow-light,
+.price-rank-yellow-light strong {
+    color: #f0a900 !important;
+}
+
+.price-rank-red-light,
+.price-rank-red-light strong {
+    color: #f0644f !important;
+}
+
+.price-rank-red-dark,
+.price-rank-red-dark strong {
+    color: #b92824 !important;
+}
+
+.rank.green-dark,
+.fallback-marker.green-dark,
+.price-marker.green-dark {
+    background: #087a43;
+    box-shadow: 2px 2px 0 #044d2b;
+}
+
+.rank.green-light,
+.fallback-marker.green-light,
+.price-marker.green-light {
+    background: #65cf76;
+    box-shadow: 2px 2px 0 #18a86b;
+}
+
+.rank.yellow-dark,
+.fallback-marker.yellow-dark,
+.price-marker.yellow-dark {
+    color: #2e250b;
+    background: #f0a900;
+    box-shadow: 2px 2px 0 #b87900;
+}
+
+.rank.yellow-light,
+.fallback-marker.yellow-light,
+.price-marker.yellow-light {
+    color: #2e250b;
+    background: #ffd230;
+    box-shadow: 2px 2px 0 #f0a900;
+}
+
+.rank.red-light,
+.fallback-marker.red-light,
+.price-marker.red-light {
+    background: #ff7a68;
+    box-shadow: 2px 2px 0 #df4d43;
+}
+
+.rank.red-dark,
+.fallback-marker.red-dark,
+.price-marker.red-dark {
+    background: #b92824;
+    box-shadow: 2px 2px 0 #7d1714;
+}
+
+/* Final flowing price scale. Keep this last so older cheap/mid/high rules cannot win. */
+.price-rank-green-dark,
+.price-rank-green-dark strong {
+    color: #087a43 !important;
+}
+
+.price-rank-green-light,
+.price-rank-green-light strong {
+    color: #18a86b !important;
+}
+
+.price-rank-yellow-dark,
+.price-rank-yellow-dark strong {
+    color: #b87900 !important;
+}
+
+.price-rank-yellow-light,
+.price-rank-yellow-light strong {
+    color: #f0a900 !important;
+}
+
+.price-rank-red-light,
+.price-rank-red-light strong {
+    color: #f0644f !important;
+}
+
+.price-rank-red-dark,
+.price-rank-red-dark strong {
+    color: #b92824 !important;
+}
+
+.rank.green-dark,
+.fallback-marker.green-dark,
+.price-marker.green-dark {
+    background: #087a43;
+    box-shadow: 2px 2px 0 #044d2b;
+}
+
+.rank.green-light,
+.fallback-marker.green-light,
+.price-marker.green-light {
+    background: #65cf76;
+    box-shadow: 2px 2px 0 #18a86b;
+}
+
+.rank.yellow-dark,
+.fallback-marker.yellow-dark,
+.price-marker.yellow-dark {
+    color: #2e250b;
+    background: #f0a900;
+    box-shadow: 2px 2px 0 #b87900;
+}
+
+.rank.yellow-light,
+.fallback-marker.yellow-light,
+.price-marker.yellow-light {
+    color: #2e250b;
+    background: #ffd230;
+    box-shadow: 2px 2px 0 #f0a900;
+}
+
+.rank.red-light,
+.fallback-marker.red-light,
+.price-marker.red-light {
+    background: #ff7a68;
+    box-shadow: 2px 2px 0 #df4d43;
+}
+
+.rank.red-dark,
+.fallback-marker.red-dark,
+.price-marker.red-dark {
+    background: #b92824;
+    box-shadow: 2px 2px 0 #7d1714;
+}
+
+.detail-price-grid .price-rank-green-dark,
+.detail-price-grid .price-rank-green-light {
+    border-color: var(--green-500);
+    background: var(--green-100);
+}
+
+.detail-price-grid .price-rank-yellow-dark,
+.detail-price-grid .price-rank-yellow-light {
+    border-color: var(--yellow-500);
+    background: var(--yellow-100);
+}
+
+.detail-price-grid .price-rank-red-light,
+.detail-price-grid .price-rank-red-dark {
+    border-color: var(--red-500);
+    background: var(--red-100);
+}
+
+/* Final price ranking override. Keep this last so visual-pass defaults cannot win. */
+.price-rank-cheap,
+.price-rank-cheap strong {
+    color: var(--green-500) !important;
+}
+
+.price-rank-mid,
+.price-rank-mid strong {
+    color: var(--yellow-500) !important;
+}
+
+.price-rank-high,
+.price-rank-high strong {
+    color: var(--red-500) !important;
+}
+
+.price-rank-muted,
+.price-rank-muted strong {
+    color: var(--gray-500) !important;
+}
+
+.price-rank-cheap,
+.price-rank-cheap strong {
+    color: var(--green-500);
+}
+
+.price-rank-mid,
+.price-rank-mid strong {
+    color: var(--yellow-500);
+}
+
+.price-rank-high,
+.price-rank-high strong {
+    color: var(--red-500);
+}
+
+.price-rank-muted,
+.price-rank-muted strong {
+    color: var(--gray-500);
+}
+
+.detail-price-grid .price-rank-cheap {
+    border-color: var(--green-500);
+    background: var(--green-100);
+}
+
+.detail-price-grid .price-rank-mid {
+    border-color: var(--yellow-500);
+    background: var(--yellow-100);
+}
+
+.detail-price-grid .price-rank-high {
+    border-color: var(--red-500);
+    background: var(--red-100);
+}
+
+/* Contrast repair for dark and branded controls */
+.icon-button.primary {
+    color: var(--white);
+    background: var(--blue-600);
+    border: 2px solid var(--ink);
+    box-shadow: 3px 3px 0 var(--red-500);
+}
+
+.location-button,
+#refreshButton {
+    color: var(--ink);
+    background: var(--yellow-300);
+    border: 2px solid var(--ink);
+    box-shadow: 3px 3px 0 var(--blue-600);
+}
+
+.location-button span {
+    color: var(--ink);
+}
+
+.brand-logo {
+    color: var(--white);
+    background: var(--blue-600);
+    border: 2px solid var(--ink);
+    box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.18);
+    text-shadow: 0 1px 0 rgba(16, 20, 25, 0.42);
+}
+
+.brand-logo.shell,
+.brand-logo.esso,
+.brand-logo.hem,
+.brand-logo.agip {
+    text-shadow: none;
+}
+
+.brand-logo.shell,
+.brand-logo.agip {
+    color: var(--ink);
+}
+
+.rank,
+.rank.cheap,
+.rank.high,
+.rank.muted {
+    color: var(--ink);
+}
+
+.view-toggle,
+.city-view-tabs,
+.city-fuel-tabs {
+    border: 2px solid var(--ink);
+    background: var(--cream-100);
+    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.14);
+}
+
+.view-button,
+.city-view-tabs button,
+.city-fuel-tabs button {
+    color: var(--ink);
+}
+
+.view-button.active,
+.text-button.active,
+.sort-toggle-button.active,
+.city-view-tabs button.active,
+.city-fuel-tabs button.active {
+    color: var(--ink);
+    background: var(--yellow-500);
+}
+
+.text-button,
+.sort-toggle-button.active,
+.city-view-tabs button.active,
+.city-fuel-tabs button.active {
+    border: 2px solid var(--ink);
+    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.16);
+}
+
+/* Three-tone traffic-light palette */
+.brand-bar,
+.city-head,
+.view-button.active,
+.text-button.active,
+.sort-toggle-button.active,
+.city-view-tabs button.active,
+.city-fuel-tabs button.active {
+    background: var(--yellow-300);
+}
+
+.brand-logo-mark {
+    box-shadow: 5px 5px 0 var(--red-500);
+}
+
+.home-install-button {
+    background: linear-gradient(90deg, #ffd230 0%, #fff7df 100%);
+    box-shadow: 5px 5px 0 var(--red-500);
+}
+
+.home-install-button.is-installed {
+    background: linear-gradient(90deg, var(--green-500) 0%, var(--green-100) 100%);
+    box-shadow: 5px 5px 0 var(--navy-900);
+}
+
+.city-row.cheapest {
+    border-color: var(--green-500);
+    background: var(--green-100);
+}
+
+.city-row.expensive {
+    border-color: var(--red-500);
+    background: var(--red-100);
+}
+
+.rank.cheap,
+.fallback-marker.cheap,
+.price-marker.cheap {
+    background: var(--green-300);
+    box-shadow: 2px 2px 0 var(--green-500);
+}
+
+.rank.mid,
+.fallback-marker.mid,
+.price-marker.mid {
+    color: #2e250b;
+    background: var(--yellow-300);
+    box-shadow: 2px 2px 0 var(--yellow-500);
+}
+
+.rank.high,
+.fallback-marker.high,
+.price-marker.high {
+    background: var(--red-300);
+    box-shadow: 2px 2px 0 var(--red-500);
+}
+
+.dot.cheap {
+    background: var(--green-500);
+}
+
+.dot.mid {
+    background: var(--yellow-500);
+}
+
+.dot.high {
+    background: var(--red-500);
+}
+
+.station-list-price,
+.favorite-price,
+.popup-price,
+.detail-price {
+    color: var(--red-500);
+}
+
+/* Final price ranking override. Keep this last so visual-pass defaults cannot win. */
+.price-rank-cheap,
+.price-rank-cheap strong {
+    color: var(--green-500) !important;
+}
+
+.price-rank-mid,
+.price-rank-mid strong {
+    color: var(--yellow-500) !important;
+}
+
+.price-rank-high,
+.price-rank-high strong {
+    color: var(--red-500) !important;
+}
+
+.price-rank-muted,
+.price-rank-muted strong {
+    color: var(--gray-500) !important;
+}
+
+/* Final flowing price scale. Keep this last so visual-pass defaults cannot win. */
+.price-rank-green-dark,
+.price-rank-green-dark strong {
+    color: #087a43 !important;
+}
+
+.price-rank-green-light,
+.price-rank-green-light strong {
+    color: #18a86b !important;
+}
+
+.price-rank-yellow-dark,
+.price-rank-yellow-dark strong {
+    color: #b87900 !important;
+}
+
+.price-rank-yellow-light,
+.price-rank-yellow-light strong {
+    color: #f0a900 !important;
+}
+
+.price-rank-red-light,
+.price-rank-red-light strong {
+    color: #f0644f !important;
+}
+
+.price-rank-red-dark,
+.price-rank-red-dark strong {
+    color: #b92824 !important;
+}
+
+.rank.green-dark,
+.fallback-marker.green-dark,
+.price-marker.green-dark {
+    background: #087a43;
+    box-shadow: 2px 2px 0 #044d2b;
+}
+
+.rank.green-light,
+.fallback-marker.green-light,
+.price-marker.green-light {
+    background: #65cf76;
+    box-shadow: 2px 2px 0 #18a86b;
+}
+
+.rank.yellow-dark,
+.fallback-marker.yellow-dark,
+.price-marker.yellow-dark {
+    color: #2e250b;
+    background: #f0a900;
+    box-shadow: 2px 2px 0 #b87900;
+}
+
+.rank.yellow-light,
+.fallback-marker.yellow-light,
+.price-marker.yellow-light {
+    color: #2e250b;
+    background: #ffd230;
+    box-shadow: 2px 2px 0 #f0a900;
+}
+
+.rank.red-light,
+.fallback-marker.red-light,
+.price-marker.red-light {
+    background: #ff7a68;
+    box-shadow: 2px 2px 0 #df4d43;
+}
+
+.rank.red-dark,
+.fallback-marker.red-dark,
+.price-marker.red-dark {
+    background: #b92824;
+    box-shadow: 2px 2px 0 #7d1714;
 }

@@ -1,0 +1,18 @@
+{
+  "name": "Tankprofi",
+  "short_name": "Tankprofi",
+  "description": "Live Tankpreise und Großstadt-Vergleich",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fff7df",
+  "theme_color": "#0b1f3a",
+  "icons": [
+    {
+      "src": "/assets/img/tankprofi-home-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

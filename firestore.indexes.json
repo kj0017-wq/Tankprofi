@@ -1,16 +1,38 @@
 {
   "indexes": [
     {
-      "collectionGroup": "price_history",
+      "collectionGroup": "tankprofi_prices",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "fuel_type",
+          "fieldPath": "stationId",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "recorded_at",
+          "fieldPath": "fuelType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "reportedAt",
           "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "tankprofi_scan_cells",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "country",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "source",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
         }
       ]
     }
