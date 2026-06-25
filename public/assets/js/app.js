@@ -2,11 +2,15 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260624-search-gps-fix-3';
+const appVersion = '20260624-drive-autobahn-price-refresh';
+const DRIVE_HIGHWAY_PRICE_MAX_AGE_MS = 15 * 60 * 1000;
+const USAGE_PRICE_MAX_AGE_MS = 30 * 60 * 1000;
 
 const state = {
     map: null,
     layer: null,
+    drivingRouteLayer: null,
+    drivingDirectionLayer: null,
     markers: new Map(),
     userLocationMarker: null,
     selectedId: null,
@@ -24,10 +28,31 @@ const state = {
     cityAutoUpdateStartedAt: null,
     cityAutoUpdateSnapshotId: null,
     cityAutoUpdateTimer: null,
+    cityAutoUpdateProgress: null,
+    cityAutoUpdateMessage: null,
     autobahnStations: [],
     selectedHighway: 'all',
     autobahnPriceLoadingId: null,
     autobahnLoadKey: null,
+    drivingActive: false,
+    drivingWatchId: null,
+    drivingUpdateTimer: null,
+    drivingUpdateInProgress: false,
+    drivingRouteId: 'ALL',
+    drivingDetectedRouteId: null,
+    drivingSamples: [],
+    drivingRouteTankpoints: [],
+    drivingRouteLoadedAt: null,
+    drivingStatus: 'inactive',
+    drivingDirection: null,
+    drivingSpeedKmh: null,
+    drivingAccuracy: null,
+    drivingNearestRouteDistanceKm: null,
+    drivingCurrentRoutePosition: null,
+    drivingContext: 'unknown',
+    drivingCityLastLoadAt: null,
+    drivingCityLastLoadKey: null,
+    drivingMessage: 'Fahrmodus starten.',
     favoriteRefreshId: 0,
     navRequestId: 0,
     stationRequestId: 0,
@@ -49,6 +74,10 @@ const els = {
     searchInput: document.querySelector('#searchInput'),
     searchButton: document.querySelector('#searchButton'),
     locationButton: document.querySelector('#locationButton'),
+    driveMode: document.querySelector('#driveModeButton'),
+    help: document.querySelector('#helpButton'),
+    helpSheet: document.querySelector('#helpSheet'),
+    helpClose: document.querySelector('#helpCloseButton'),
     suggestions: document.querySelector('#suggestions'),
     settingsSheet: document.querySelector('#settingsSheet'),
     settingsBackdrop: document.querySelector('#settingsBackdrop'),
@@ -79,6 +108,7 @@ const els = {
     results: document.querySelector('#results'),
     resultCount: document.querySelector('#resultCount'),
     resultMeta: document.querySelector('#resultMeta'),
+    drivingMapBack: document.querySelector('#drivingMapBackButton'),
     globalProgress: document.querySelector('#globalProgress'),
     status: document.querySelector('#statusPill'),
     splash: document.querySelector('#splashScreen'),
@@ -88,6 +118,37 @@ const els = {
     bottomNavButtons: document.querySelectorAll('.bottom-nav-button'),
     template: document.querySelector('#stationTemplate'),
 };
+
+function setupTopControls() {
+    const summary = document.querySelector('.result-summary');
+    if (!summary) return;
+
+    const info = summary.querySelector('div:not(.global-progress)');
+    if (info) info.classList.add('result-info');
+
+    if (!els.status && info) {
+        els.status = document.createElement('span');
+        els.status.id = 'statusPill';
+        els.status.className = 'status-pill';
+        els.status.textContent = 'Bereit';
+        info.appendChild(els.status);
+    }
+
+    let actions = summary.querySelector('.quick-actions');
+    if (!actions) {
+        actions = document.createElement('div');
+        actions.className = 'quick-actions';
+        summary.appendChild(actions);
+    }
+
+    const sortToggle = document.querySelector('.sort-toggle');
+    if (els.locationButton) {
+        els.locationButton.lastChild.textContent = 'Standort';
+        actions.appendChild(els.locationButton);
+    }
+    if (sortToggle) actions.appendChild(sortToggle);
+    if (els.refresh) els.refresh.remove();
+}
 
 function startSplashScreen() {
     if (!els.splash) return;
@@ -228,7 +289,7 @@ function refreshMapLayout() {
 }
 
 function setStatus(text) {
-    els.status.textContent = text;
+    if (els.status) els.status.textContent = text;
 }
 
 function updateGlobalProgress() {
@@ -264,9 +325,14 @@ function debounce(fn, delay = 350) {
     };
 }
 
+function isValidPriceValue(value) {
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0;
+}
+
 function money(value) {
     const number = Number(value);
-    return Number.isFinite(number) ? `${number.toFixed(3).replace('.', ',')} €` : '-';
+    return isValidPriceValue(number) ? `${number.toFixed(3).replace('.', ',')} €` : '-';
 }
 
 function autobahnPriceValue(station, fuel = els.fuel.value) {
@@ -283,14 +349,45 @@ function autobahnPriceStand(station) {
     return dates[0]?.toISOString?.() || null;
 }
 
+function hasRecentAutobahnPrice(station, maxAgeMs = USAGE_PRICE_MAX_AGE_MS) {
+    const stand = validDateMs(autobahnPriceStand(station) || station.last_update || station.importedAt);
+    if (stand === null) return false;
+    return Date.now() - stand <= maxAgeMs;
+}
+
 function autobahnPriceSummary(station) {
     if (!station.prices) return 'Keine gespeicherten Preise';
     return `Diesel ${money(station.prices.diesel?.price)} · E5 ${money(station.prices.e5?.price)} · E10 ${money(station.prices.e10?.price)}`;
 }
 
+function routePriceStand(tankpoint) {
+    const dates = ['diesel', 'e5', 'e10']
+        .map((fuel) => tankpoint.prices?.[fuel]?.recordedAt)
+        .filter(Boolean)
+        .map((value) => new Date(value))
+        .filter((date) => !Number.isNaN(date.getTime()))
+        .sort((a, b) => b - a);
+    return dates[0]?.toISOString?.() || tankpoint.lastUpdated || null;
+}
+
+function selectedFuelPriceStand(station, fuel = els.fuel.value) {
+    if (!isValidPriceValue(fuelPriceValue(station, fuel))) return null;
+    return station.prices?.[fuel]?.recordedAt || station.last_update || station.lastUpdated || null;
+}
+
 function validDateMs(value) {
     const ms = Date.parse(value || '');
     return Number.isFinite(ms) ? ms : null;
+}
+
+function hasCurrentDrivingPrice(station, fuel = els.fuel.value, maxAgeMs = DRIVE_HIGHWAY_PRICE_MAX_AGE_MS) {
+    const stand = validDateMs(selectedFuelPriceStand(station, fuel));
+    if (stand === null) return false;
+    return Date.now() - stand <= maxAgeMs;
+}
+
+function hasDrivingPrice(station, fuel = els.fuel.value) {
+    return isValidPriceValue(fuelPriceValue(station, fuel));
 }
 
 function autobahnDataStand(stations = state.stations) {
@@ -317,9 +414,9 @@ function autobahnDataStandText(stations = state.stations) {
     const stand = autobahnDataStand(stations);
     if (stand.newestPrice) {
         const oldest = stand.oldestPrice && stand.oldestPrice !== stand.newestPrice
-            ? `, aelteste ${formatDateTime(stand.oldestPrice)}`
+            ? `, ältester Preis ${formatDateTime(stand.oldestPrice)}`
             : '';
-        return `Preisdaten: neueste ${formatDateTime(stand.newestPrice)}${oldest}`;
+        return `Preise zuletzt aktualisiert ${formatDateTime(stand.newestPrice)}${oldest}`;
     }
     if (stand.newestImport) return `Stammdaten: ${formatDateTime(stand.newestImport)}`;
     return 'Datenstand unbekannt';
@@ -393,7 +490,7 @@ function stationBrandKey(station) {
 }
 
 function getVisibleStations() {
-    if (state.listMode === 'cities' || state.listMode === 'autobahn') return state.stations;
+    if (state.listMode === 'cities' || state.listMode === 'autobahn' || state.listMode === 'driving') return state.stations;
     const selectedBrand = els.brand.value;
     if (selectedBrand === 'all') return state.stations;
     return state.stations.filter((station) => stationBrandKey(station) === selectedBrand);
@@ -424,7 +521,28 @@ function markerClass(station, thresholds) {
     if (station.priceCategory) {
         return ({ cheap: 'green-dark', medium: 'yellow-light', mid: 'yellow-light', expensive: 'red-dark', high: 'red-dark' })[station.priceCategory] || 'yellow-light';
     }
-    if (!station.is_open || station.price === null) return 'muted';
+    if (!station.is_open || !isValidPriceValue(station.price)) return 'muted';
+    if (thresholds?.prices?.length > 1) {
+        const price = Number(station.price);
+        const prices = thresholds.prices;
+        let first = -1;
+        let last = -1;
+        for (let index = 0; index < prices.length; index += 1) {
+            if (prices[index] === price) {
+                if (first === -1) first = index;
+                last = index;
+            }
+        }
+        if (first !== -1) {
+            const ratio = ((first + last) / 2) / Math.max(1, prices.length - 1);
+            if (ratio <= 0.1667) return 'green-dark';
+            if (ratio <= 0.3334) return 'green-light';
+            if (ratio <= 0.5001) return 'yellow-dark';
+            if (ratio <= 0.6668) return 'yellow-light';
+            if (ratio <= 0.8335) return 'red-light';
+            return 'red-dark';
+        }
+    }
     if (!Number.isFinite(thresholds.range) || thresholds.range <= 0) return 'green-dark';
     const ratio = Math.max(0, Math.min(1, (Number(station.price) - thresholds.low) / thresholds.range));
     if (ratio <= 0.1667) return 'green-dark';
@@ -441,9 +559,9 @@ function priceClassFor(station, thresholds) {
 
 function priceClassForFuel(station, fuel) {
     const price = Number(fuelPriceValue(station, fuel));
-    if (!Number.isFinite(price)) return 'price-rank-muted';
-    const candidates = state.stations
-        .filter((item) => Number.isFinite(Number(fuelPriceValue(item, fuel))))
+    if (!isValidPriceValue(price)) return 'price-rank-muted';
+    const candidates = getVisibleStations()
+        .filter((item) => isValidPriceValue(fuelPriceValue(item, fuel)))
         .map((item) => ({
             price: Number(fuelPriceValue(item, fuel)),
             is_open: true,
@@ -464,29 +582,34 @@ function categoryForDelta(delta) {
 
 function thresholdsFor(stations) {
     const prices = stations
-        .filter((station) => station.is_open && station.price !== null)
+        .filter((station) => station.is_open && isValidPriceValue(station.price))
         .map((station) => Number(station.price))
-        .filter(Number.isFinite)
+        .filter(isValidPriceValue)
         .sort((a, b) => a - b);
 
-    if (!prices.length) return { low: 0, high: Number.POSITIVE_INFINITY };
+    if (!prices.length) return { low: 0, high: Number.POSITIVE_INFINITY, range: 0, prices: [] };
     const low = prices[0];
     const high = prices[prices.length - 1];
     return {
         low,
         high: high > low ? high : Number.POSITIVE_INFINITY,
         range: high - low,
+        prices,
     };
 }
 
 function sortStations() {
     const byDistance = document.querySelector('.sort-toggle-button.active')?.dataset.sort === 'distance';
     state.stations.sort((a, b) => {
+        const distanceA = Number.isFinite(Number(a.distance)) ? Number(a.distance) : Number.MAX_VALUE;
+        const distanceB = Number.isFinite(Number(b.distance)) ? Number(b.distance) : Number.MAX_VALUE;
+        const priceA = isValidPriceValue(a.price) ? Number(a.price) : Number.MAX_VALUE;
+        const priceB = isValidPriceValue(b.price) ? Number(b.price) : Number.MAX_VALUE;
         if (byDistance) {
-            return a.distance - b.distance || (a.price ?? Number.MAX_VALUE) - (b.price ?? Number.MAX_VALUE);
+            return distanceA - distanceB || priceA - priceB;
         }
 
-        return (a.price ?? Number.MAX_VALUE) - (b.price ?? Number.MAX_VALUE) || a.distance - b.distance;
+        return priceA - priceB || distanceA - distanceB;
     });
 }
 
@@ -702,6 +825,67 @@ function renderMarkers() {
         state.map.fitBounds(bounds.pad(0.16), { maxZoom: 14 });
     }
     renderUserLocationMarker();
+    renderDrivingRouteOverlay();
+}
+
+function clearDrivingRouteOverlay() {
+    if (!state.map || state.map.type === 'fallback') return;
+    if (state.drivingRouteLayer) {
+        state.drivingRouteLayer.remove();
+        state.drivingRouteLayer = null;
+    }
+    if (state.drivingDirectionLayer) {
+        state.drivingDirectionLayer.remove();
+        state.drivingDirectionLayer = null;
+    }
+}
+
+function drivingDirectionTarget(position, direction) {
+    if (!position || !direction) return null;
+    const delta = direction === 'Berlin' ? 0.08 : -0.08;
+    return {
+        lat: Number(position.lat) + delta,
+        lng: Number(position.lng),
+    };
+}
+
+function renderDrivingRouteOverlay() {
+    if (!state.map || state.map.type === 'fallback') return;
+    clearDrivingRouteOverlay();
+    if (state.listMode !== 'driving') return;
+
+    const activeRouteId = state.drivingDetectedRouteId || state.drivingRouteId;
+    const routePoints = routeTankpointsFor(activeRouteId)
+        .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
+        .sort((a, b) => routeSortValue(a) - routeSortValue(b));
+    const routeLatLngs = routePoints.map((point) => [point.lat, point.lng]);
+
+    if (routeLatLngs.length >= 2) {
+        state.drivingRouteLayer = L.polyline(routeLatLngs, {
+            color: '#101419',
+            weight: 5,
+            opacity: 0.74,
+            dashArray: '10 8',
+        }).addTo(state.map);
+    }
+
+    const position = state.drivingSamples[state.drivingSamples.length - 1] || state.selectedLocation;
+    const target = drivingDirectionTarget(position, state.drivingDirection);
+    if (position && target) {
+        state.drivingDirectionLayer = L.polyline([[position.lat, position.lng], [target.lat, target.lng]], {
+            color: '#1f4fbf',
+            weight: 6,
+            opacity: 0.86,
+        }).addTo(state.map);
+    }
+
+    const fitPoints = [
+        ...(position ? [[position.lat, position.lng]] : []),
+        ...state.stations.map((station) => [station.lat, station.lng]),
+    ].filter(([lat, lng]) => Number.isFinite(Number(lat)) && Number.isFinite(Number(lng)));
+    if (fitPoints.length) {
+        state.map.fitBounds(L.latLngBounds(fitPoints).pad(0.22), { maxZoom: 13 });
+    }
 }
 
 function renderFallbackMap(stations, thresholds) {
@@ -754,6 +938,10 @@ function renderResults() {
         renderAutobahnList();
         return;
     }
+    if (state.listMode === 'driving') {
+        renderDrivingModeList();
+        return;
+    }
     sortStations();
 
     if (state.listMode === 'favorites') {
@@ -777,8 +965,8 @@ function renderResults() {
         rank.textContent = String(index + 1);
         rank.classList.add(markerClass(station, listThresholds));
         const price = node.querySelector('.station-list-price');
-        price.textContent = `${money(station.price)}`;
-        price.classList.add(priceClassFor(station, listThresholds));
+        price.textContent = money(fuelPriceValue(station, els.fuel.value));
+        price.classList.add(priceClassForFuel(station, els.fuel.value));
         node.querySelector('.brand-logo').replaceWith(htmlToElement(brandLogoHtml(station)));
         node.querySelector('.station-name').textContent = station.name || 'Tankstelle';
         node.querySelector('.station-distance').textContent = `${station.distance.toFixed(1).replace('.', ',')} km`;
@@ -853,6 +1041,9 @@ function stationDetailExtraHtml(station) {
 }
 
 function fuelPriceValue(station, fuel) {
+    if (station?.cityMode && fuel === els.fuel.value && isValidPriceValue(station.price)) {
+        return Number(station.price);
+    }
     return station?.prices?.[fuel]?.price ?? station?.[fuel] ?? (station?.fuel_type === fuel ? station.price : null);
 }
 
@@ -873,6 +1064,34 @@ function stationFuelPriceGridHtml(station) {
             `).join('')}
         </div>
     `;
+}
+
+function compactFuelPriceGridHtml(station, className = 'station-list-prices') {
+    const selectedFuel = els.fuel.value;
+    const fuels = [
+        ['diesel', 'Diesel'],
+        ['e5', 'E5'],
+        ['e10', 'E10'],
+    ];
+    return `
+        <div class="${escapeHtml(className)}">
+            ${fuels.map(([fuel, label]) => `
+                <span class="${priceClassForFuel(station, fuel)}${fuel === selectedFuel ? ' selected' : ''}">
+                    <small>${escapeHtml(label)}</small>
+                    <strong>${money(fuelPriceValue(station, fuel))}</strong>
+                </span>
+            `).join('')}
+        </div>
+    `;
+}
+
+function selectedFuelPriceHtml(station, className, thresholds = null) {
+    const fuel = els.fuel.value;
+    const price = fuelPriceValue(station, fuel);
+    const cls = thresholds
+        ? priceClassFor({ price, is_open: station.is_open !== false }, thresholds)
+        : priceClassForFuel(station, fuel);
+    return `<span class="${escapeHtml(className)} ${cls}">${money(price)}</span>`;
 }
 
 function stationHighwayDetailHtml(station) {
@@ -941,6 +1160,8 @@ function renderDetail(station) {
 
     const wazeUrl = `https://waze.com/ul?ll=${station.lat}%2C${station.lng}&navigate=yes`;
     const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lng}`;
+    const appleUrl = `https://maps.apple.com/?daddr=${station.lat},${station.lng}`;
+    const geoUrl = `geo:${station.lat},${station.lng}?q=${station.lat},${station.lng}`;
     const detailPriceClass = visiblePriceClass(station);
     els.appShell.classList.add('detail-open');
     els.detail.classList.add('visible');
@@ -981,8 +1202,15 @@ function renderDetail(station) {
             <nav class="detail-footer-nav" aria-label="Detailaktionen">
                 <button class="${isFavorite(station.tankerkoenig_id) ? 'active' : ''}" type="button" id="favoriteButton">Favorit</button>
                 <button type="button" id="showMapButton">Karte</button>
-                <a class="nav-link nav-link-waze" href="${wazeUrl}" target="_blank" rel="noopener">Waze</a>
-                <a class="nav-link" href="${googleUrl}" target="_blank" rel="noopener">Maps</a>
+                <details class="navigation-picker">
+                    <summary>Navigation</summary>
+                    <div class="navigation-options">
+                        <a href="${googleUrl}" target="_blank" rel="noopener">Google Maps</a>
+                        <a href="${wazeUrl}" target="_blank" rel="noopener">Waze</a>
+                        <a href="${appleUrl}" target="_blank" rel="noopener">Apple Karten</a>
+                        <a href="${geoUrl}" target="_blank" rel="noopener">System-Karte</a>
+                    </div>
+                </details>
             </nav>
         </article>
     `;
@@ -1098,6 +1326,7 @@ async function loadStations() {
         limit: els.limit.value,
         open: els.openOnly.checked ? '1' : '0',
         priced: els.pricedOnly.checked ? '1' : '0',
+        sort: document.querySelector('.sort-toggle-button.active')?.dataset.sort || 'price',
         q: els.searchInput.value.trim(),
     });
 
@@ -1112,8 +1341,8 @@ async function loadStations() {
         sortStations();
         els.resultCount.textContent = `${state.stations.length} Treffer`;
         els.resultMeta.textContent = data.fallback
-            ? `Gespeicherte Daten · ${fuelLabel(els.fuel.value)} im Radius ${els.radius.value} km`
-            : `${fuelLabel(els.fuel.value)} im Radius ${els.radius.value} km`;
+            ? `Gespeichert · ${fuelShortLabel(els.fuel.value)} · ${els.radius.value} km`
+            : `${fuelShortLabel(els.fuel.value)} · ${els.radius.value} km`;
         if (state.view === 'map') renderMarkers();
         renderResults();
         renderDetail(null);
@@ -1132,6 +1361,7 @@ async function loadStations() {
 }
 
 function prepareNormalSearch(clearLocation = false) {
+    if (state.drivingActive) stopDrivingMode(false);
     state.listMode = 'results';
     state.cityMapMode = 'overview';
     state.selectedCityId = null;
@@ -1156,6 +1386,10 @@ function runCurrentLocationSearch(options = {}) {
 
 function fuelLabel(value) {
     return ({ e10: 'Super E10', e5: 'Super E5', diesel: 'Diesel' })[value] || value;
+}
+
+function fuelShortLabel(value) {
+    return ({ e10: 'E10', e5: 'E5', diesel: 'Diesel' })[value] || value;
 }
 
 function cityFuelKeys() {
@@ -1217,6 +1451,12 @@ function shouldRefreshCitySnapshot(snapshot = state.citySnapshot, stale = false)
 }
 
 function cityUpdateProgressPercent() {
+    const progress = state.cityAutoUpdateProgress;
+    const cityCount = Number(progress?.cityCount || 0);
+    const citiesProcessed = Number(progress?.citiesProcessed || 0);
+    if (cityCount > 0) {
+        return Math.max(8, Math.min(98, Math.round((citiesProcessed / cityCount) * 100)));
+    }
     if (!state.cityAutoUpdateRunning || !state.cityAutoUpdateStartedAt) return 0;
     const elapsed = Date.now() - state.cityAutoUpdateStartedAt;
     return Math.max(8, Math.min(92, Math.round((elapsed / (2.5 * 60 * 1000)) * 100)));
@@ -1225,11 +1465,33 @@ function cityUpdateProgressPercent() {
 function cityUpdateProgressHtml() {
     if (!state.cityAutoUpdateRunning) return '';
     const percent = cityUpdateProgressPercent();
+    const progress = state.cityAutoUpdateProgress;
+    const processed = Number(progress?.citiesProcessed || 0);
+    const total = Number(progress?.cityCount || 0);
+    const stationCount = Number(progress?.stationUniqueCount || 0);
+    const step = progress?.currentStep || 'Import laeuft';
+    const currentCity = progress?.currentCityIndex && progress?.currentCity
+        ? `Stadt ${progress.currentCityIndex}/${total || '?'}: ${progress.currentCity}`
+        : progress?.currentCity || '';
+    const currentPoint = progress?.currentPointIndex && progress?.currentPointCount
+        ? `Suchpunkt ${progress.currentPointIndex}/${progress.currentPointCount}${progress.currentPoint ? `: ${progress.currentPoint}` : ''}`
+        : progress?.currentPoint || '';
+    const detail = total > 0
+        ? `${processed} von ${total} Staedten verarbeitet${stationCount ? ` - ${stationCount} Tankstellen` : ''}`
+        : 'Die bisherigen Daten bleiben sichtbar, bis der Snapshot abgeschlossen ist.';
+    const message = state.cityAutoUpdateMessage || detail;
+    const importDetail = [
+        progress?.currentDetail || '',
+        currentCity,
+        currentPoint,
+        progress?.progressUpdatedAt ? `Stand ${formatTime(progress.progressUpdatedAt)}` : '',
+    ].filter(Boolean).join(' - ');
     return `
         <div class="city-update-progress" role="status" aria-live="polite">
             <div>
                 <strong>Neue Städtedaten werden geladen</strong>
-                <span>Die bisherigen Daten bleiben sichtbar, bis der Snapshot vollständig abgeschlossen ist.</span>
+                <span>${escapeHtml(message)}</span>
+                <small><b>${escapeHtml(step)}</b>${importDetail ? ` - ${escapeHtml(importDetail)}` : ''}</small>
             </div>
             <div class="city-progress-bar" aria-hidden="true"><i style="width: ${percent}%"></i></div>
         </div>
@@ -1248,6 +1510,7 @@ async function pollCitySnapshotUntilFresh() {
     if (!state.cityAutoUpdateRunning) return;
     try {
         const data = await fetchJson('/api/city-snapshot.php');
+        state.cityAutoUpdateProgress = data.update || null;
         const nextId = data.snapshot?.snapshotId;
         const changed = nextId && nextId !== state.cityAutoUpdateSnapshotId;
         if (changed || (data.snapshot && !shouldRefreshCitySnapshot(data.snapshot, data.stale))) {
@@ -1256,8 +1519,26 @@ async function pollCitySnapshotUntilFresh() {
             state.cityAutoUpdateRunning = false;
             state.cityAutoUpdateStartedAt = null;
             state.cityAutoUpdateSnapshotId = null;
+            state.cityAutoUpdateProgress = null;
+            state.cityAutoUpdateMessage = null;
             setStatus('Aktuell');
             renderResults();
+            return;
+        }
+        const requestStatus = data.update?.requestStatus;
+        if (['completed', 'partial', 'skipped', 'failed'].includes(requestStatus) && !data.update?.running) {
+            state.cityAutoUpdateRunning = false;
+            state.cityAutoUpdateStartedAt = null;
+            state.cityAutoUpdateSnapshotId = null;
+            state.cityAutoUpdateMessage = requestStatus === 'failed'
+                ? (data.update?.requestError || 'Aktualisierung fehlgeschlagen. Alte Daten bleiben sichtbar.')
+                : requestStatus === 'partial'
+                    ? 'Aktualisierung mit Teilfehlern beendet. Alte Daten bleiben sichtbar.'
+                : 'Kein neuer Snapshot erforderlich. Alte Daten bleiben sichtbar.';
+            setStatus(['failed', 'partial'].includes(requestStatus) ? 'Fehler' : 'Aktuell');
+            renderResults();
+            state.cityAutoUpdateMessage = null;
+            state.cityAutoUpdateProgress = null;
             return;
         }
         renderResults();
@@ -1272,6 +1553,8 @@ async function startCityAutoUpdateIfNeeded(stale = false) {
     state.cityAutoUpdateRunning = true;
     state.cityAutoUpdateStartedAt = Date.now();
     state.cityAutoUpdateSnapshotId = state.citySnapshot?.snapshotId || null;
+    state.cityAutoUpdateProgress = null;
+    state.cityAutoUpdateMessage = null;
     setStatus('Update');
     renderResults();
     try {
@@ -1285,6 +1568,8 @@ async function startCityAutoUpdateIfNeeded(stale = false) {
         state.cityAutoUpdateRunning = false;
         state.cityAutoUpdateStartedAt = null;
         state.cityAutoUpdateSnapshotId = null;
+        state.cityAutoUpdateProgress = null;
+        state.cityAutoUpdateMessage = null;
         setStatus('Fehler');
         if (els.cityUpdateStatus) els.cityUpdateStatus.textContent = error.message;
         renderResults();
@@ -1303,6 +1588,7 @@ async function loadCitySnapshot(requestId = state.navRequestId) {
     try {
         const data = await fetchJson('/api/city-snapshot.php');
         if (!isCurrentNavigation(requestId, 'cities')) return;
+        state.cityAutoUpdateProgress = data.update || null;
         state.citySnapshot = data.snapshot;
         state.cityRankings = data.rankings || [];
         if (!state.selectedCityId && state.cityRankings[0]) {
@@ -1350,7 +1636,7 @@ function renderCityRankings() {
     });
 
     els.resultCount.textContent = `${rankings.length} Großstädte`;
-    els.resultMeta.textContent = `Stand: ${formatDateTime(state.citySnapshot.completedAt)}`;
+    els.resultMeta.textContent = `${formatDateTime(state.citySnapshot.completedAt)} · ${totals.stationCount} Tankstellen`;
     els.results.innerHTML = `
         <section class="city-dashboard">
             <div class="city-toolbar">
@@ -1360,16 +1646,10 @@ function renderCityRankings() {
                     <button type="button" data-city-view="map">Karte</button>
                 </div>
                 <div class="city-fuel-tabs">
-                    <button type="button" data-city-fuel="diesel">Diesel</button>
-                    <button type="button" data-city-fuel="e5">E5</button>
-                    <button type="button" data-city-fuel="e10">E10</button>
+                    <button type="button" data-city-fuel="diesel"><span>Diesel</span><strong>${averageMoney(totals.avgDiesel)}</strong></button>
+                    <button type="button" data-city-fuel="e5"><span>E5</span><strong>${averageMoney(totals.avgE5)}</strong></button>
+                    <button type="button" data-city-fuel="e10"><span>E10</span><strong>${averageMoney(totals.avgE10)}</strong></button>
                 </div>
-            </div>
-            <div class="city-overview">
-                <span>Ø Diesel <strong>${averageMoney(totals.avgDiesel)}</strong></span>
-                <span>Ø E5 <strong>${averageMoney(totals.avgE5)}</strong></span>
-                <span>Ø E10 <strong>${averageMoney(totals.avgE10)}</strong></span>
-                <span>Tankstellen <strong>${totals.stationCount}</strong></span>
             </div>
             ${cityUpdateProgressHtml()}
             <div class="city-table" role="table" aria-label="Durchschnittspreise Großstädte">
@@ -1380,6 +1660,8 @@ function renderCityRankings() {
             </div>
         </section>
     `;
+
+    applyCityPriceColors(rankings, keys);
 
     els.results.querySelectorAll('[data-city-fuel]').forEach((button) => {
         button.classList.toggle('active', button.dataset.cityFuel === els.fuel.value);
@@ -1412,6 +1694,38 @@ function renderCityRankings() {
 function averageMoney(group) {
     if (!group.count) return '-';
     return money(group.sum / group.count);
+}
+
+function cityPriceRankClass(key, value) {
+    const price = Number(value);
+    if (!Number.isFinite(price)) return 'price-rank-muted';
+    const candidates = state.cityRankings
+        .map((city) => ({ price: Number(city[key]), is_open: true }))
+        .filter((city) => Number.isFinite(city.price));
+    return priceClassFor({ price, is_open: true }, thresholdsFor(candidates));
+}
+
+function cityPriceCellHtml(city, key, label) {
+    return `<span class="city-data city-price-cell ${cityPriceRankClass(key, city[key])}" data-label="${escapeHtml(label)}">${money(city[key])}</span>`;
+}
+
+function applyCityPriceColors(rankings, keys) {
+    const priceColumns = [
+        { childIndex: 3, key: 'avgDiesel' },
+        { childIndex: 4, key: 'avgE5' },
+        { childIndex: 5, key: 'avgE10' },
+        { childIndex: 7, key: keys.min },
+        { childIndex: 8, key: keys.max },
+    ];
+    els.results.querySelectorAll('.city-row[data-city-id]').forEach((row) => {
+        const city = rankings.find((item) => item.cityId === row.dataset.cityId);
+        if (!city) return;
+        priceColumns.forEach(({ childIndex, key }) => {
+            const cell = row.querySelector(`span:nth-child(${childIndex})`);
+            if (!cell) return;
+            cell.classList.add('city-price-cell', cityPriceRankClass(key, city[key]));
+        });
+    });
 }
 
 function cityRowHtml(city, rank, keys, cheapest, expensive) {
@@ -1492,13 +1806,13 @@ function renderCityOverviewMap() {
     setStatus('Karte');
 }
 
-function cityStationRankClass(station) {
-    if (!station.is_open || station.price === null || station.price === undefined) return 'muted';
-    return markerClass(station, { low: 0, high: 0 });
+function cityStationRankClass(station, thresholds) {
+    if (!station.is_open || !isValidPriceValue(station.price)) return 'muted';
+    return markerClass({ price: station.price, is_open: true }, thresholds);
 }
 
-function cityStationRowHtml(station, rank) {
-    const cls = cityStationRankClass(station);
+function cityStationRowHtml(station, rank, thresholds) {
+    const cls = cityStationRankClass(station, thresholds);
     const addressParts = address(station);
     const category = ({ cheap: 'günstig', mid: 'mittel', high: 'teuer', muted: 'ohne Preis' })[cls] || 'mittel';
     return `
@@ -1509,7 +1823,7 @@ function cityStationRowHtml(station, rank) {
                 <strong>${escapeHtml(station.name || 'Tankstelle')}</strong>
                 <small>${escapeHtml(station.brand || 'Freie Tankstelle')} · ${escapeHtml(addressParts || 'Adresse unbekannt')}</small>
             </span>
-            <span class="city-station-price price-rank-${cls}">${money(station.price)}</span>
+            ${selectedFuelPriceHtml(station, 'city-station-price', thresholds)}
             <span class="city-station-meta">${escapeHtml(category)} · ${Number(station.distance || 0).toFixed(1).replace('.', ',')} km</span>
         </button>
     `;
@@ -1522,8 +1836,8 @@ function renderCityStationList() {
     const stations = [...state.stations]
         .filter((station) => station.cityMode)
         .sort((a, b) => {
-            const priceA = Number.isFinite(Number(a.price)) ? Number(a.price) : Number.MAX_VALUE;
-            const priceB = Number.isFinite(Number(b.price)) ? Number(b.price) : Number.MAX_VALUE;
+            const priceA = isValidPriceValue(a.price) ? Number(a.price) : Number.MAX_VALUE;
+            const priceB = isValidPriceValue(b.price) ? Number(b.price) : Number.MAX_VALUE;
             return priceA - priceB || Number(a.distance || 0) - Number(b.distance || 0) || String(a.name).localeCompare(String(b.name), 'de');
         });
 
@@ -1533,6 +1847,8 @@ function renderCityStationList() {
         els.results.innerHTML = '<div class="empty-state">Bitte die Großstadtliste neu öffnen.</div>';
         return;
     }
+
+    const cityStationThresholds = thresholdsFor(stations);
 
     els.resultCount.textContent = city.cityName;
     els.resultMeta.textContent = `${fuelLabel(els.fuel.value)} Ø ${money(city[keys.avg])} · ${stations.length} Einträge · Stand ${formatDateTime(state.citySnapshot.completedAt)}`;
@@ -1551,14 +1867,8 @@ function renderCityStationList() {
                     <button type="button" data-city-fuel="e10">E10</button>
                 </div>
             </div>
-            <div class="city-overview">
-                <span>Durchschnitt <strong>${money(city[keys.avg])}</strong></span>
-                <span>Gültige Preise <strong>${city[keys.valid] || 0}</strong></span>
-                <span>Günstigster Preis <strong>${money(city[keys.min])}</strong></span>
-                <span>Teuerster Preis <strong>${money(city[keys.max])}</strong></span>
-            </div>
             <div class="city-station-list">
-                ${stations.map((station, index) => cityStationRowHtml(station, index + 1)).join('')}
+                ${stations.map((station, index) => cityStationRowHtml(station, index + 1, cityStationThresholds)).join('')}
             </div>
         </section>
     `;
@@ -1613,7 +1923,15 @@ async function loadCityStations(cityId, target = 'map') {
         lng: Number(station.lng),
         distance: Number(station.distanceKm || 0),
         is_open: station.isOpen !== false,
-        price: station[keys.price],
+        price: isValidPriceValue(station[keys.price]) ? Number(station[keys.price]) : null,
+        diesel: isValidPriceValue(station.diesel) ? Number(station.diesel) : null,
+        e5: isValidPriceValue(station.e5) ? Number(station.e5) : null,
+        e10: isValidPriceValue(station.e10) ? Number(station.e10) : null,
+        prices: {
+            diesel: isValidPriceValue(station.diesel) ? { price: Number(station.diesel), recordedAt: station.collectedAt } : null,
+            e5: isValidPriceValue(station.e5) ? { price: Number(station.e5), recordedAt: station.collectedAt } : null,
+            e10: isValidPriceValue(station.e10) ? { price: Number(station.e10), recordedAt: station.collectedAt } : null,
+        },
         priceCategory: station[keys.category],
         last_update: station.collectedAt,
     })).filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lng));
@@ -1626,6 +1944,811 @@ async function loadCityStations(cityId, target = 'map') {
     if (target === 'list') renderCityStationList();
     else renderMarkers();
     setStatus('Aktuell');
+}
+
+function routeDistanceKm(latA, lngA, latB, lngB) {
+    const aLat = Number(latA);
+    const aLng = Number(lngA);
+    const bLat = Number(latB);
+    const bLng = Number(lngB);
+    if (![aLat, aLng, bLat, bLng].every(Number.isFinite)) return Number.POSITIVE_INFINITY;
+    const toRad = (value) => (value * Math.PI) / 180;
+    const earthKm = 6371;
+    const dLat = toRad(bLat - aLat);
+    const dLng = toRad(bLng - aLng);
+    const startLat = toRad(aLat);
+    const endLat = toRad(bLat);
+    const a = Math.sin(dLat / 2) ** 2
+        + Math.cos(startLat) * Math.cos(endLat) * Math.sin(dLng / 2) ** 2;
+    return earthKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function calculateBearing(from, to) {
+    const lat1 = Number(from.lat) * Math.PI / 180;
+    const lat2 = Number(to.lat) * Math.PI / 180;
+    const dLng = (Number(to.lng) - Number(from.lng)) * Math.PI / 180;
+    if (![lat1, lat2, dLng].every(Number.isFinite)) return null;
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function detectDrivingDirection(samples = state.drivingSamples) {
+    const usable = samples
+        .filter((sample) => Number.isFinite(sample.lat) && Number.isFinite(sample.lng))
+        .slice(-5);
+    if (usable.length < 2) return null;
+    const first = usable[0];
+    const last = usable[usable.length - 1];
+    const distance = routeDistanceKm(first.lat, first.lng, last.lat, last.lng);
+    const elapsedHours = Math.max(0, (last.timestamp - first.timestamp) / 3600000);
+    const calculatedSpeed = elapsedHours > 0 ? distance / elapsedHours : 0;
+    const speedKmh = Number.isFinite(last.speedKmh) && last.speedKmh > 0 ? last.speedKmh : calculatedSpeed;
+    state.drivingSpeedKmh = speedKmh;
+    state.drivingAccuracy = last.accuracy;
+    if (speedKmh < 20 || Number(last.accuracy) > 100 || distance < 0.08) return null;
+
+    const bearing = calculateBearing(first, last);
+    if (!Number.isFinite(bearing)) return null;
+    const latDelta = Number(last.lat) - Number(first.lat);
+    if (Math.abs(latDelta) > 0.00045) return latDelta > 0 ? 'Berlin' : 'Muenchen';
+    if (bearing >= 315 || bearing <= 45) return 'Berlin';
+    if (bearing >= 135 && bearing <= 225) return 'Muenchen';
+    return null;
+}
+
+function routeSortValue(point) {
+    if (point.kmPosition !== null && point.kmPosition !== undefined && point.kmPosition !== '' && Number.isFinite(Number(point.kmPosition))) return Number(point.kmPosition);
+    if (point.streckenIndex !== null && point.streckenIndex !== undefined && point.streckenIndex !== '' && Number.isFinite(Number(point.streckenIndex))) return Number(point.streckenIndex);
+    return Number(point.lat);
+}
+
+function routeUsesLatFallback(routeId) {
+    return routeTankpointsFor(routeId).every((point) => (
+        (point.kmPosition === null || point.kmPosition === undefined || point.kmPosition === '' || !Number.isFinite(Number(point.kmPosition)))
+        && (point.streckenIndex === null || point.streckenIndex === undefined || point.streckenIndex === '' || !Number.isFinite(Number(point.streckenIndex)))
+    ));
+}
+
+function normalizeRouteDirection(value) {
+    const text = String(value || 'beide').toLowerCase();
+    if (text.includes('berlin') || text.includes('nord')) return 'Berlin';
+    if (text.includes('muenchen') || text.includes('münchen') || text.includes('nuernberg') || text.includes('nürnberg') || text.includes('sued') || text.includes('süd')) return 'Muenchen';
+    return 'beide';
+}
+
+function distanceToSegmentKm(point, start, end) {
+    const latScale = 111.32;
+    const lngScale = 111.32 * Math.max(0.2, Math.cos((Number(point.lat) * Math.PI) / 180));
+    const px = Number(point.lng) * lngScale;
+    const py = Number(point.lat) * latScale;
+    const ax = Number(start.lng) * lngScale;
+    const ay = Number(start.lat) * latScale;
+    const bx = Number(end.lng) * lngScale;
+    const by = Number(end.lat) * latScale;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lengthSquared = dx * dx + dy * dy;
+    if (!lengthSquared) return routeDistanceKm(point.lat, point.lng, start.lat, start.lng);
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSquared));
+    const x = ax + t * dx;
+    const y = ay + t * dy;
+    return Math.sqrt((px - x) ** 2 + (py - y) ** 2);
+}
+
+function routeLabel(routeId = state.drivingDetectedRouteId || state.drivingRouteId) {
+    return routeId && routeId !== 'ALL' ? routeId : 'A';
+}
+
+function routeTankpointsFor(routeId) {
+    return state.drivingRouteTankpoints.filter((point) => {
+        const pointRoute = String(point.routeId || point.autobahn || '').toUpperCase();
+        return routeId === 'ALL' || pointRoute === routeId;
+    });
+}
+
+function hasAnyFuelPrice(point) {
+    return ['diesel', 'e5', 'e10'].some((fuel) => isValidPriceValue(fuelPriceValue(point, fuel)));
+}
+
+function routeHasEnoughPricedPoints(routeId, minCount = 2) {
+    return routeTankpointsFor(routeId).filter(hasAnyFuelPrice).length >= minCount;
+}
+
+function detectCurrentRoute(position, routeId = state.drivingRouteId) {
+    if (!position || !state.drivingRouteTankpoints.length) {
+        return { onRoute: false, distanceKm: Number.POSITIVE_INFINITY, routeId };
+    }
+    const routeIds = routeId === 'ALL'
+        ? [...new Set(state.drivingRouteTankpoints.map((point) => String(point.routeId || point.autobahn || '').toUpperCase()).filter((value) => /^A\d+$/.test(value)))]
+        : [routeId];
+    let best = { onRoute: false, distanceKm: Number.POSITIVE_INFINITY, routeId };
+
+    routeIds.forEach((currentRouteId) => {
+        if (!routeHasEnoughPricedPoints(currentRouteId)) return;
+        const points = routeTankpointsFor(currentRouteId).sort((a, b) => routeSortValue(a) - routeSortValue(b));
+        if (!points.length) return;
+        let distanceKm = Math.min(...points.map((point) => routeDistanceKm(position.lat, position.lng, point.lat, point.lng)));
+        for (let index = 1; index < points.length; index += 1) {
+            distanceKm = Math.min(distanceKm, distanceToSegmentKm(position, points[index - 1], points[index]));
+        }
+        if (distanceKm < best.distanceKm) best = { onRoute: distanceKm <= 18, distanceKm, routeId: currentRouteId };
+    });
+
+    state.drivingNearestRouteDistanceKm = best.distanceKm;
+    state.drivingDetectedRouteId = best.onRoute ? best.routeId : null;
+    return best;
+}
+
+function estimateCurrentRoutePosition(position) {
+    const points = routeTankpointsFor(state.drivingDetectedRouteId || state.drivingRouteId)
+        .filter((point) => Number.isFinite(routeSortValue(point)));
+    if (!position || !points.length) return null;
+    let nearest = null;
+    points.forEach((point) => {
+        const distance = routeDistanceKm(position.lat, position.lng, point.lat, point.lng);
+        if (!nearest || distance < nearest.distance) nearest = { point, distance };
+    });
+    if (!nearest) return null;
+    state.drivingCurrentRoutePosition = routeSortValue(nearest.point);
+    return state.drivingCurrentRoutePosition;
+}
+
+function routePointDistanceAheadKm(point, position) {
+    if (!position) return null;
+    return routeDistanceKm(position.lat, position.lng, point.lat, point.lng);
+}
+
+function getNextTankpointsOnRoute({ position, direction, limit = 5 } = {}) {
+    if (!position || !direction) return [];
+    const currentPosition = estimateCurrentRoutePosition(position);
+    if (!Number.isFinite(currentPosition)) return [];
+    const activeRouteId = state.drivingDetectedRouteId || state.drivingRouteId;
+    const usesLatFallback = routeUsesLatFallback(activeRouteId);
+    const candidates = routeTankpointsFor(activeRouteId)
+        .filter((point) => {
+            const pointDirection = normalizeRouteDirection(point.richtung);
+            if (pointDirection !== 'beide' && pointDirection !== direction) return false;
+            const value = routeSortValue(point);
+            if (!Number.isFinite(value)) return false;
+            if (usesLatFallback) return direction === 'Berlin' ? value > currentPosition : value < currentPosition;
+            return direction === 'Muenchen' ? value > currentPosition : value < currentPosition;
+        })
+        .map((point) => ({
+            ...point,
+            distance: routePointDistanceAheadKm(point, position),
+            is_open: point.isOpen,
+            price: fuelPriceValue(point, els.fuel.value),
+            last_update: routePriceStand(point),
+        }))
+        .filter((point) => Number.isFinite(point.distance))
+        .sort((a, b) => (
+            usesLatFallback
+                ? (direction === 'Berlin' ? routeSortValue(a) - routeSortValue(b) : routeSortValue(b) - routeSortValue(a))
+                : (direction === 'Muenchen' ? routeSortValue(a) - routeSortValue(b) : routeSortValue(b) - routeSortValue(a))
+        ));
+    return candidates.slice(0, limit);
+}
+
+async function loadCityDriveStations(position, limit = 5) {
+    if (!position) return [];
+    const lat = Number(position.lat);
+    const lng = Number(position.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return [];
+    const loadKey = `${lat.toFixed(3)}:${lng.toFixed(3)}:${els.fuel.value}`;
+    const fresh = state.drivingCityLastLoadKey === loadKey
+        && state.drivingCityLastLoadAt
+        && Date.now() - state.drivingCityLastLoadAt < 30000;
+    if (fresh && state.stations.length && state.drivingContext === 'city') {
+        return state.stations
+            .map((station) => ({
+                ...station,
+                distance: routeDistanceKm(lat, lng, station.lat, station.lng),
+            }))
+            .filter((station) => Number.isFinite(station.distance))
+            .sort((a, b) => a.distance - b.distance)
+            .slice(0, limit);
+    }
+
+    const candidateLimit = Math.max(25, limit * 5);
+    const params = new URLSearchParams({
+        lat: String(lat),
+        lng: String(lng),
+        radius: '5',
+        fuel: els.fuel.value,
+        limit: String(candidateLimit),
+        open: '1',
+        priced: '1',
+        q: 'Fahrmodus',
+    });
+    const data = await fetchJson(`/api/search.php?${params.toString()}`, { timeoutMs: 15000, progress: false });
+    state.drivingCityLastLoadAt = Date.now();
+    state.drivingCityLastLoadKey = loadKey;
+    return (data.stations || [])
+        .map((station) => ({
+            ...station,
+            drivingContext: 'city',
+            drivingMode: true,
+            distance: Number(station.distance || Number.POSITIVE_INFINITY),
+        }))
+        .filter((station) => Number.isFinite(station.distance))
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, limit);
+}
+
+function mergeLiveDrivingPrice(station, liveStation) {
+    if (!liveStation) return station;
+    return {
+        ...station,
+        is_open: liveStation.is_open ?? station.is_open,
+        price: fuelPriceValue(liveStation, els.fuel.value),
+        prices: liveStation.prices || station.prices,
+        last_update: liveStation.last_update || station.last_update,
+        priceSource: 'live',
+    };
+}
+
+function bestLiveMatchForDrivingStation(station, liveStations = []) {
+    const stationId = String(station.tankerkoenigId || station.tankerkoenig_id || station.stationId || station.priceStationId || '').replace(/^tankkoenig_/, '');
+    const direct = liveStations.find((candidate) => {
+        const candidateId = String(candidate.tankerkoenigId || candidate.tankerkoenig_id || candidate.stationId || '').replace(/^tankkoenig_/, '');
+        return stationId && candidateId && stationId === candidateId;
+    });
+    if (direct) return direct;
+
+    return liveStations
+        .map((candidate) => ({
+            candidate,
+            distance: routeDistanceKm(station.lat, station.lng, candidate.lat, candidate.lng),
+        }))
+        .filter((item) => Number.isFinite(item.distance) && item.distance <= 0.35)
+        .sort((a, b) => a.distance - b.distance)[0]?.candidate || null;
+}
+
+async function loadLivePricesForDrivingStations(stations) {
+    const staleStations = stations.filter((station) => !hasCurrentDrivingPrice(station));
+    if (!staleStations.length) return stations;
+
+    const refreshed = await Promise.all(stations.map(async (station) => {
+        if (hasCurrentDrivingPrice(station)) return station;
+        const lat = Number(station.lat);
+        const lng = Number(station.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return station;
+        const params = new URLSearchParams({
+            lat: String(lat),
+            lng: String(lng),
+            radius: '3',
+            fuel: els.fuel.value,
+            limit: '10',
+            open: '1',
+            priced: '1',
+            live: '1',
+            q: 'Fahrmodus Preise',
+        });
+        try {
+            const data = await fetchJson(`/api/search.php?${params.toString()}`, { timeoutMs: 15000, progress: false });
+            return mergeLiveDrivingPrice(station, bestLiveMatchForDrivingStation(station, data.stations || []));
+        } catch (error) {
+            return station;
+        }
+    }));
+
+    return refreshed;
+}
+
+async function loadLiveCityDriveStations(position, limit = 10) {
+    const lat = Number(position?.lat);
+    const lng = Number(position?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return [];
+    const params = new URLSearchParams({
+        lat: String(lat),
+        lng: String(lng),
+        radius: '5',
+        fuel: els.fuel.value,
+        limit: String(Math.max(50, limit * 8)),
+        open: '1',
+        priced: '1',
+        live: '1',
+        sort: 'distance',
+        q: 'Fahrmodus Live',
+    });
+    let data = await fetchJson(`/api/search.php?${params.toString()}`, { timeoutMs: 15000, progress: false });
+    let usedStoredFallback = data.fallback === true || data.stored === true;
+    if (!(data.stations || []).length) {
+        params.delete('live');
+        data = await fetchJson(`/api/search.php?${params.toString()}`, { timeoutMs: 15000, progress: false });
+        usedStoredFallback = true;
+    }
+    state.drivingCityLastLoadAt = Date.now();
+    state.drivingCityLastLoadKey = `${lat.toFixed(3)}:${lng.toFixed(3)}:${els.fuel.value}`;
+    state.drivingCityLastSource = usedStoredFallback ? 'fallback' : 'live';
+    state.drivingCityLastMessage = usedStoredFallback
+        ? (data.message || 'Live-Preise nicht erreichbar - gespeicherte Preise koennen abweichen')
+        : '';
+    return (data.stations || [])
+        .map((station) => ({
+            ...station,
+            drivingContext: 'city',
+            drivingMode: true,
+            priceSource: usedStoredFallback ? 'fallback' : 'live',
+            distance: Number(station.distance || Number.POSITIVE_INFINITY),
+        }))
+        .filter((station) => Number.isFinite(station.distance) && hasDrivingPrice(station))
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, limit);
+}
+
+function normalizeRouteTankpoint(point) {
+    return {
+        drivingMode: true,
+        tankerkoenig_id: point.id || point.stationId,
+        id: point.id || point.stationId,
+        stationId: point.stationId || point.id,
+        priceStationId: point.priceStationId || '',
+        name: point.name || 'Tankpunkt',
+        brand: point.brand || 'Tankstelle',
+        typ: point.typ || point.type || 'tankpunkt',
+        autobahn: point.autobahn || point.routeId || '',
+        routeId: point.routeId || point.autobahn || '',
+        richtung: point.richtung || 'beide',
+        direktAnAutobahn: point.direktAnAutobahn === true,
+        abfahrtName: point.abfahrtName || '',
+        abfahrtNummer: point.abfahrtNummer || '',
+        abfahrtEntfernungKm: Number.isFinite(Number(point.abfahrtEntfernungKm)) ? Number(point.abfahrtEntfernungKm) : null,
+        abfahrtEntfernungMin: Number.isFinite(Number(point.abfahrtEntfernungMin)) ? Number(point.abfahrtEntfernungMin) : null,
+        streckenIndex: point.streckenIndex !== null && point.streckenIndex !== undefined && point.streckenIndex !== '' && Number.isFinite(Number(point.streckenIndex)) ? Number(point.streckenIndex) : null,
+        kmPosition: point.kmPosition !== null && point.kmPosition !== undefined && point.kmPosition !== '' && Number.isFinite(Number(point.kmPosition)) ? Number(point.kmPosition) : null,
+        lat: Number(point.lat),
+        lng: Number(point.lng),
+        distance: Number(point.distance || 0),
+        is_open: point.isOpen ?? point.is_open ?? null,
+        prices: point.prices || null,
+        price: null,
+        source: point.source || '',
+        lastUpdated: point.lastUpdated || null,
+        last_update: routePriceStand(point),
+    };
+}
+
+async function loadRouteTankpoints(routeId = state.drivingRouteId) {
+    const freshMs = state.drivingRouteLoadedAt ? Date.now() - state.drivingRouteLoadedAt : Number.POSITIVE_INFINITY;
+    if (state.drivingRouteTankpoints.length && freshMs < 30 * 60 * 1000) return state.drivingRouteTankpoints;
+    const data = await fetchJson(`/api/route/tankpoints.php?route=${encodeURIComponent(routeId)}`);
+    state.drivingRouteTankpoints = (data.tankpoints || [])
+        .map(normalizeRouteTankpoint)
+        .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+    state.drivingRouteLoadedAt = Date.now();
+    return state.drivingRouteTankpoints;
+}
+
+function drivingModePriceStandText(stations = state.stations) {
+    const times = stations
+        .map(routePriceStand)
+        .map(validDateMs)
+        .filter((value) => value !== null)
+        .sort((a, b) => b - a);
+    return times.length ? `Preise Stand ${formatDateTime(times[0])}` : 'Keine gespeicherten Preise';
+}
+
+function drivingModeHintHtml() {
+    return `
+        <div class="driving-hint">
+            <strong>${escapeHtml(state.drivingMessage || 'Fahrtrichtung wird ermittelt')}</strong>
+            <span>GPS wird nur im aktiven Fahrmodus genutzt. Es erfolgt keine permanente externe Umkreissuche.</span>
+        </div>
+    `;
+}
+
+function drivingTestPanelHtml() {
+    const sample = state.drivingSamples[state.drivingSamples.length - 1] || {};
+    const lat = Number.isFinite(sample.lat) ? sample.lat : 51.401904;
+    const lng = Number.isFinite(sample.lng) ? sample.lng : 12.18128;
+    const direction = state.drivingDirection || 'Muenchen';
+    return `
+        <form class="driving-test-panel" data-driving-test-form>
+            <strong>Testposition</strong>
+            <label>
+                <span>Breite</span>
+                <input name="lat" type="number" step="0.000001" value="${escapeHtml(lat)}">
+            </label>
+            <label>
+                <span>Länge</span>
+                <input name="lng" type="number" step="0.000001" value="${escapeHtml(lng)}">
+            </label>
+            <label>
+                <span>Richtung</span>
+                <select name="direction">
+                    <option value="Muenchen"${direction === 'Muenchen' ? ' selected' : ''}>München/Nürnberg</option>
+                    <option value="Berlin"${direction === 'Berlin' ? ' selected' : ''}>Berlin</option>
+                </select>
+            </label>
+            <button class="text-button" type="submit">Ansicht testen</button>
+            <div class="driving-test-presets">
+                <button type="button" data-driving-preset-lat="50.914758" data-driving-preset-lng="6.834332" data-driving-preset-direction="Berlin">A1 Frechen -> Nord</button>
+                <button type="button" data-driving-preset-lat="51.406848" data-driving-preset-lng="7.478127" data-driving-preset-direction="Berlin">A1 Hagen -> Nord</button>
+                <button type="button" data-driving-preset-lat="53.053350" data-driving-preset-lng="9.031812" data-driving-preset-direction="Muenchen">A1 Oyten -> Sued</button>
+            </div>
+        </form>
+    `;
+}
+
+function routeTankpointTypeLabel(value) {
+    const text = String(value || '').toLowerCase();
+    if (text.includes('autohof')) return 'Autohof';
+    if (text.includes('rast')) return 'Raststätte';
+    if (text.includes('abfahrt')) return 'Tankstelle nahe Abfahrt';
+    return 'Tankpunkt';
+}
+
+function drivingTankpointRowHtml(station, rank, thresholds) {
+    const cls = markerClass(station, thresholds);
+    const typeLabel = routeTankpointTypeLabel(station.typ);
+    const access = station.direktAnAutobahn
+        ? 'direkt an Autobahn'
+        : `nahe Abfahrt${station.abfahrtEntfernungMin ? `, ca. ${station.abfahrtEntfernungMin} Min.` : ''}`;
+    const exit = [station.abfahrtNummer ? `AS ${station.abfahrtNummer}` : '', station.abfahrtName].filter(Boolean).join(' ');
+    return `
+        <button class="driving-row" type="button" data-driving-station-id="${escapeHtml(station.tankerkoenig_id)}">
+            <span class="rank ${cls}">${rank}</span>
+            ${brandLogoHtml(station)}
+            <span class="driving-main">
+                <strong>${escapeHtml(station.name || 'Tankpunkt')}</strong>
+                <small>${escapeHtml(typeLabel)} · ${escapeHtml(access)}${exit ? ` · ${escapeHtml(exit)}` : ''}</small>
+                <small>Diesel ${money(fuelPriceValue(station, 'diesel'))} · E5 ${money(fuelPriceValue(station, 'e5'))} · E10 ${money(fuelPriceValue(station, 'e10'))}</small>
+            </span>
+            <span class="driving-distance">${Number(station.distance || 0).toFixed(1).replace('.', ',')} km</span>
+            <span class="driving-status">${station.is_open === false ? 'geschlossen' : station.is_open === true ? 'geöffnet' : 'Status offen'}</span>
+        </button>
+    `;
+}
+
+function drivingTankpointCardHtml(station, rank, thresholds) {
+    const cls = markerClass(station, thresholds);
+    const typeLabel = routeTankpointTypeLabel(station.typ);
+    const isCity = state.drivingContext === 'city' || station.drivingContext === 'city';
+    const access = station.direktAnAutobahn
+        ? 'direkt an Autobahn'
+        : `nahe Abfahrt${station.abfahrtEntfernungMin ? `, ca. ${station.abfahrtEntfernungMin} Min.` : ''}`;
+    const exit = [station.abfahrtNummer ? `AS ${station.abfahrtNummer}` : '', station.abfahrtName].filter(Boolean).join(' ');
+    const status = station.is_open === false ? 'geschlossen' : station.is_open === true ? 'geoeffnet' : 'Status unbekannt';
+    const subtitle = isCity
+        ? `${escapeHtml(station.brand || 'Tankstelle')} - ${escapeHtml(address(station) || 'Umkreis')}`
+        : `${escapeHtml(typeLabel)} - ${escapeHtml(access)}${exit ? ` - ${escapeHtml(exit)}` : ''}`;
+    const selectedFuel = els.fuel.value;
+    return `
+        <button class="driving-row driving-card" type="button" data-driving-station-id="${escapeHtml(station.tankerkoenig_id)}">
+            <span class="rank ${cls}">${rank}</span>
+            <span class="driving-main">
+                <span class="driving-titleline">
+                    ${brandLogoHtml(station)}
+                    <strong>${escapeHtml(station.name || 'Tankpunkt')}</strong>
+                </span>
+                <small>${subtitle}</small>
+            </span>
+            <span class="driving-distance"><strong>${Number(station.distance || 0).toFixed(1).replace('.', ',')}</strong><small>${isCity ? 'km entfernt' : 'km voraus'}</small></span>
+            <span class="driving-selected-price ${priceClassForFuel(station, selectedFuel)}">
+                <small>${escapeHtml(fuelLabel(selectedFuel))}</small>
+                <strong>${money(fuelPriceValue(station, selectedFuel))}</strong>
+            </span>
+            <span class="driving-status">${escapeHtml(status)} - ${formatTime(station.last_update)}</span>
+        </button>
+    `;
+}
+
+function drivingPriceVisualizationHtml(thresholds) {
+    if (!state.stations.length) return '';
+    const selectedFuel = els.fuel.value;
+    const isCity = state.drivingContext === 'city';
+    const maxDistance = Math.max(...state.stations.map((station) => Number(station.distance || 0)), 1);
+    const cheapestPrice = Math.min(...state.stations
+        .map((station) => Number(fuelPriceValue(station, selectedFuel)))
+        .filter(isValidPriceValue));
+    return `
+        <section class="driving-price-visual" aria-label="Preissituation der naechsten Tankstellen">
+            <div class="driving-price-visual-head">
+                <strong>${escapeHtml(fuelLabel(selectedFuel))}</strong>
+                <span>${state.stations.length} ${isCity ? 'Tankstellen im Umkreis' : 'Tankpunkte voraus'}</span>
+            </div>
+            <div class="driving-price-road">
+                ${state.stations.map((station, index) => {
+                    const price = Number(fuelPriceValue(station, selectedFuel));
+                    const isCheapest = isValidPriceValue(price) && price === cheapestPrice;
+                    const left = Math.max(4, Math.min(96, (Number(station.distance || 0) / maxDistance) * 92 + 4));
+                    const cls = markerClass(station, thresholds);
+                    return `
+                        <button class="driving-price-stop ${cls}${isCheapest ? ' cheapest' : ''}" type="button" data-driving-station-id="${escapeHtml(station.tankerkoenig_id)}" style="left:${left}%">
+                            <span>${index + 1}</span>
+                            <strong>${money(price)}</strong>
+                            <small>${Number(station.distance || 0).toFixed(0)} km</small>
+                        </button>
+                    `;
+                }).join('')}
+            </div>
+            <div class="driving-price-legend">
+                <span><i class="dot cheap"></i>guenstig</span>
+                <span><i class="dot mid"></i>mittel</span>
+                <span><i class="dot high"></i>teuer</span>
+            </div>
+        </section>
+    `;
+}
+
+function renderDrivingModeList() {
+    setCityMode(false);
+    setDirectoryMode(false);
+    els.appShell.classList.add('driving-mode');
+    const directionLabel = state.drivingDirection === 'Muenchen' ? 'Richtung Sueden' : state.drivingDirection === 'Berlin' ? 'Richtung Norden' : 'wird ermittelt';
+    const speed = Number.isFinite(state.drivingSpeedKmh) ? `${Math.round(state.drivingSpeedKmh)} km/h` : 'Tempo unbekannt';
+    const accuracy = Number.isFinite(state.drivingAccuracy) ? `GPS ${Math.round(state.drivingAccuracy)} m` : 'GPS wird ermittelt';
+    const routeDistance = Number.isFinite(state.drivingNearestRouteDistanceKm)
+        ? `${state.drivingNearestRouteDistanceKm.toFixed(1).replace('.', ',')} km zur Route`
+        : 'Autobahn-Naehe wird geprueft';
+    const thresholds = thresholdsFor(state.stations);
+    const contextLabel = state.drivingContext === 'city' ? 'Stadtmodus' : `Autobahn ${routeLabel()}`;
+    const visibleStations = [...state.stations]
+        .sort((a, b) => Number(a.distance || 0) - Number(b.distance || 0));
+    els.resultCount.textContent = `Drive ${state.drivingContext === 'city' ? 'Stadt' : routeLabel()}`;
+    els.resultMeta.textContent = `${accuracy} · ${speed} · ${directionLabel} · ${drivingModePriceStandText(state.stations)}`;
+
+    els.results.innerHTML = `
+        <section class="driving-dashboard">
+            <div class="driving-header">
+                <div class="driving-header-main">
+                    <span>${escapeHtml(contextLabel)} - ${escapeHtml(state.drivingContext === 'city' ? 'nah bis fern' : directionLabel)}</span>
+                    <small>${escapeHtml(speed)} - ${escapeHtml(accuracy)} - ${escapeHtml(routeDistance)}</small>
+                </div>
+                <strong>${escapeHtml(contextLabel)}</strong>
+                <span>${escapeHtml(state.drivingContext === 'city' ? '5 naechste Tankstellen' : directionLabel)}</span>
+                <small>${escapeHtml(speed)} · ${escapeHtml(accuracy)} · ${escapeHtml(routeDistance)}</small>
+            </div>
+            ${state.drivingStatus === 'ready' && !state.drivingMessage ? '' : drivingModeHintHtml()}
+            <div class="driving-actions">
+                <button class="text-button" type="button" data-driving-map>Karte anzeigen</button>
+            </div>
+            ${drivingTestPanelHtml()}
+            ${drivingPriceVisualizationHtml(thresholds)}
+            <div class="city-station-list">
+                ${visibleStations.length
+                    ? visibleStations.map((station, index) => drivingTankpointCardHtml(station, index + 1, thresholds)).join('')
+                    : '<div class="empty-state">Keine passenden Tankpunkte in Fahrtrichtung gefunden.</div>'}
+            </div>
+        </section>
+    `;
+
+    els.results.querySelector('[data-driving-map]')?.addEventListener('click', () => {
+        setView('map');
+        updateDrivingModeMapMarkers();
+    });
+    els.results.querySelector('[data-driving-stop]')?.addEventListener('click', stopDrivingMode);
+    els.results.querySelector('[data-driving-test-form]')?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        applyDrivingTestPosition(new FormData(event.currentTarget)).catch((error) => {
+            state.drivingStatus = 'error';
+            state.drivingMessage = error.message || 'Testposition konnte nicht angewendet werden.';
+            renderDrivingModeList();
+        });
+    });
+    els.results.querySelectorAll('[data-driving-preset-lat]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const form = button.closest('[data-driving-test-form]');
+            if (!form) return;
+            form.elements.lat.value = button.dataset.drivingPresetLat;
+            form.elements.lng.value = button.dataset.drivingPresetLng;
+            form.elements.direction.value = button.dataset.drivingPresetDirection;
+            applyDrivingTestPosition(new FormData(form)).catch((error) => {
+                state.drivingStatus = 'error';
+                state.drivingMessage = error.message || 'Testposition konnte nicht angewendet werden.';
+                renderDrivingModeList();
+            });
+        });
+    });
+    els.results.querySelectorAll('[data-driving-station-id]').forEach((button) => {
+        button.addEventListener('click', () => {
+            state.selectedId = button.dataset.drivingStationId;
+            renderDetail(state.stations.find((item) => item.tankerkoenig_id === state.selectedId));
+        });
+    });
+}
+
+function updateDrivingModeMapMarkers() {
+    if (state.view !== 'map') return;
+    renderMarkers();
+    if (!state.stations.length && state.selectedLocation && state.map?.type !== 'fallback') {
+        state.map.setView([state.selectedLocation.lat, state.selectedLocation.lng], 13, { animate: true });
+    }
+}
+
+async function applyDrivingTestPosition(formData) {
+    const parseCoordinate = (value) => Number(String(value || '').replace(',', '.'));
+    const lat = parseCoordinate(formData.get('lat'));
+    const lng = parseCoordinate(formData.get('lng'));
+    const direction = String(formData.get('direction') || 'Muenchen');
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error('Bitte gültige Koordinaten eingeben.');
+
+    if (state.drivingWatchId !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(state.drivingWatchId);
+        state.drivingWatchId = null;
+    }
+
+    state.listMode = 'driving';
+    state.drivingActive = true;
+    state.drivingDetectedRouteId = null;
+    state.drivingRouteId = state.drivingRouteId || 'ALL';
+    state.drivingStatus = 'test';
+    state.drivingMessage = 'Testposition aktiv';
+    await loadRouteTankpoints(state.drivingRouteId);
+
+    const now = Date.now();
+    const deltaLat = direction === 'Berlin' ? 0.006 : -0.006;
+    state.drivingSamples = [
+        {
+            lat: lat - deltaLat,
+            lng,
+            accuracy: 25,
+            speedKmh: 85,
+            timestamp: now - 25000,
+        },
+        {
+            lat,
+            lng,
+            accuracy: 25,
+            speedKmh: 85,
+            timestamp: now,
+        },
+    ];
+    state.selectedLocation = { label: 'Testposition', lat, lng };
+    await updateDrivingMode();
+}
+
+async function updateDrivingMode() {
+    if (!state.drivingActive) return;
+    setStatus('Fahrt');
+    await loadRouteTankpoints(state.drivingRouteId);
+    const position = state.drivingSamples[state.drivingSamples.length - 1];
+    if (!position) {
+        state.drivingStatus = 'waiting';
+        state.drivingMessage = 'Standortfreigabe erforderlich';
+        renderDrivingModeList();
+        return;
+    }
+
+    state.selectedLocation = { label: 'Aktuelle Position', lat: position.lat, lng: position.lng };
+    const route = detectCurrentRoute(position, state.drivingRouteId);
+    const direction = detectDrivingDirection();
+    state.drivingDirection = direction;
+    if (route.onRoute && !direction) {
+        state.drivingContext = 'highway';
+        state.drivingStatus = 'direction-pending';
+        state.drivingMessage = 'Fahrtrichtung wird ermittelt';
+        state.stations = [];
+    } else if (route.onRoute && direction) {
+        state.drivingContext = 'highway';
+        let stationsAhead = getNextTankpointsOnRoute({ position, direction, limit: 50 });
+        if (stationsAhead.some((station) => !hasCurrentDrivingPrice(station, els.fuel.value, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS))) {
+            state.stations = [];
+            state.drivingStatus = 'loading-prices';
+            state.drivingMessage = 'Preise werden aktualisiert';
+            renderDrivingModeList();
+            stationsAhead = await loadLivePricesForDrivingStations(stationsAhead);
+        }
+        state.stations = stationsAhead
+            .filter((station) => hasCurrentDrivingPrice(station, els.fuel.value, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS))
+            .slice(0, 10);
+        state.drivingStatus = state.stations.length ? 'ready' : 'empty';
+        state.drivingMessage = state.stations.length
+            ? ''
+            : 'Keine aktuellen Preise fuer passende Tankpunkte gefunden';
+    } else {
+        state.drivingContext = 'city';
+        state.drivingDetectedRouteId = null;
+        state.stations = await loadLiveCityDriveStations(position, 10);
+        state.drivingStatus = state.stations.length ? 'ready' : 'empty';
+        state.drivingMessage = state.stations.length
+            ? (state.drivingCityLastMessage || '')
+            : 'Keine Tankstellen mit Preisinformationen im Umkreis gefunden';
+    }
+
+    if (state.view === 'map') updateDrivingModeMapMarkers();
+    renderDrivingModeList();
+}
+
+async function evaluateDrivingModeList() {
+    if (!state.drivingActive || state.drivingUpdateInProgress) return;
+    state.drivingUpdateInProgress = true;
+    try {
+        await updateDrivingMode();
+    } catch (error) {
+        state.drivingStatus = 'error';
+        state.drivingMessage = error.message || 'Fahrmodus konnte nicht aktualisiert werden.';
+        renderDrivingModeList();
+        setStatus('Fehler');
+    } finally {
+        state.drivingUpdateInProgress = false;
+    }
+}
+
+function handleDrivingPosition(position) {
+    const coords = position.coords || {};
+    const sample = {
+        lat: Number(coords.latitude),
+        lng: Number(coords.longitude),
+        accuracy: Number(coords.accuracy || Number.POSITIVE_INFINITY),
+        speedKmh: Number.isFinite(coords.speed) && coords.speed !== null ? Number(coords.speed) * 3.6 : null,
+        timestamp: Number(position.timestamp || Date.now()),
+    };
+    if (!Number.isFinite(sample.lat) || !Number.isFinite(sample.lng)) return;
+    state.drivingSamples.push(sample);
+    state.drivingSamples = state.drivingSamples.slice(-6);
+    if (state.drivingSamples.length === 1) evaluateDrivingModeList();
+}
+
+async function startDrivingMode(routeId = 'ALL') {
+    state.listMode = 'driving';
+    state.drivingRouteId = routeId;
+    state.drivingDetectedRouteId = null;
+    state.drivingActive = true;
+    state.drivingSamples = [];
+    state.drivingStatus = 'starting';
+    state.drivingMessage = 'Fahrtrichtung wird ermittelt';
+    state.selectedId = null;
+    setView('list');
+    renderDetail(null);
+    renderDrivingModeList();
+
+    if (!navigator.geolocation) {
+        state.drivingStatus = 'blocked';
+        state.drivingMessage = 'Standortfreigabe erforderlich';
+        renderDrivingModeList();
+        return;
+    }
+
+    try {
+        await loadRouteTankpoints(routeId);
+    } catch (error) {
+        state.drivingStatus = 'error';
+        state.drivingMessage = error.message || 'Autobahn-Tankpunkte konnten nicht geladen werden.';
+        renderDrivingModeList();
+        return;
+    }
+
+    if (state.drivingWatchId !== null) navigator.geolocation.clearWatch(state.drivingWatchId);
+    state.drivingWatchId = navigator.geolocation.watchPosition(handleDrivingPosition, () => {
+        state.drivingStatus = 'blocked';
+        state.drivingMessage = 'Standortfreigabe erforderlich';
+        renderDrivingModeList();
+    }, {
+        enableHighAccuracy: true,
+        maximumAge: 5000,
+        timeout: 12000,
+    });
+    if (state.drivingUpdateTimer !== null) window.clearInterval(state.drivingUpdateTimer);
+    state.drivingUpdateTimer = window.setInterval(evaluateDrivingModeList, 15000);
+}
+
+function stopDrivingMode(restore = true) {
+    if (state.drivingWatchId !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(state.drivingWatchId);
+    }
+    if (state.drivingUpdateTimer !== null) window.clearInterval(state.drivingUpdateTimer);
+    state.drivingWatchId = null;
+    state.drivingUpdateTimer = null;
+    state.drivingUpdateInProgress = false;
+    state.drivingActive = false;
+    state.drivingSamples = [];
+    state.drivingStatus = 'inactive';
+    state.drivingDirection = null;
+    state.drivingDetectedRouteId = null;
+    state.drivingSpeedKmh = null;
+    state.drivingAccuracy = null;
+    state.drivingNearestRouteDistanceKm = null;
+    els.appShell.classList.remove('driving-mode');
+    clearDrivingRouteOverlay();
+    state.stations = [];
+    state.selectedLocation = null;
+    state.listMode = 'results';
+    renderDetail(null);
+    if (restore) restoreStoredStartState();
+    updateBottomNav();
 }
 
 function autobahnStationAddress(station) {
@@ -1718,18 +2841,65 @@ async function refreshSelectedAutobahnPrices(target = 'list') {
             highway: state.selectedHighway,
         });
         const data = await fetchJson(`/api/autobahn/stations.php?${params.toString()}`);
-        const updated = (data.stations || []).map(normalizeAutobahnStation)
+        let updated = (data.stations || []).map(normalizeAutobahnStation)
             .filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lng));
         const byId = new Map(state.autobahnStations.map((station) => [station.tankerkoenig_id, station]));
         updated.forEach((station) => byId.set(station.tankerkoenig_id, station));
         state.autobahnStations = [...byId.values()];
         syncAutobahnVisibleStations();
+        const staleStations = state.stations.filter((station) => !hasRecentAutobahnPrice(station, USAGE_PRICE_MAX_AGE_MS));
+        if (staleStations.length) {
+            const liveUpdated = await refreshAutobahnLivePricesForStations(staleStations);
+            const liveById = new Map(state.autobahnStations.map((station) => [station.tankerkoenig_id, station]));
+            liveUpdated.forEach((station) => liveById.set(station.tankerkoenig_id, station));
+            state.autobahnStations = [...liveById.values()];
+            syncAutobahnVisibleStations();
+        }
         setStatus('Aktuell');
         if (target === 'map') openAutobahnMap();
         else renderAutobahnList();
     } finally {
         if (state.autobahnLoadKey === loadKey) state.autobahnLoadKey = null;
     }
+}
+
+function mergeAutobahnLivePrice(station, liveStation) {
+    if (!liveStation) return station;
+    return {
+        ...station,
+        is_open: liveStation.is_open ?? station.is_open,
+        prices: liveStation.prices || station.prices,
+        price: fuelPriceValue(liveStation, els.fuel.value),
+        last_update: liveStation.last_update || station.last_update,
+        priceSource: 'live',
+    };
+}
+
+async function refreshAutobahnLivePricesForStations(stations) {
+    const refreshed = await Promise.all(stations.map(async (station) => {
+        const lat = Number(station.lat);
+        const lng = Number(station.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return station;
+        const params = new URLSearchParams({
+            lat: String(lat),
+            lng: String(lng),
+            radius: '3',
+            fuel: els.fuel.value,
+            limit: '10',
+            open: '1',
+            priced: '1',
+            live: '1',
+            sort: 'distance',
+            q: 'Autobahn Preise',
+        });
+        try {
+            const data = await fetchJson(`/api/search.php?${params.toString()}`, { timeoutMs: 15000, progress: false });
+            return mergeAutobahnLivePrice(station, bestLiveMatchForDrivingStation(station, data.stations || []));
+        } catch (error) {
+            return station;
+        }
+    }));
+    return refreshed;
 }
 
 async function refreshAutobahnStationPrices(id) {
@@ -1747,8 +2917,11 @@ async function refreshAutobahnStationPrices(id) {
             refresh: '1',
         });
         const data = await fetchJson(`/api/autobahn/stations.php?${params.toString()}`);
-        const updated = (data.stations || []).map(normalizeAutobahnStation)
+        let updated = (data.stations || []).map(normalizeAutobahnStation)
             .find((station) => station.tankerkoenig_id === id);
+        if (updated && !hasRecentAutobahnPrice(updated, USAGE_PRICE_MAX_AGE_MS)) {
+            [updated] = await refreshAutobahnLivePricesForStations([updated]);
+        }
         if (!updated) throw new Error('Keine Preisdaten für diese Raststätte gefunden.');
 
         const byId = new Map(state.autobahnStations.map((station) => [station.tankerkoenig_id, station]));
@@ -1785,6 +2958,18 @@ function autobahnGroups() {
         ]);
 }
 
+function selectAutobahnHighway(highway, target = 'list') {
+    const nextHighway = String(highway || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!/^A\d+$/.test(nextHighway)) return;
+    state.selectedHighway = nextHighway;
+    syncAutobahnVisibleStations();
+    renderAutobahnList();
+    refreshSelectedAutobahnPrices(target).catch((error) => {
+        els.resultMeta.textContent = error.message;
+        setStatus('Fehler');
+    });
+}
+
 function autobahnRowHtml(station, priceThresholds = thresholdsFor(state.stations)) {
     const side = station.sideLabel || 'Richtung unbekannt';
     const features = station.features?.length ? station.features.slice(0, 3).join(', ') : 'Services nicht angegeben';
@@ -1809,7 +2994,6 @@ function autobahnRowHtml(station, priceThresholds = thresholdsFor(state.stations
 function autobahnRowHtmlDetailed(station, priceThresholds = thresholdsFor(state.stations)) {
     const side = station.sideLabel || 'Richtung unbekannt';
     const features = station.features?.length ? station.features.slice(0, 3).join(', ') : 'Services nicht angegeben';
-    const selectedPrice = autobahnPriceValue(station);
     const priceStand = autobahnPriceStand(station);
     const highwayLabel = station.highway || 'A';
     const rankClass = `${markerClass(station, priceThresholds)} ${autobahnKindClass(station)}`;
@@ -1824,7 +3008,7 @@ function autobahnRowHtmlDetailed(station, priceThresholds = thresholdsFor(state.
                 ${tankRastBadgeHtml(station)}
                 <small>${escapeHtml(autobahnPriceSummary(station))}</small>
             </span>
-            <span class="autobahn-meta ${priceClassFor(station, priceThresholds)}">${money(selectedPrice)}</span>
+            ${selectedFuelPriceHtml(station, 'autobahn-meta')}
             <span class="autobahn-services">${escapeHtml(side)} - ${escapeHtml(priceStand ? `Stand ${formatDateTime(priceStand)}` : features)}</span>
         </button>
     `;
@@ -1867,7 +3051,7 @@ function renderAutobahnList() {
             <div class="autobahn-list">
                 ${groups.map(([highway, stations]) => `
                     <section class="autobahn-group">
-                        <h2>${escapeHtml(highway)} <span>${stations.length}</span></h2>
+                        <h2><button type="button" class="autobahn-group-select" data-autobahn-select="${escapeHtml(highway)}">${escapeHtml(highway)} <span>${stations.length}</span></button></h2>
                         <div class="city-station-list">
                             ${stations.map((station) => autobahnRowHtmlDetailed(station, priceThresholds)).join('')}
                         </div>
@@ -1888,6 +3072,11 @@ function renderAutobahnList() {
             return;
         }
         if (state.view === 'map') openAutobahnMap();
+    });
+    els.results.querySelectorAll('[data-autobahn-select]').forEach((button) => {
+        button.addEventListener('click', () => {
+            selectAutobahnHighway(button.dataset.autobahnSelect, 'list');
+        });
     });
     els.results.querySelectorAll('[data-autobahn-view]').forEach((button) => {
         button.addEventListener('click', () => {
@@ -2238,6 +3427,17 @@ function updateFavoritesButton() {
 function updateBottomNav() {
     setCityMode(state.listMode === 'cities');
     setDirectoryMode(state.listMode === 'autobahn');
+    els.appShell.classList.toggle('driving-mode', state.listMode === 'driving');
+    els.driveMode?.classList.toggle('active', state.listMode === 'driving');
+    if (els.driveMode) {
+        const label = state.drivingActive ? 'No Drive' : 'Drive';
+        els.driveMode.replaceChildren();
+        const badge = document.createElement('span');
+        badge.setAttribute('aria-hidden', 'true');
+        badge.textContent = 'A';
+        els.driveMode.append(badge, document.createTextNode(label));
+        els.driveMode.setAttribute('aria-pressed', state.drivingActive ? 'true' : 'false');
+    }
     els.bottomNavButtons.forEach((button) => {
         const action = button.dataset.action;
         const active = (action === 'map' && state.view === 'map')
@@ -2255,6 +3455,11 @@ function setSettingsOpen(open) {
     els.settingsBackdrop.classList.toggle('visible', open);
     updateBottomNav();
     if (open) loadTankprofiStats();
+}
+
+function setHelpOpen(open) {
+    els.helpSheet?.classList.toggle('open', open);
+    els.settingsBackdrop?.classList.toggle('visible', open || els.settingsSheet?.classList.contains('open'));
 }
 
 function setShareOpen(open) {
@@ -2543,6 +3748,9 @@ function bindEvents() {
         if (event.key === 'Escape' && els.settingsSheet.classList.contains('open')) {
             setSettingsOpen(false);
         }
+        if (event.key === 'Escape' && els.helpSheet?.classList.contains('open')) {
+            setHelpOpen(false);
+        }
     });
     els.viewButtons.forEach((button) => {
         button.addEventListener('click', () => setView(button.dataset.view));
@@ -2561,6 +3769,11 @@ function bindEvents() {
                     openAutobahnMap();
                     return;
                 }
+                if (state.listMode === 'driving') {
+                    setView('map');
+                    updateDrivingModeMapMarkers();
+                    return;
+                }
                 setView('map');
                 return;
             }
@@ -2571,6 +3784,7 @@ function bindEvents() {
             }
 
             if (action === 'cities') {
+                if (state.drivingActive) stopDrivingMode(false);
                 state.listMode = 'cities';
                 state.cityMapMode = 'overview';
                 renderDetail(null);
@@ -2581,6 +3795,7 @@ function bindEvents() {
             }
 
             if (action === 'autobahn') {
+                if (state.drivingActive) stopDrivingMode(false);
                 state.listMode = 'autobahn';
                 state.cityMapMode = 'overview';
                 renderDetail(null);
@@ -2595,6 +3810,7 @@ function bindEvents() {
             }
 
             if (action === 'list') {
+                if (state.drivingActive) stopDrivingMode(false);
                 state.listMode = 'results';
                 state.cityMapMode = 'overview';
                 state.selectedCityId = null;
@@ -2612,6 +3828,7 @@ function bindEvents() {
             }
 
             const showFavorites = action === 'favorites';
+            if (state.drivingActive) stopDrivingMode(false);
             state.listMode = showFavorites ? 'favorites' : 'results';
             updateFavoritesButton();
             renderResults();
@@ -2619,33 +3836,43 @@ function bindEvents() {
             if (showFavorites) refreshFavoritesOnOpen();
         });
     });
-    els.settingsBackdrop.addEventListener('click', () => setSettingsOpen(false));
+    els.settingsBackdrop.addEventListener('click', () => {
+        setSettingsOpen(false);
+        setHelpOpen(false);
+    });
     els.settingsClose.addEventListener('click', () => setSettingsOpen(false));
-    els.shareToggle?.addEventListener('click', async () => {
-        const link = els.shareLink?.value || 'https://tankprofi.web.app';
-        if (navigator.share) {
-            try {
-                await navigator.share({
-                    title: 'Tankprofi',
-                    text: 'Tankprofi Webapp',
-                    url: link,
-                });
-                return;
-            } catch {
-                // Fall through and show QR panel.
-            }
-        }
-
+    els.help?.addEventListener('click', () => {
+        setSettingsOpen(false);
+        setHelpOpen(!els.helpSheet?.classList.contains('open'));
+    });
+    els.helpClose?.addEventListener('click', () => setHelpOpen(false));
+    els.shareToggle?.addEventListener('click', () => {
         setShareOpen(els.shareContent?.hidden ?? true);
     });
     els.shareCopy?.addEventListener('click', copyShareLink);
     els.homeInstall?.addEventListener('click', installToHomeScreen);
     els.splashInstall?.addEventListener('click', installToHomeScreen);
+    els.drivingMapBack?.addEventListener('click', () => {
+        if (state.listMode !== 'driving') return;
+        setView('list');
+        renderDrivingModeList();
+    });
+    els.driveMode?.addEventListener('click', () => {
+        if (state.drivingActive) {
+            stopDrivingMode(true);
+            return;
+        }
+        startDrivingMode('ALL');
+    });
     els.cityUpdate?.addEventListener('click', () => runCityUpdate(false));
     els.cityForceUpdate?.addEventListener('click', () => runCityUpdate(true));
     els.sortButtons.forEach((button) => {
         button.addEventListener('click', () => {
             els.sortButtons.forEach((item) => item.classList.toggle('active', item === button));
+            if (state.listMode === 'results' && state.selectedLocation) {
+                loadStations();
+                return;
+            }
             sortStations();
             renderResults();
             renderMarkers();
@@ -2681,6 +3908,10 @@ function bindEvents() {
                 if (state.view === 'map') renderMarkers();
                 return;
             }
+            if (state.listMode === 'driving') {
+                updateDrivingMode();
+                return;
+            }
             if (state.selectedLocation) loadStations();
         });
     });
@@ -2691,6 +3922,7 @@ startSplashScreen();
 restoreUserSettings();
 initInstallPrompt();
 registerServiceWorker();
+setupTopControls();
 bindEvents();
 setView('list');
 updateFavoritesButton();

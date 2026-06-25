@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
-    <link rel="stylesheet" href="assets/css/app.css?v=20260624-search-gps-fix-3">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260624-drive-autobahn-price-refresh">
 </head>
 <body>
     <section class="splash-screen" id="splashScreen" aria-label="Tankprofi wird geladen">
@@ -40,7 +40,11 @@
                     <h1>Tankprofi</h1>
                 </div>
                 <div class="header-actions">
-                    <span class="status-pill" id="statusPill">Bereit</span>
+                    <button class="help-button" id="helpButton" type="button" aria-label="Hilfe öffnen">?</button>
+                    <button class="drive-mode-button" id="driveModeButton" type="button">
+                        <span aria-hidden="true">A</span>
+                        Drive
+                    </button>
                 </div>
             </header>
 
@@ -79,6 +83,7 @@
             <div class="app-content">
                 <section class="map-pane" aria-label="Karte">
                     <div id="map"></div>
+                    <button class="driving-map-back" id="drivingMapBackButton" type="button">Fahranzeige</button>
                     <div class="map-legend" aria-label="Marker Legende">
                         <span><i class="dot cheap"></i>günstig</span>
                         <span><i class="dot mid"></i>mittel</span>
@@ -122,6 +127,46 @@
             </nav>
 
             <div class="settings-backdrop" id="settingsBackdrop"></div>
+            <section class="help-box" id="helpSheet" aria-label="Hilfe">
+                <div class="settings-sheet-header">
+                    <strong>Hilfe</strong>
+                    <button type="button" id="helpCloseButton" aria-label="Hilfe schließen">×</button>
+                </div>
+                <div class="help-body">
+                    <article>
+                        <h2>Liste</h2>
+                        <p>Zeigt Tankstellen im gewählten Umkreis. Mit Preis oder Entfernung sortierst du die Treffer neu.</p>
+                    </article>
+                    <article>
+                        <h2>Standort</h2>
+                        <p>Aktualisiert deine aktuelle Position und lädt die passenden Live-Tankstellen in der Nähe.</p>
+                    </article>
+                    <article>
+                        <h2>Karte</h2>
+                        <p>Zeigt die Treffer als Marker. Grün ist günstiger, Gelb mittel, Rot teurer, Grau geschlossen oder ohne Preis.</p>
+                    </article>
+                    <article>
+                        <h2>Details</h2>
+                        <p>Antippen öffnet Preise, Adresse, Status und Navigation. Der Navigationsbutton bietet Google Maps, Waze, Apple Karten und System-Karte.</p>
+                    </article>
+                    <article>
+                        <h2>Drive</h2>
+                        <p>Startet den Fahrmodus. In der Stadt werden die nächsten Tankstellen nach Entfernung gezeigt; auf Autobahnen die passenden Tankpunkte in Fahrtrichtung.</p>
+                    </article>
+                    <article>
+                        <h2>Städte</h2>
+                        <p>Vergleicht Durchschnittspreise großer Städte nach Diesel, E5 oder E10.</p>
+                    </article>
+                    <article>
+                        <h2>Autobahn</h2>
+                        <p>Zeigt vorbereitete Autobahn-Standorte und Preise. Diese Daten werden aus Firebase geladen.</p>
+                    </article>
+                    <article>
+                        <h2>Favoriten</h2>
+                        <p>Speichert wichtige Tankstellen lokal, damit du sie schnell wiederfindest.</p>
+                    </article>
+                </div>
+            </section>
             <section class="settings-box" id="settingsSheet" aria-label="Einstellungen">
                 <div class="settings-sheet-header">
                     <strong>Einstellungen</strong>
@@ -195,7 +240,7 @@
                             </span>
                         </button>
                         <button class="share-toggle" id="shareToggleButton" type="button" aria-expanded="false">
-                            <span>QR / App teilen</span>
+                            <span>QR-Code anzeigen</span>
                             <strong>https://tankprofi.web.app</strong>
                         </button>
                         <div class="share-content" id="shareContent" hidden>
@@ -225,13 +270,12 @@
                             <b id="tankprofiTruckCount">...</b>
                         </div>
                         <span id="tankprofiStatsStatus">Wird beim Öffnen aktualisiert.</span>
-                    </section>
-
-                    <section class="share-panel city-admin-panel" aria-label="Admin Durchschnittspreise">
-                        <strong>Durchschnittspreise Großstädte</strong>
-                        <button class="text-button" id="cityUpdateButton" type="button">Aktualisieren</button>
-                        <button class="text-button" id="cityForceUpdateButton" type="button">Trotzdem erzwingen</button>
-                        <span id="cityUpdateStatus">Nur gespeicherte Snapshots werden angezeigt.</span>
+                        <div class="stats-update-panel" aria-label="Preis-Updates Städtepreise">
+                            <strong>Preis-Updates Städtepreise</strong>
+                            <button class="text-button" id="cityUpdateButton" type="button">Aktualisieren</button>
+                            <button class="text-button" id="cityForceUpdateButton" type="button">Trotzdem erzwingen</button>
+                            <span id="cityUpdateStatus">Nur gespeicherte Snapshots werden angezeigt.</span>
+                        </div>
                     </section>
                 </div>
             </section>
@@ -255,7 +299,7 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <script type="module" src="assets/js/firebase-app.js?v=20260624-search-gps-fix-3"></script>
-    <script src="assets/js/app.js?v=20260624-search-gps-fix-3" defer></script>
+    <script type="module" src="assets/js/firebase-app.js?v=20260624-drive-null-position-fix"></script>
+    <script src="assets/js/app.js?v=20260624-drive-autobahn-price-refresh" defer></script>
 </body>
 </html>
