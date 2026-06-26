@@ -16,6 +16,11 @@ const snapshotTtlMs = 60 * 60 * 1000;
 const lockTtlMs = 20 * 60 * 1000;
 const cityRequestDelayMs = 250;
 const cityRetryDelayMs = 2500;
+const autobahnPriceRefreshTargetMs = 120 * 60 * 1000;
+const autobahnPriceRefreshScheduleMs = 15 * 60 * 1000;
+const autobahnPriceRefreshRadiusKm = 6;
+const autobahnPriceRefreshMaxQueries = 30;
+const autobahnPriceRefreshDelayMs = 450;
 const cityPriceThresholds = {
   cheapDelta: -0.02,
   expensiveDelta: 0.02,
@@ -23,6 +28,20 @@ const cityPriceThresholds = {
 const scanMaxRadiusKm = 25;
 const scanMaxResultsLimit = 100;
 const scanMinRadiusKm = 1.5;
+const cityScanConfigs = {
+  berlin: {
+    cityId: 'berlin',
+    cityName: 'Berlin',
+    region: 'Berlin',
+    country: 'DE',
+    minLat: 52.338,
+    maxLat: 52.675,
+    minLon: 13.07,
+    maxLon: 13.79,
+    radiusKm: 5,
+    spacingKm: 5.5,
+  },
+};
 const supportedScanCountries = new Set(['DE', 'AT', 'CH', 'PL']);
 const raststaettenDirectoryUrl = 'https://www.raststaetten.de/alle-standorte/';
 const overpassApiUrl = 'https://overpass-api.de/api/interpreter';
@@ -85,6 +104,21 @@ const highwaySearchPoints = {
     { id: 'fuerstenwalde', label: 'Fuerstenwalde', lat: 52.3607, lng: 14.0619 },
     { id: 'frankfurt-oder', label: 'Frankfurt Oder', lat: 52.3415, lng: 14.5506 },
     { id: 'swiecko', label: 'Swiecko', lat: 52.3094, lng: 14.6093 },
+  ],
+  A24: [
+    { id: 'hamburg-horn', label: 'Hamburg Horn', lat: 53.5565, lng: 10.0981 },
+    { id: 'reinbek', label: 'Reinbek', lat: 53.5468, lng: 10.2504 },
+    { id: 'gudow', label: 'Gudow', lat: 53.5210, lng: 10.8065 },
+    { id: 'wittenburg', label: 'Wittenburg', lat: 53.5017, lng: 11.0892 },
+    { id: 'neustadt-glewe', label: 'Neustadt-Glewe', lat: 53.3808, lng: 11.6282 },
+    { id: 'stolpe', label: 'Stolpe', lat: 53.3673, lng: 11.7294 },
+    { id: 'wittstock', label: 'Wittstock/Dosse', lat: 53.1590, lng: 12.4630 },
+    { id: 'herzsprung', label: 'Herzsprung', lat: 53.0685, lng: 12.5328 },
+    { id: 'neuruppin', label: 'Neuruppin', lat: 52.9062, lng: 12.7505 },
+    { id: 'fehrbellin', label: 'Fehrbellin', lat: 52.8058, lng: 12.7860 },
+    { id: 'linum', label: 'Linumer Bruch', lat: 52.7540, lng: 12.8540 },
+    { id: 'kremmen', label: 'Kremmen', lat: 52.7520, lng: 13.0300 },
+    { id: 'berliner-ring', label: 'Berliner Ring', lat: 52.6542, lng: 13.5064 },
   ],
 };
 const raststaettenFuelBrands = ['Aral', 'Avia', 'bft', 'Eni', 'Esso', 'Orlen', 'Score', 'Shell', 'Tamoil', 'Total', 'Westfalen'];
@@ -175,10 +209,13 @@ function endpointFrom(req) {
   if (path.endsWith('/admin/stats.php') || path.endsWith('/admin/stats')) return 'adminStats';
   if (path.endsWith('/admin/addresses/consolidate.php') || path.endsWith('/admin/addresses/consolidate')) return 'addressConsolidate';
   if (path.endsWith('/admin/autobahn/import.php') || path.endsWith('/admin/autobahn/import')) return 'autobahnImport';
+  if (path.endsWith('/admin/autobahn/prices/refresh.php') || path.endsWith('/admin/autobahn/prices/refresh')) return 'autobahnPriceRefresh';
   if (path.endsWith('/autobahn/stations.php') || path.endsWith('/autobahn/stations')) return 'autobahnStations';
   if (path.endsWith('/route/tankpoints.php') || path.endsWith('/route/tankpoints')) return 'routeTankpoints';
   if (path.endsWith('/admin/autohof/import.php') || path.endsWith('/admin/autohof/import')) return 'autohofImport';
   if (path.endsWith('/admin/autohof/tankerkoenig-import.php') || path.endsWith('/admin/autohof/tankerkoenig-import')) return 'autohofTankerkoenigImport';
+  if (path.endsWith('/admin/tank-id/match.php') || path.endsWith('/admin/tank-id/match')) return 'tankIdMatch';
+  if (path.endsWith('/admin/tank-id/candidates.php') || path.endsWith('/admin/tank-id/candidates')) return 'tankIdCandidates';
   if (path.endsWith('/autohof/stations.php') || path.endsWith('/autohof/stations')) return 'autohofStations';
   return '';
 }
@@ -203,7 +240,7 @@ function normalizeStation(station, fuel) {
     lat: Number(station.lat || 0),
     lng: Number(station.lng || 0),
     distance: Number(station.dist || 0),
-    is_open: Boolean(station.isOpen),
+    is_open: station.isOpen === true ? true : station.isOpen === false ? false : null,
     fuel_type: fuel,
     price: Number.isFinite(price) ? price : null,
     diesel: validPrice(station.diesel) ? roundPrice(station.diesel) : null,
@@ -898,13 +935,17 @@ async function asyncPool(items, limit, worker) {
   return await Promise.all(results);
 }
 
-async function importRaststaettenDirectory({ limit = 0 } = {}) {
+async function importRaststaettenDirectory({ limit = 0, highway = '', offset = 0 } = {}) {
+  const normalizedHighway = String(highway || '').trim().toUpperCase().replace(/\s+/g, '');
+  const startOffset = Math.round(numberParam(offset, 0, 0, 10000));
   const startedAt = Timestamp.now();
   const runRef = db.collection('autobahn_import_runs').doc();
   await runRef.set({
     runId: runRef.id,
     source: 'raststaetten.de',
     sourceUrl: raststaettenDirectoryUrl,
+    highway: normalizedHighway || null,
+    offset: startOffset || null,
     status: 'running',
     startedAt,
     importedCount: 0,
@@ -914,6 +955,15 @@ async function importRaststaettenDirectory({ limit = 0 } = {}) {
   try {
     const listHtml = await fetchText(raststaettenDirectoryUrl, 'Tankprofi/1.0 (autobahn-directory-import)');
     let links = extractRaststaettenLinks(listHtml);
+    if (normalizedHighway) {
+      const highwayPattern = new RegExp(`\\b${normalizedHighway.replace(/^A/, 'A\\s?')}\\b`, 'i');
+      links = links.filter((link) => {
+        const sourceIndex = listHtml.indexOf(link.sourceUrl);
+        const nearby = sourceIndex >= 0 ? listHtml.slice(sourceIndex, sourceIndex + 900) : '';
+        return highwayPattern.test(nearby);
+      });
+    }
+    if (startOffset > 0) links = links.slice(startOffset);
     if (limit > 0) links = links.slice(0, limit);
 
     const errors = [];
@@ -959,14 +1009,46 @@ async function importRaststaettenDirectory({ limit = 0 } = {}) {
   }
 }
 
-function autohofOverpassQuery() {
+function overpassAutohofClauses(prefix = 'area.de') {
+  return `
+  nwr(${prefix})["name"~"Autohof|Euro Rastpark|SVG Autohof|24[- ]?Autohof",i];
+  nwr(${prefix})["operator"~"Autohof|Euro Rastpark|SVG Autohof|24[- ]?Autohof",i];
+  nwr(${prefix})["brand"~"Autohof|Euro Rastpark|SVG Autohof|24[- ]?Autohof",i];`;
+}
+
+function overpassBoxForPoint(point, radiusKm = 35) {
+  const latDelta = kmToLat(radiusKm);
+  const lonDelta = kmToLon(radiusKm, point.lat);
+  return [
+    Number(point.lat - latDelta).toFixed(5),
+    Number(point.lng - lonDelta).toFixed(5),
+    Number(point.lat + latDelta).toFixed(5),
+    Number(point.lng + lonDelta).toFixed(5),
+  ].join(',');
+}
+
+function autohofOverpassQuery({ highway = '', maxPoints = 0, pointOffset = 0 } = {}) {
+  const normalizedHighway = String(highway || '').trim().toUpperCase().replace(/\s+/g, '');
+  const routePoints = highwaySearchPoints[normalizedHighway] || [];
+  const pointLimit = Math.round(Number(maxPoints || 0));
+  const offset = Math.max(0, Math.round(Number(pointOffset || 0)));
+  const points = pointLimit > 0 ? routePoints.slice(offset, offset + pointLimit) : routePoints.slice(offset);
+  if (points.length) {
+    const boxes = points.map((point) => overpassAutohofClauses(overpassBoxForPoint(point, 35))).join('\n');
+    return `
+[out:json][timeout:60];
+(
+${boxes}
+);
+out center tags;
+`;
+  }
+
   return `
 [out:json][timeout:90];
 area(3600051477)->.de;
 (
-  nwr(area.de)["name"~"Autohof|Euro Rastpark|SVG Autohof|24[- ]?Autohof",i];
-  nwr(area.de)["operator"~"Autohof|Euro Rastpark|SVG Autohof|24[- ]?Autohof",i];
-  nwr(area.de)["brand"~"Autohof|Euro Rastpark|SVG Autohof|24[- ]?Autohof",i];
+${overpassAutohofClauses()}
 );
 out center tags;
 `;
@@ -988,7 +1070,7 @@ function highwayFromTags(tags) {
   return candidates.match(/\bA\s?\d{1,3}\b/i)?.[0]?.replace(/\s+/g, '').toUpperCase() || null;
 }
 
-function normalizeAutohofElement(element) {
+function normalizeAutohofElement(element, highwayFallback = '') {
   const tags = element.tags || {};
   const lat = Number(element.lat ?? element.center?.lat);
   const lng = Number(element.lon ?? element.center?.lon);
@@ -1009,7 +1091,7 @@ function normalizeAutohofElement(element) {
     sideLabel: directionSideFromName(name),
     directionSource: directionSideFromName(name) ? 'name_suffix_side_only' : null,
     directionText: null,
-    highway: highwayFromTags(tags),
+    highway: highwayFromTags(tags) || highwayFallback || null,
     exitRef: tags['motorway_junction:ref'] || tags['destination:ref'] || null,
     street: tags['addr:street'] || null,
     houseNumber: tags['addr:housenumber'] || null,
@@ -1031,12 +1113,18 @@ function normalizeAutohofElement(element) {
   };
 }
 
-async function importAutohofDirectory({ limit = 0 } = {}) {
+async function importAutohofDirectory({ limit = 0, highway = '', maxPoints = 0, pointOffset = 0 } = {}) {
+  const normalizedHighway = String(highway || '').trim().toUpperCase().replace(/\s+/g, '');
+  const pointLimit = Math.round(numberParam(maxPoints, 0, 0, 40));
+  const offset = Math.round(numberParam(pointOffset, 0, 0, 200));
   const runRef = db.collection('autohof_import_runs').doc();
   await runRef.set({
     runId: runRef.id,
     source: 'openstreetmap_overpass',
     sourceUrl: overpassApiUrl,
+    highway: normalizedHighway || null,
+    maxPoints: pointLimit || null,
+    pointOffset: offset || null,
     status: 'running',
     startedAt: Timestamp.now(),
     importedCount: 0,
@@ -1050,12 +1138,12 @@ async function importAutohofDirectory({ limit = 0 } = {}) {
         'content-type': 'application/x-www-form-urlencoded; charset=utf-8',
         'user-agent': 'Tankprofi/1.0 (autohof-import)',
       },
-      body: new URLSearchParams({ data: autohofOverpassQuery() }).toString(),
+      body: new URLSearchParams({ data: autohofOverpassQuery({ highway: normalizedHighway, maxPoints: pointLimit, pointOffset: offset }) }).toString(),
     });
     const text = await response.text();
     if (!response.ok) throw new Error(`Overpass failed with HTTP ${response.status}: ${text.slice(0, 200)}`);
     const data = JSON.parse(text);
-    let stations = (data.elements || []).map(normalizeAutohofElement).filter(Boolean);
+    let stations = (data.elements || []).map((element) => normalizeAutohofElement(element, normalizedHighway)).filter(Boolean);
     const byNameAndPlace = new Map();
     stations.forEach((station) => {
       const key = `${station.name.toLowerCase()}_${station.postCode || ''}_${station.place || ''}`;
@@ -1431,20 +1519,74 @@ function germanySeedPoints({ radiusKm = scanMaxRadiusKm, spacingKm = 19, limit =
   return points;
 }
 
+function cityRegionSeedPoints(config, { limit = 0 } = {}) {
+  const points = [];
+  const radiusKm = Number(config.radiusKm || 5);
+  const spacingKm = Number(config.spacingKm || radiusKm);
+  const latStart = Number(config.minLat) - kmToLat(radiusKm * 0.55);
+  const latEnd = Number(config.maxLat) + kmToLat(radiusKm * 0.55);
+  for (let lat = latStart; lat <= latEnd; lat += kmToLat(spacingKm)) {
+    const lonStart = Number(config.minLon) - kmToLon(radiusKm * 0.55, lat);
+    const lonEnd = Number(config.maxLon) + kmToLon(radiusKm * 0.55, lat);
+    const lonStep = kmToLon(spacingKm, lat);
+    for (let lon = lonStart; lon <= lonEnd; lon += lonStep) {
+      points.push({
+        country: config.country || 'DE',
+        region: config.region || config.cityName || null,
+        cityId: config.cityId || null,
+        cityName: config.cityName || null,
+        postcodeArea: null,
+        centerLat: Math.round(lat * 100000) / 100000,
+        centerLon: Math.round(lon * 100000) / 100000,
+        radiusKm,
+      });
+      if (limit > 0 && points.length >= limit) return points;
+    }
+  }
+  return points;
+}
+
+function scanSeedPointsForMode(mode, { limit = 0 } = {}) {
+  const normalizedMode = String(mode || 'seed_de_grid').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '_');
+  if (normalizedMode === 'seed_de_grid') {
+    return {
+      mode: normalizedMode,
+      country: 'DE',
+      radiusKm: scanMaxRadiusKm,
+      cells: germanySeedPoints({ radiusKm: scanMaxRadiusKm, spacingKm: 19, limit }),
+    };
+  }
+  const cityId = normalizedMode.replace(/^city_/, '').replace(/^scan_/, '');
+  const config = cityScanConfigs[cityId];
+  if (!config) throw new Error(`Unsupported scan mode: ${mode}`);
+  return {
+    mode: `city_${config.cityId}`,
+    country: config.country || 'DE',
+    region: config.region || config.cityName || null,
+    cityId: config.cityId,
+    cityName: config.cityName,
+    radiusKm: config.radiusKm,
+    cells: cityRegionSeedPoints(config, { limit }),
+  };
+}
+
 async function createTankprofiScanRun({ country = 'DE', source = 'tankkoenig', mode = 'seed_de_grid', limit = 0 } = {}) {
   const normalizedCountry = normalizeCountry(country);
   if (normalizedCountry !== 'DE' || source !== 'tankkoenig') {
     throw new Error('Initial scan seeding currently supports DE with tankkoenig only.');
   }
+  const seed = scanSeedPointsForMode(mode, { limit });
   const runRef = db.collection('tankprofi_scan_runs').doc();
-  const radiusKm = scanMaxRadiusKm;
-  const cells = germanySeedPoints({ radiusKm, spacingKm: 19, limit });
+  const cells = seed.cells;
   const now = FieldValue.serverTimestamp();
   await runRef.set({
     scanRunId: runRef.id,
     country: normalizedCountry,
     source,
-    mode,
+    mode: seed.mode,
+    region: seed.region || null,
+    cityId: seed.cityId || null,
+    cityName: seed.cityName || null,
     status: 'running',
     startedAt: now,
     finishedAt: null,
@@ -1468,10 +1610,12 @@ async function createTankprofiScanRun({ country = 'DE', source = 'tankkoenig', m
         scanRunId: runRef.id,
         country: normalizedCountry,
         region: cell.region,
+        cityId: cell.cityId || null,
+        cityName: cell.cityName || null,
         postcodeArea: cell.postcodeArea,
         centerLat: cell.centerLat,
         centerLon: cell.centerLon,
-        radiusKm,
+        radiusKm: cell.radiusKm,
         maxRadiusKm: scanMaxRadiusKm,
         maxResultsLimit: scanMaxResultsLimit,
         resultCount: null,
@@ -1495,7 +1639,16 @@ async function createTankprofiScanRun({ country = 'DE', source = 'tankkoenig', m
   }
 
   await updateTankprofiCoverage(normalizedCountry, source);
-  return { scanRunId: runRef.id, country: normalizedCountry, source, cellsTotal: cells.length };
+  return {
+    scanRunId: runRef.id,
+    country: normalizedCountry,
+    source,
+    mode: seed.mode,
+    region: seed.region || null,
+    cityId: seed.cityId || null,
+    radiusKm: seed.radiusKm,
+    cellsTotal: cells.length,
+  };
 }
 
 async function fetchTankkoenigScanStations({ centerLat, centerLon, radiusKm }) {
@@ -1540,6 +1693,8 @@ function childCellsFor(cell) {
   return centers.map(([latOffsetKm, lonOffsetKm]) => ({
     country: cell.country,
     region: cell.region || null,
+    cityId: cell.cityId || null,
+    cityName: cell.cityName || null,
     postcodeArea: cell.postcodeArea || null,
     centerLat: Math.round((Number(cell.centerLat) + kmToLat(latOffsetKm)) * 100000) / 100000,
     centerLon: Math.round((Number(cell.centerLon) + kmToLon(lonOffsetKm, Number(cell.centerLat))) * 100000) / 100000,
@@ -1559,6 +1714,8 @@ async function splitScanCell(cell) {
       scanRunId: cell.scanRunId,
       country: child.country,
       region: child.region,
+      cityId: child.cityId || null,
+      cityName: child.cityName || null,
       postcodeArea: child.postcodeArea,
       centerLat: child.centerLat,
       centerLon: child.centerLon,
@@ -1749,20 +1906,27 @@ async function processOneScanCell(cellDoc) {
   }
 }
 
-async function processTankprofiScanCells({ limit = 5, country = 'DE', source = 'tankkoenig' } = {}) {
-  const snapshot = await db.collection('tankprofi_scan_cells')
-    .where('country', '==', country)
-    .where('source', '==', source)
-    .where('status', '==', 'pending')
-    .limit(Math.max(1, Math.min(25, Math.round(limit))))
-    .get();
+async function processTankprofiScanCells({ limit = 5, country = 'DE', source = 'tankkoenig', retryErrors = false } = {}) {
+  const safeLimit = Math.max(1, Math.min(25, Math.round(limit)));
+  const statuses = retryErrors ? ['pending', 'error'] : ['pending'];
+  const docs = [];
+  for (const status of statuses) {
+    if (docs.length >= safeLimit) break;
+    const snapshot = await db.collection('tankprofi_scan_cells')
+      .where('country', '==', country)
+      .where('source', '==', source)
+      .where('status', '==', status)
+      .limit(safeLimit - docs.length)
+      .get();
+    snapshot.docs.forEach((doc) => docs.push(doc));
+  }
   const results = [];
-  for (const doc of snapshot.docs) {
+  for (const doc of docs) {
     results.push(await processOneScanCell(doc));
     await sleep(1200);
   }
   await updateTankprofiCoverage(country, source);
-  return { processed: results.length, results };
+  return { processed: results.length, retryErrors, results };
 }
 
 async function handleGeocode(req, res) {
@@ -2267,7 +2431,7 @@ function mergeStation(stationMap, station, pointId) {
     lat: Number(station.lat || 0),
     lng: Number(station.lng || 0),
     distanceKm: Number(station.dist || Number.POSITIVE_INFINITY),
-    isOpen: Boolean(station.isOpen),
+    isOpen: station.isOpen === true ? true : station.isOpen === false ? false : null,
     searchPointIds: [],
     diesel: null,
     e5: null,
@@ -2280,7 +2444,9 @@ function mergeStation(stationMap, station, pointId) {
   }
 
   if (!current.searchPointIds.includes(pointId)) current.searchPointIds.push(pointId);
-  current.isOpen = current.isOpen || Boolean(station.isOpen);
+  current.isOpen = current.isOpen === true || station.isOpen === true
+    ? true
+    : (current.isOpen === false || station.isOpen === false ? false : null);
   cityFuels.forEach((fuel) => {
     const price = Number(station[fuel]);
     if (validPrice(price)) current[fuel] = roundPrice(price);
@@ -2353,7 +2519,7 @@ function cityStationForTankprofiPersistence(station, city) {
     lat: station.lat,
     lng: station.lng,
     distance: station.distanceKm,
-    is_open: station.isOpen,
+    is_open: station.isOpen === true ? true : station.isOpen === false ? false : null,
     diesel: station.diesel,
     e5: station.e5,
     e10: station.e10,
@@ -2884,8 +3050,9 @@ async function handleScanInit(req, res) {
   if (!['POST', 'GET'].includes(req.method)) return sendJson(res, { error: 'Method not allowed.' }, 405);
   const country = String(req.query.country || req.body?.country || 'DE').trim().toUpperCase();
   const source = String(req.query.source || req.body?.source || 'tankkoenig').trim().toLowerCase();
+  const mode = String(req.query.mode || req.body?.mode || 'seed_de_grid').trim();
   const limit = Math.round(numberParam(req.query.limit || req.body?.limit, 0, 0, 10000));
-  const result = await createTankprofiScanRun({ country, source, limit });
+  const result = await createTankprofiScanRun({ country, source, mode, limit });
   return sendJson(res, result, 202);
 }
 
@@ -2894,14 +3061,18 @@ async function handleScanProcess(req, res) {
   const country = String(req.query.country || req.body?.country || 'DE').trim().toUpperCase();
   const source = String(req.query.source || req.body?.source || 'tankkoenig').trim().toLowerCase();
   const limit = Math.round(numberParam(req.query.limit || req.body?.limit, 5, 1, 25));
-  const result = await processTankprofiScanCells({ country, source, limit });
+  const retryErrors = String(req.query.retryErrors || req.body?.retryErrors || '') === '1'
+    || String(req.query.retryErrors || req.body?.retryErrors || '').toLowerCase() === 'true';
+  const result = await processTankprofiScanCells({ country, source, limit, retryErrors });
   return sendJson(res, result);
 }
 
 async function handleAutobahnImport(req, res) {
   if (!['POST', 'GET'].includes(req.method)) return sendJson(res, { error: 'Method not allowed.' }, 405);
   const limit = Math.round(numberParam(req.query.limit || req.body?.limit, 0, 0, 500));
-  const result = await importRaststaettenDirectory({ limit });
+  const highway = String(req.query.highway || req.body?.highway || '').trim().toUpperCase().replace(/\s+/g, '');
+  const offset = Math.round(numberParam(req.query.offset || req.body?.offset, 0, 0, 10000));
+  const result = await importRaststaettenDirectory({ limit, highway, offset });
   return sendJson(res, result);
 }
 
@@ -2978,6 +3149,215 @@ async function fetchAutobahnPriceMatch(autobahnStation) {
   };
 }
 
+function tankerkoenigStationForPersistence(station) {
+  return {
+    tankerkoenig_id: String(station.id || ''),
+    source: 'tankkoenig',
+    country: 'DE',
+    name: station.name || '',
+    brand: station.brand || '',
+    street: station.street || '',
+    house_number: station.houseNumber || '',
+    postcode: station.postCode || '',
+    city: station.place || '',
+    lat: Number(station.lat),
+    lng: Number(station.lng),
+    distance: Number(station.dist || 0),
+    is_open: station.isOpen === true ? true : station.isOpen === false ? false : null,
+    diesel: station.diesel,
+    e5: station.e5,
+    e10: station.e10,
+    last_update: new Date().toISOString(),
+  };
+}
+
+async function fetchTankerkoenigStationsAround(point, radiusKm = autobahnPriceRefreshRadiusKm) {
+  const upstream = new URL('https://creativecommons.tankerkoenig.de/json/list.php');
+  upstream.search = new URLSearchParams({
+    lat: String(point.lat),
+    lng: String(point.lng),
+    rad: String(radiusKm),
+    sort: 'dist',
+    type: 'all',
+    apikey: tankerkoenigKey(),
+  }).toString();
+
+  const { response, data } = await fetchJsonWithTimeout(upstream, {
+    headers: {
+      accept: 'application/json',
+      'user-agent': 'Tankprofi/1.0 (autobahn-price-refresh)',
+    },
+  }, 9000);
+  if (!response.ok || data.ok !== true) {
+    throw new Error(data.message || `Tankerkoenig request failed with status ${response.status}.`);
+  }
+  return data.stations || [];
+}
+
+function pointRefreshAgeMs(point) {
+  const last = Date.parse(point.lastAutobahnPriceRefreshAt || '');
+  if (!Number.isFinite(last) || last <= 0) return Number.POSITIVE_INFINITY;
+  return Date.now() - last;
+}
+
+function pointRefreshSortValue(point) {
+  const last = Date.parse(point.lastAutobahnPriceRefreshAt || '');
+  return Number.isFinite(last) && last > 0 ? last : 0;
+}
+
+function routePointRefreshRef(point) {
+  if (!point?.sourceCollection || !point.sourceDocId) return null;
+  return db.collection(point.sourceCollection).doc(point.sourceDocId);
+}
+
+function buildAutobahnRefreshClusters(points, { radiusKm = autobahnPriceRefreshRadiusKm, maxQueries = autobahnPriceRefreshMaxQueries } = {}) {
+  const clusters = [];
+  points.forEach((point) => {
+    const covered = clusters.some((cluster) => distanceKmBetween(point.lat, point.lng, cluster.lat, cluster.lng) <= radiusKm * 0.65);
+    if (covered || clusters.length >= maxQueries) return;
+    clusters.push({
+      id: `cluster-${clusters.length + 1}`,
+      lat: point.lat,
+      lng: point.lng,
+      routeId: point.routeId || point.autobahn || '',
+      sourcePointId: point.id,
+      points: [],
+    });
+  });
+
+  clusters.forEach((cluster) => {
+    cluster.points = points.filter((point) => distanceKmBetween(point.lat, point.lng, cluster.lat, cluster.lng) <= radiusKm);
+  });
+  return clusters;
+}
+
+async function markAutobahnPointsRefreshed(points, cluster, stationCount, radiusKm = autobahnPriceRefreshRadiusKm, now = FieldValue.serverTimestamp()) {
+  const refs = new Map();
+  points.forEach((point) => {
+    const ref = routePointRefreshRef(point);
+    if (ref) refs.set(ref.path, ref);
+  });
+  const items = [...refs.values()];
+  await writeInChunks(items, (batch, ref) => {
+    batch.set(ref, {
+      lastAutobahnPriceRefreshAt: now,
+      lastAutobahnPriceRefreshRadiusKm: radiusKm,
+      lastAutobahnPriceRefreshStationCount: stationCount,
+      lastAutobahnPriceRefreshCluster: {
+        lat: cluster.lat,
+        lng: cluster.lng,
+        routeId: cluster.routeId || null,
+      },
+      updatedAt: now,
+    }, { merge: true });
+  });
+}
+
+async function runAutobahnPriceRefresh({
+  maxQueries = autobahnPriceRefreshMaxQueries,
+  radiusKm = autobahnPriceRefreshRadiusKm,
+  force = false,
+  route = 'ALL',
+} = {}) {
+  const normalizedRoute = String(route || 'ALL').trim().toUpperCase().replace(/\s+/g, '');
+  const [prepared, unified] = await Promise.all([
+    loadRouteTankpointsFromCollection('autobahnTankpunkte', normalizedRoute).catch(() => []),
+    loadRouteTankpointsFromCollection('tankprofi_stations', normalizedRoute).catch(() => []),
+  ]);
+  const allPoints = mergeDirectoryStations([...unified, ...prepared])
+    .filter((point) => point.active && Number.isFinite(point.lat) && Number.isFinite(point.lng));
+  const targetDueCount = Math.max(20, Math.ceil(allPoints.length / Math.max(1, Math.floor(autobahnPriceRefreshTargetMs / autobahnPriceRefreshScheduleMs))));
+  const duePoints = allPoints
+    .filter((point) => force || pointRefreshAgeMs(point) >= autobahnPriceRefreshTargetMs)
+    .sort((a, b) => pointRefreshSortValue(a) - pointRefreshSortValue(b) || String(a.name).localeCompare(String(b.name), 'de'))
+    .slice(0, targetDueCount * 2);
+  const clusters = buildAutobahnRefreshClusters(duePoints, { radiusKm, maxQueries });
+  const discovered = new Map();
+  const clusterResults = [];
+
+  for (const [index, cluster] of clusters.entries()) {
+    if (index > 0) await sleep(autobahnPriceRefreshDelayMs);
+    try {
+      const stations = await fetchTankerkoenigStationsAround(cluster, radiusKm);
+      stations.forEach((station) => {
+        if (station.id) discovered.set(String(station.id), station);
+      });
+      await markAutobahnPointsRefreshed(cluster.points, cluster, stations.length, radiusKm);
+      clusterResults.push({
+        ...cluster,
+        pointCount: cluster.points.length,
+        stationCount: stations.length,
+        status: 'completed',
+      });
+    } catch (error) {
+      clusterResults.push({
+        ...cluster,
+        pointCount: cluster.points.length,
+        stationCount: 0,
+        status: 'failed',
+        error: error.message,
+      });
+    }
+  }
+
+  const stations = [...discovered.values()].map(tankerkoenigStationForPersistence)
+    .filter((station) => station.tankerkoenig_id && Number.isFinite(station.lat) && Number.isFinite(station.lng));
+  const persistStats = stations.length
+    ? await rememberTankprofiStations(stations, { source: 'tankkoenig', writePriceHistory: false, concurrency: 6 })
+    : { stationsCreated: 0, stationsUpdated: 0, addressesCreated: 0, errors: [] };
+
+  const refreshedPointIds = new Set(clusterResults
+    .filter((cluster) => cluster.status === 'completed')
+    .flatMap((cluster) => cluster.points.map((point) => `${point.sourceCollection}:${point.sourceDocId}`)));
+
+  await db.collection('tankprofi_jobs').doc('autobahn-price-refresh').set({
+    jobId: 'autobahn-price-refresh',
+    updatedAt: FieldValue.serverTimestamp(),
+    route: normalizedRoute,
+    force,
+    radiusKm,
+    maxQueries,
+    totalTankpoints: allPoints.length,
+    dueTankpoints: duePoints.length,
+    refreshedTankpoints: refreshedPointIds.size,
+    clusterCount: clusters.length,
+    discoveredStations: stations.length,
+    stationsCreated: persistStats.stationsCreated,
+    stationsUpdated: persistStats.stationsUpdated,
+    addressesCreated: persistStats.addressesCreated,
+    errorCount: clusterResults.filter((cluster) => cluster.status === 'failed').length + persistStats.errors.length,
+    clusters: clusterResults.map((cluster) => ({
+      id: cluster.id,
+      routeId: cluster.routeId,
+      lat: cluster.lat,
+      lng: cluster.lng,
+      pointCount: cluster.pointCount,
+      stationCount: cluster.stationCount,
+      status: cluster.status,
+      error: cluster.error || null,
+    })),
+  }, { merge: true });
+
+  return {
+    status: 'completed',
+    route: normalizedRoute,
+    radiusKm,
+    targetWindowMinutes: Math.round(autobahnPriceRefreshTargetMs / 60000),
+    totalTankpoints: allPoints.length,
+    dueTankpoints: duePoints.length,
+    refreshedTankpoints: refreshedPointIds.size,
+    clusterCount: clusters.length,
+    discoveredStations: stations.length,
+    stationsCreated: persistStats.stationsCreated,
+    stationsUpdated: persistStats.stationsUpdated,
+    addressesCreated: persistStats.addressesCreated,
+    errors: [
+      ...clusterResults.filter((cluster) => cluster.status === 'failed').map((cluster) => cluster.error),
+      ...persistStats.errors,
+    ],
+  };
+}
+
 function findStoredStationMatch(autobahnStation, storedStations) {
   const fuelBrands = [
     autobahnStation.primaryFuelBrand,
@@ -2988,10 +3368,20 @@ function findStoredStationMatch(autobahnStation, storedStations) {
   storedStations.forEach((stored) => {
     const distanceKm = distanceKmBetween(autobahnStation.lat, autobahnStation.lng, stored.lat, stored.lng);
     if (distanceKm > 1.2) return;
-    const storedBrand = String(stored.brand || '').toLowerCase();
-    const brandHit = fuelBrands.length && fuelBrands.some((brand) => storedBrand.includes(brand) || brand.includes(storedBrand));
-    const score = distanceKm + (brandHit ? 0 : 0.45);
-    if (!best || score < best.score) best = { ...stored, score, matchDistanceKm: roundPrice(distanceKm) };
+    const storedBrand = String(stored.brand || '').toLowerCase().trim();
+    const brandHit = Boolean(storedBrand) && fuelBrands.length
+      && fuelBrands.some((brand) => storedBrand.includes(brand) || brand.includes(storedBrand));
+    const nameHit = stationNamesSimilar(autobahnStation.name, stored.name);
+    const score = distanceKm + (brandHit ? -0.12 : 0.45) + (nameHit ? -0.08 : 0);
+    if (!best || score < best.score) {
+      best = {
+        ...stored,
+        score,
+        brandHit: Boolean(brandHit),
+        nameHit: Boolean(nameHit),
+        matchDistanceKm: roundPrice(distanceKm),
+      };
+    }
   });
   return best;
 }
@@ -3068,6 +3458,230 @@ async function enrichAutobahnStationsWithPrices(stations, refresh = false) {
       prices: { diesel, e5, e10 },
     };
   }));
+}
+
+async function loadStoredTankerkoenigStationsForMatch() {
+  const snapshot = await db.collection('tankprofi_stations')
+    .where('source', '==', 'tankkoenig')
+    .limit(5000)
+    .get();
+  return snapshot.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      stationId: String(data.externalStationId || doc.id.replace(/^tankkoenig_/, '')),
+      name: data.name || '',
+      brand: data.brand || '',
+      lat: Number(data.latitude),
+      lng: Number(data.longitude),
+    };
+  }).filter((station) => station.stationId && Number.isFinite(station.lat) && Number.isFinite(station.lng));
+}
+
+function serviceStationMatchCandidateFromDoc(doc) {
+  const data = doc.data();
+  const stationTypes = Array.isArray(data.standortTyp) ? data.standortTyp : [];
+  const priceStationId = String(data.priceStationId || data.tankerkoenigId || '').trim();
+  if (priceStationId) return null;
+  if (data.source === 'tankkoenig') return null;
+  if (!stationTypes.some((type) => ['RaststÃ¤tte', 'Autohof', 'Truck Stop', 'Ladepark', 'Service Area'].includes(type))) return null;
+  const lat = Number(data.latitude);
+  const lng = Number(data.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return {
+    doc,
+    stationId: data.stationId || doc.id,
+    name: data.name || '',
+    primaryFuelBrand: data.primaryFuelBrand || data.brand || null,
+    fuelBrands: data.fuelBrands || (data.brand ? [data.brand] : []),
+    lat,
+    lng,
+  };
+}
+
+async function collectTankIdMatchCandidates(limit) {
+  const byId = new Map();
+  const addSnapshot = async (query) => {
+    const snapshot = await query.limit(limit).get();
+    snapshot.docs.forEach((doc) => {
+      const candidate = serviceStationMatchCandidateFromDoc(doc);
+      if (candidate) byId.set(doc.id, candidate);
+    });
+  };
+
+  await Promise.all([
+    addSnapshot(db.collection('tankprofi_stations').where('standortTyp', 'array-contains', 'RaststÃ¤tte')),
+    addSnapshot(db.collection('tankprofi_stations').where('standortTyp', 'array-contains', 'Autohof')),
+    addSnapshot(db.collection('tankprofi_stations').where('standortTyp', 'array-contains', 'Truck Stop')),
+    addSnapshot(db.collection('tankprofi_stations').where('standortTyp', 'array-contains', 'Ladepark')),
+  ]);
+
+  return [...byId.values()].slice(0, limit);
+}
+
+async function matchStoredTankIds({ limit = 300, dryRun = false, maxDistanceKm = 0.25 } = {}) {
+  const safeLimit = Math.round(numberParam(limit, 300, 1, 1000));
+  const safeMaxDistanceKm = numberParam(maxDistanceKm, 0.25, 0.02, 1.2);
+  const [storedStations, candidates] = await Promise.all([
+    loadStoredTankerkoenigStationsForMatch(),
+    collectTankIdMatchCandidates(safeLimit),
+  ]);
+  const matches = [];
+  const skipped = [];
+
+  for (const candidate of candidates) {
+    const match = findStoredStationMatch(candidate, storedStations);
+    if (!match) {
+      skipped.push({ stationId: candidate.stationId, name: candidate.name, reason: 'no_match' });
+      continue;
+    }
+    if (Number(match.matchDistanceKm) > safeMaxDistanceKm) {
+      skipped.push({
+        stationId: candidate.stationId,
+        name: candidate.name,
+        reason: 'distance_too_high',
+        priceStationId: match.stationId,
+        matchName: match.name,
+        distanceKm: match.matchDistanceKm,
+      });
+      continue;
+    }
+    if (Number(match.matchDistanceKm) > 0.35 && !match.brandHit && !match.nameHit) {
+      skipped.push({
+        stationId: candidate.stationId,
+        name: candidate.name,
+        reason: 'needs_review_no_brand_signal',
+        priceStationId: match.stationId,
+        matchName: match.name,
+        matchBrand: match.brand,
+        distanceKm: match.matchDistanceKm,
+      });
+      continue;
+    }
+    matches.push({ candidate, match });
+  }
+
+  if (!dryRun && matches.length) {
+    const now = FieldValue.serverTimestamp();
+    for (let index = 0; index < matches.length; index += 400) {
+      const batch = db.batch();
+      matches.slice(index, index + 400).forEach(({ candidate, match }) => {
+        batch.set(candidate.doc.ref, {
+          priceStationId: match.stationId,
+          tankerkoenigId: match.stationId,
+          priceMatch: {
+            stationId: match.stationId,
+            name: match.name,
+            brand: match.brand,
+            distanceKm: match.matchDistanceKm,
+            source: 'stored_tankprofi_stations',
+            matchedAt: now,
+          },
+          tankstelleVorhanden: true,
+          tankstellenReferenzen: FieldValue.arrayUnion({
+            source: 'tankkoenig',
+            stationId: match.stationId,
+            distanceKm: match.matchDistanceKm,
+          }),
+          updatedAt: now,
+        }, { merge: true });
+      });
+      await batch.commit();
+    }
+  }
+
+  return {
+    status: 'completed',
+    dryRun,
+    maxDistanceKm: safeMaxDistanceKm,
+    scanned: candidates.length,
+    storedTankStations: storedStations.length,
+    matched: matches.length,
+    updated: dryRun ? 0 : matches.length,
+    skipped: skipped.length,
+    sampleMatches: matches.slice(0, 20).map(({ candidate, match }) => ({
+      stationId: candidate.stationId,
+      name: candidate.name,
+      priceStationId: match.stationId,
+      matchName: match.name,
+      matchBrand: match.brand,
+      distanceKm: match.matchDistanceKm,
+    })),
+    sampleSkipped: skipped.slice(0, 10),
+  };
+}
+
+function tankIdCandidateScores(candidate, storedStations, radiusKm) {
+  const fuelBrands = [
+    candidate.primaryFuelBrand,
+    ...(Array.isArray(candidate.fuelBrands) ? candidate.fuelBrands : []),
+  ].filter(Boolean).map((brand) => String(brand).toLowerCase());
+  const candidateName = String(candidate.name || '').toLowerCase();
+  return storedStations
+    .map((station) => {
+      const distanceKm = distanceKmBetween(candidate.lat, candidate.lng, station.lat, station.lng);
+      if (!Number.isFinite(distanceKm) || distanceKm > radiusKm) return null;
+      const brand = String(station.brand || station.name || '').toLowerCase();
+      const name = String(station.name || '').toLowerCase();
+      const brandHit = fuelBrands.length && fuelBrands.some((item) => brand.includes(item) || item.includes(brand));
+      const nameHit = candidateName && name && (
+        stationNamesSimilar(candidateName, name)
+        || candidateName.includes(name)
+        || name.includes(candidateName)
+      );
+      const score = distanceKm + (brandHit ? -0.08 : 0) + (nameHit ? -0.05 : 0);
+      return {
+        stationId: station.stationId,
+        name: station.name,
+        brand: station.brand,
+        distanceKm: roundPrice(distanceKm),
+        brandHit: Boolean(brandHit),
+        nameHit: Boolean(nameHit),
+        score: Math.round(score * 1000) / 1000,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.score - b.score || a.distanceKm - b.distanceKm)
+    .slice(0, 5);
+}
+
+async function reportTankIdCandidates({ limit = 200, radiusKm = 0.8 } = {}) {
+  const safeLimit = Math.round(numberParam(limit, 200, 1, 1000));
+  const safeRadiusKm = numberParam(radiusKm, 0.8, 0.05, 2);
+  const [storedStations, candidates] = await Promise.all([
+    loadStoredTankerkoenigStationsForMatch(),
+    collectTankIdMatchCandidates(safeLimit),
+  ]);
+  const items = candidates.map((candidate) => {
+    const matches = tankIdCandidateScores(candidate, storedStations, safeRadiusKm);
+    const best = matches[0] || null;
+    let category = 'no_nearby_candidate';
+    if (best) {
+      if (best.distanceKm <= 0.25 && (best.brandHit || best.nameHit)) category = 'strong_auto_candidate';
+      else if (best.distanceKm <= 0.5 && (best.brandHit || best.nameHit)) category = 'review_good_candidate';
+      else if (best.distanceKm <= 0.8) category = 'review_distance_candidate';
+    }
+    return {
+      stationId: candidate.stationId,
+      name: candidate.name,
+      lat: candidate.lat,
+      lng: candidate.lng,
+      category,
+      candidates: matches,
+    };
+  });
+  const totals = items.reduce((acc, item) => {
+    acc[item.category] = (acc[item.category] || 0) + 1;
+    return acc;
+  }, {});
+
+  return {
+    status: 'completed',
+    radiusKm: safeRadiusKm,
+    scanned: candidates.length,
+    storedTankStations: storedStations.length,
+    totals,
+    items: items.slice(0, safeLimit),
+  };
 }
 
 function directoryStationFromTankprofiDoc(doc) {
@@ -3301,10 +3915,16 @@ function routeTankpointFromDoc(doc, data, sourceCollection) {
 
   return {
     id: String(data.id || doc.id),
+    sourceDocId: doc.id,
     stationId,
     priceStationId,
     name: String(data.name || 'Tankpunkt'),
     brand: String(data.brand || data.primaryFuelBrand || ''),
+    street: data.street || data.addressStreet || data.address || '',
+    house_number: data.house_number || data.houseNumber || data.houseNumberText || '',
+    postcode: data.postcode || data.postCode || data.zip || '',
+    city: data.city || data.place || data.town || '',
+    country: data.country || 'DE',
     autobahn: String(data.autobahn || data.highway || '').toUpperCase().replace(/\s+/g, ''),
     routeId: String(data.routeId || data.autobahn || data.highway || '').toUpperCase().replace(/\s+/g, ''),
     typ,
@@ -3323,6 +3943,7 @@ function routeTankpointFromDoc(doc, data, sourceCollection) {
     source: data.source || sourceCollection,
     sourceCollection,
     lastUpdated: isoFromTimestamp(data.lastUpdated || data.updatedAt || data.lastSeenAt || data.importedAt),
+    lastAutobahnPriceRefreshAt: isoFromTimestamp(data.lastAutobahnPriceRefreshAt),
     prices: {
       diesel: routePriceFromCurrent(data, 'diesel'),
       e5: routePriceFromCurrent(data, 'e5'),
@@ -3398,7 +4019,21 @@ async function handleRouteTankpoints(req, res) {
 async function handleAutohofImport(req, res) {
   if (!['POST', 'GET'].includes(req.method)) return sendJson(res, { error: 'Method not allowed.' }, 405);
   const limit = Math.round(numberParam(req.query.limit || req.body?.limit, 0, 0, 500));
-  const result = await importAutohofDirectory({ limit });
+  const highway = String(req.query.highway || req.body?.highway || '').trim().toUpperCase().replace(/\s+/g, '');
+  const maxPoints = Math.round(numberParam(req.query.maxPoints || req.body?.maxPoints, 0, 0, 40));
+  const pointOffset = Math.round(numberParam(req.query.pointOffset || req.body?.pointOffset, 0, 0, 200));
+  const result = await importAutohofDirectory({ limit, highway, maxPoints, pointOffset });
+  return sendJson(res, result);
+}
+
+async function handleAutobahnPriceRefresh(req, res) {
+  if (!['POST', 'GET'].includes(req.method)) return sendJson(res, { error: 'Method not allowed.' }, 405);
+  const force = String(req.query.force || req.body?.force || '') === '1' || String(req.body?.force || '') === 'true';
+  const route = String(req.query.route || req.query.autobahn || req.body?.route || req.body?.autobahn || 'ALL').trim().toUpperCase().replace(/\s+/g, '');
+  if (route !== 'ALL' && !/^A\d+$/i.test(route)) return sendJson(res, { error: 'Unsupported route.' }, 422);
+  const maxQueries = Math.round(numberParam(req.query.maxQueries || req.body?.maxQueries, autobahnPriceRefreshMaxQueries, 1, 40));
+  const radiusKm = numberParam(req.query.radiusKm || req.body?.radiusKm, autobahnPriceRefreshRadiusKm, 2, 12);
+  const result = await runAutobahnPriceRefresh({ force, route, maxQueries, radiusKm });
   return sendJson(res, result);
 }
 
@@ -3442,6 +4077,24 @@ async function handleAutohofTankerkoenigImport(req, res) {
     });
   }
   const result = await importTankerkoenigAutohofDirectory({ highway, limit, radiusKm, maxPoints, delayMs });
+  return sendJson(res, result);
+}
+
+async function handleTankIdMatch(req, res) {
+  if (!['POST', 'GET'].includes(req.method)) return sendJson(res, { error: 'Method not allowed.' }, 405);
+  const limit = Math.round(numberParam(req.query.limit || req.body?.limit, 300, 1, 1000));
+  const dryRun = String(req.query.dryRun || req.body?.dryRun || '') === '1'
+    || String(req.query.dryRun || req.body?.dryRun || '').toLowerCase() === 'true';
+  const maxDistanceKm = numberParam(req.query.maxDistanceKm || req.body?.maxDistanceKm, 0.25, 0.02, 1.2);
+  const result = await matchStoredTankIds({ limit, dryRun, maxDistanceKm });
+  return sendJson(res, result);
+}
+
+async function handleTankIdCandidates(req, res) {
+  if (!['POST', 'GET'].includes(req.method)) return sendJson(res, { error: 'Method not allowed.' }, 405);
+  const limit = Math.round(numberParam(req.query.limit || req.body?.limit, 200, 1, 1000));
+  const radiusKm = numberParam(req.query.radiusKm || req.body?.radiusKm, 0.8, 0.05, 2);
+  const result = await reportTankIdCandidates({ limit, radiusKm });
   return sendJson(res, result);
 }
 
@@ -3619,10 +4272,13 @@ export const api = onRequest({
     if (endpoint === 'adminStats') return await handleAdminStats(req, res);
     if (endpoint === 'addressConsolidate') return await handleAddressConsolidate(req, res);
     if (endpoint === 'autobahnImport') return await handleAutobahnImport(req, res);
+    if (endpoint === 'autobahnPriceRefresh') return await handleAutobahnPriceRefresh(req, res);
     if (endpoint === 'autobahnStations') return await handleAutobahnStations(req, res);
     if (endpoint === 'routeTankpoints') return await handleRouteTankpoints(req, res);
     if (endpoint === 'autohofImport') return await handleAutohofImport(req, res);
     if (endpoint === 'autohofTankerkoenigImport') return await handleAutohofTankerkoenigImport(req, res);
+    if (endpoint === 'tankIdMatch') return await handleTankIdMatch(req, res);
+    if (endpoint === 'tankIdCandidates') return await handleTankIdCandidates(req, res);
     if (endpoint === 'autohofStations') return await handleAutohofStations(req, res);
     return sendJson(res, { error: 'Unknown API endpoint.' }, 404);
   } catch (error) {
@@ -3649,7 +4305,18 @@ export const processTankprofiScanQueue = onSchedule({
   timeoutSeconds: 540,
   memory: '512MiB',
 }, async () => {
-  await processTankprofiScanCells({ country: 'DE', source: 'tankkoenig', limit: 5 });
+  await processTankprofiScanCells({ country: 'DE', source: 'tankkoenig', limit: 5, retryErrors: true });
+});
+
+export const refreshAutobahnPrices = onSchedule({
+  region: 'europe-west3',
+  schedule: 'every 15 minutes',
+  timeZone: 'Europe/Berlin',
+  secrets: [tankerkoenigApiKey],
+  timeoutSeconds: 540,
+  memory: '512MiB',
+}, async () => {
+  await runAutobahnPriceRefresh({ force: false });
 });
 
 export const cityAverageUpdateRequest = onDocumentCreated({

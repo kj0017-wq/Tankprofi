@@ -6,12 +6,12 @@
     <meta name="theme-color" content="#0b1f3a">
     <title>Tankprofi</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="apple-touch-icon" href="assets/img/tankprofi-home-icon.png">
+    <link rel="apple-touch-icon" href="assets/img/tankprofi-home-icon.png?v=20260626-raiffeisen-logo">
     <link rel="preconnect" href="https://unpkg.com">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
-    <link rel="stylesheet" href="assets/css/app.css?v=20260624-drive-autobahn-price-refresh">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260626-raiffeisen-logo">
 </head>
 <body>
     <section class="splash-screen" id="splashScreen" aria-label="Tankprofi wird geladen">
@@ -34,7 +34,7 @@
     <div class="app-shell view-list" id="appShell">
         <aside class="control-pane" aria-label="Suche und Ergebnisse">
             <header class="brand-bar">
-                <img class="brand-logo-mark" src="assets/img/tankprofi-home-icon.png" width="56" height="56" alt="">
+                <img class="brand-logo-mark" src="assets/img/tankprofi-home-icon.png?v=20260626-raiffeisen-logo" width="56" height="56" alt="">
                 <div class="brand-title">
                     <p class="eyebrow">Live Tankpreise</p>
                     <h1>Tankprofi</h1>
@@ -135,35 +135,39 @@
                 <div class="help-body">
                     <article>
                         <h2>Liste</h2>
-                        <p>Zeigt Tankstellen im gewählten Umkreis. Mit Preis oder Entfernung sortierst du die Treffer neu.</p>
+                        <p>Zeigt Tankstellen im gewaehlten Umkreis fuer den eingestellten Kraftstoff. Preis und Entfernung sortieren die vorhandenen Treffer nur neu. Ein neuer Abruf erfolgt erst nach kurzer Wartezeit, bei neuer Suche, neuem Standort oder ueber Neu laden.</p>
                     </article>
                     <article>
                         <h2>Standort</h2>
-                        <p>Aktualisiert deine aktuelle Position und lädt die passenden Live-Tankstellen in der Nähe.</p>
+                        <p>Ermittelt deine aktuelle Position einmalig und laedt passende Tankstellen in der Naehe. Die Standortfreigabe wird nur fuer die jeweilige Aktion genutzt; im normalen Listenmodus wird keine dauerhafte Fahrt verfolgt.</p>
                     </article>
                     <article>
                         <h2>Karte</h2>
-                        <p>Zeigt die Treffer als Marker. Grün ist günstiger, Gelb mittel, Rot teurer, Grau geschlossen oder ohne Preis.</p>
+                        <p>Zeigt die aktuellen Treffer als Marker. Gruen bedeutet guenstiger, Gelb mittlerer Bereich, Rot teurer und Grau geschlossen oder ohne verwertbaren Preis. Tippe einen Marker an, um die Tankstelle in der Liste oder im Detail weiter zu oeffnen.</p>
                     </article>
                     <article>
                         <h2>Details</h2>
-                        <p>Antippen öffnet Preise, Adresse, Status und Navigation. Der Navigationsbutton bietet Google Maps, Waze, Apple Karten und System-Karte.</p>
+                        <p>Ein Tipp auf eine Tankstelle oeffnet Adresse, Status und die Preise fuer Diesel, E5 und E10. Ueber Navigation kannst du Google Maps, Waze, Apple Karten oder die System-Karte starten. Favoriten werden lokal auf diesem Geraet gespeichert.</p>
                     </article>
                     <article>
                         <h2>Drive</h2>
-                        <p>Startet den Fahrmodus. In der Stadt werden die nächsten Tankstellen nach Entfernung gezeigt; auf Autobahnen die passenden Tankpunkte in Fahrtrichtung.</p>
+                        <p>Startet den aktiven Fahrmodus. In der Stadt werden nahe Tankstellen nach Entfernung und Fahrtrichtung bewertet; im Ruhemodus bleibt die Liste stabil, der Pfeil kann den Geraetekompass nutzen und wird hoechstens alle 30 Sekunden neu ausgerichtet. Tankstellen hinter dir werden nach mehr als 200 m ausgeblendet, sobald eine Richtung erkannt wurde. Auf Autobahnen nutzt Tankprofi vorbereitete Tankpunkte voraus und aktualisiert Preise gedrosselt.</p>
+                    </article>
+                    <article>
+                        <h2>Ziel im Drive</h2>
+                        <p>Mit Ziel eingeben kannst du eine Adresse oder einen Ort setzen. Danach schlaegt Tankprofi eine passende Autobahnstrecke vor und zeigt die Karte als zusaetzlichen Button. Ohne Ziel bleibt Drive im Stadtmodus oder Autobahnmodus ohne Ziel.</p>
                     </article>
                     <article>
                         <h2>Städte</h2>
-                        <p>Vergleicht Durchschnittspreise großer Städte nach Diesel, E5 oder E10.</p>
+                        <p>Vergleicht Durchschnittspreise grosser Staedte nach Diesel, E5 oder E10. Die Staedteansicht nutzt gespeicherte Snapshots, damit der Vergleich nicht bei jedem Oeffnen neu aufgebaut werden muss.</p>
                     </article>
                     <article>
                         <h2>Autobahn</h2>
-                        <p>Zeigt vorbereitete Autobahn-Standorte und Preise. Diese Daten werden aus Firebase geladen.</p>
+                        <p>Zeigt vorbereitete Autobahn-Standorte wie Raststaetten, Autohoefe und Tankstellen nahe Abfahrten. Die Stammdaten kommen aus Firebase, Preise werden nachgeladen und mit gespeicherten Daten kombiniert, wenn Live-Daten gerade nicht erreichbar sind.</p>
                     </article>
                     <article>
                         <h2>Favoriten</h2>
-                        <p>Speichert wichtige Tankstellen lokal, damit du sie schnell wiederfindest.</p>
+                        <p>Speichert wichtige Tankstellen lokal auf deinem Geraet, damit du sie schnell wiederfindest. Beim Oeffnen werden Preise nach Moeglichkeit aktualisiert; wenn Live-Daten fehlen, bleibt der letzte bekannte Stand sichtbar.</p>
                     </article>
                 </div>
             </section>
@@ -213,8 +217,11 @@
                                 <option value="jet">Jet</option>
                                 <option value="hem">HEM</option>
                                 <option value="avia">Avia</option>
+                                <option value="avex">AVEX</option>
                                 <option value="star">Star</option>
                                 <option value="bft">BFT</option>
+                                <option value="honsel">Honsel</option>
+                                <option value="raiffeisen">Raiffeisen</option>
                                 <option value="agip">Agip / Eni</option>
                             </select>
                         </div>
@@ -256,18 +263,30 @@
                     <section class="share-panel tankprofi-stats-panel" aria-label="Tankprofi Datenbestand">
                         <strong>Gesammelte Daten</strong>
                         <div class="stats-grid">
-                            <span>Adressen</span>
-                            <b id="tankprofiAddressCount">...</b>
-                            <span>Tankstellen</span>
-                            <b id="tankprofiStationCount">...</b>
-                            <span>Autohöfe</span>
-                            <b id="tankprofiAutohofCount">...</b>
-                            <span>Raststätten</span>
-                            <b id="tankprofiRastCount">...</b>
-                            <span>Ladeparks</span>
-                            <b id="tankprofiChargingCount">...</b>
-                            <span>Truck Stops</span>
-                            <b id="tankprofiTruckCount">...</b>
+                            <div class="stat-item">
+                                <span>Adressen</span>
+                                <b id="tankprofiAddressCount">...</b>
+                            </div>
+                            <div class="stat-item">
+                                <span>Tankstellen</span>
+                                <b id="tankprofiStationCount">...</b>
+                            </div>
+                            <div class="stat-item">
+                                <span>Autohoefe</span>
+                                <b id="tankprofiAutohofCount">...</b>
+                            </div>
+                            <div class="stat-item">
+                                <span>Raststaetten</span>
+                                <b id="tankprofiRastCount">...</b>
+                            </div>
+                            <div class="stat-item">
+                                <span>Ladeparks</span>
+                                <b id="tankprofiChargingCount">...</b>
+                            </div>
+                            <div class="stat-item">
+                                <span>Truck Stops</span>
+                                <b id="tankprofiTruckCount">...</b>
+                            </div>
                         </div>
                         <span id="tankprofiStatsStatus">Wird beim Öffnen aktualisiert.</span>
                         <div class="stats-update-panel" aria-label="Preis-Updates Städtepreise">
@@ -299,7 +318,8 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <script type="module" src="assets/js/firebase-app.js?v=20260624-drive-null-position-fix"></script>
-    <script src="assets/js/app.js?v=20260624-drive-autobahn-price-refresh" defer></script>
+    <script type="module" src="assets/js/firebase-app.js?v=20260626-raiffeisen-logo"></script>
+    <script src="assets/js/app.js?v=20260626-raiffeisen-logo" defer></script>
 </body>
 </html>
+

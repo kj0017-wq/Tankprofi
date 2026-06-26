@@ -53,7 +53,7 @@ body {
     gap: 14px;
     padding: max(22px, env(safe-area-inset-top)) 20px max(26px, env(safe-area-inset-bottom));
     color: var(--navy-900);
-    background: #fff7df;
+    background: #fcf0d5;
     transition: opacity 420ms ease, visibility 420ms ease;
 }
 
@@ -215,6 +215,7 @@ button {
 
 .control-pane {
     width: 100%;
+    max-width: 100%;
     height: 100vh;
     display: flex;
     flex-direction: column;
@@ -240,10 +241,39 @@ button {
     grid-template-areas: "logo title actions";
     align-items: center;
     gap: 10px;
-    padding: 12px 14px 10px;
+    min-height: calc(74px + env(safe-area-inset-top));
+    padding: calc(12px + env(safe-area-inset-top)) 14px 10px;
     color: var(--ink);
     background: var(--yellow-500);
     border-bottom: 4px solid var(--ink);
+}
+
+.section-tone-autobahn .brand-bar {
+    color: var(--white);
+    background: linear-gradient(180deg, #2367d8 0%, #174aa8 100%);
+}
+
+.section-tone-autobahn .brand-bar .eyebrow,
+.section-tone-autobahn .brand-bar h1 {
+    color: var(--white);
+}
+
+.section-tone-autobahn .brand-logo-mark {
+    box-shadow: 4px 4px 0 #0b2e78;
+}
+
+.section-tone-autobahn .help-button,
+.section-tone-autobahn .drive-mode-button {
+    box-shadow: 3px 3px 0 #0b2e78;
+}
+
+.section-tone-city .brand-bar {
+    color: var(--ink);
+    background: var(--yellow-500);
+}
+
+.section-tone-city .brand-bar .eyebrow {
+    color: var(--blue-600);
 }
 
 .brand-logo-mark {
@@ -505,9 +535,9 @@ select:focus {
     bottom: 0;
     z-index: 40;
     display: grid;
-    gap: 12px;
-    max-height: min(78vh, 620px);
-    padding: 14px 14px max(18px, env(safe-area-inset-bottom));
+    gap: 10px;
+    max-height: min(82vh, 640px);
+    padding: 12px 12px max(16px, env(safe-area-inset-bottom));
     border-radius: 18px 18px 0 0;
     background: #eaf3ff;
     box-shadow: 0 -18px 44px rgba(7, 23, 43, 0.24);
@@ -587,7 +617,7 @@ select:focus {
 
 .settings-body {
     display: grid;
-    gap: 10px;
+    gap: 8px;
 }
 
 .switch-label {
@@ -615,34 +645,58 @@ select:focus {
 
 .share-panel {
     display: grid;
-    gap: 10px;
-    padding: 10px;
+    gap: 8px;
+    padding: 8px;
     border: 1px solid #c8d8ee;
     border-radius: 8px;
     background: #f8fbff;
 }
 
+.settings-body .home-install-button {
+    min-height: 50px;
+    gap: 10px;
+    padding: 6px 12px;
+    box-shadow: 4px 4px 0 var(--navy-900);
+}
+
+.settings-body .home-install-icon,
+.settings-body .home-install-button > span[aria-hidden="true"] {
+    width: 32px;
+    height: 32px;
+    font-size: 0.98rem;
+}
+
+.settings-body .home-install-copy strong {
+    font-size: 0.9rem;
+}
+
+.settings-body .home-install-copy small {
+    font-size: 0.68rem;
+}
+
 .share-toggle {
-    min-height: 48px;
+    min-height: 42px;
     display: grid;
     gap: 3px;
     width: 100%;
-    border: 0;
+    border: 2px solid var(--ink);
     border-radius: 8px;
-    padding: 8px 10px;
+    padding: 7px 10px;
     color: var(--ink);
-    background: var(--navy-900);
+    background: #101419;
+    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.16);
     text-align: left;
 }
 
 .share-toggle span {
-    font-size: 0.92rem;
+    font-size: 0.78rem;
     font-weight: 950;
+    text-transform: uppercase;
 }
 
 .share-toggle strong {
     color: #cfe0f2;
-    font-size: 0.72rem;
+    font-size: 0.82rem;
     font-weight: 800;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -672,48 +726,90 @@ select:focus {
 }
 
 .tankprofi-stats-panel {
+    gap: 8px;
     background: var(--white);
+}
+
+.tankprofi-stats-panel > strong {
+    font-size: 1rem;
+    line-height: 1.1;
 }
 
 .stats-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 8px;
-    color: var(--gray-700);
-    font-weight: 850;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
 }
 
-.stats-grid b {
+.stat-item {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 46px;
+    padding: 7px 9px;
+    border: 2px solid #dbe7f5;
+    border-radius: 8px;
+    background: #f2f7ff;
+}
+
+.stat-item span,
+.stat-item b {
+    min-width: 0;
+}
+
+.stat-item span {
+    color: var(--gray-700);
+    font-size: 0.74rem;
+    font-weight: 950;
+    text-transform: uppercase;
+    overflow-wrap: anywhere;
+}
+
+.stat-item b {
+    flex: 0 0 auto;
     color: var(--blue-700);
-    font-size: 1.15rem;
+    font-size: 1.05rem;
+    font-weight: 950;
+    line-height: 1;
 }
 
 .tankprofi-stats-panel > span {
     color: var(--gray-600);
-    font-size: 0.82rem;
+    font-size: 0.78rem;
     font-weight: 800;
 }
 
 .stats-update-panel {
     display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 7px;
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 2px solid var(--gray-200);
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--gray-200);
 }
 
 .stats-update-panel strong {
+    grid-column: 1 / -1;
     color: var(--ink);
-    font-size: 0.9rem;
+    font-size: 0.86rem;
     font-weight: 950;
 }
 
 .stats-update-panel span {
+    grid-column: 1 / -1;
     color: var(--gray-700);
     font-size: 0.76rem;
     font-weight: 850;
     line-height: 1.25;
+}
+
+.stats-update-panel .text-button {
+    min-height: 40px;
+    padding: 7px 8px;
+    font-size: 0.84rem;
+    line-height: 1.05;
 }
 
 .share-copy {
@@ -762,10 +858,40 @@ select:focus {
     flex: 0 0 auto;
     gap: 6px;
     min-height: 0;
+    min-width: 0;
+    max-width: 100%;
     text-align: left;
     padding: 7px 10px 8px;
     border-bottom: 1px solid var(--gray-200);
     background: var(--white);
+}
+
+.section-tone-autobahn .result-summary {
+    color: var(--white);
+    border-bottom-color: #0b2e78;
+    background: linear-gradient(180deg, #1f63c9 0%, #123f92 100%);
+}
+
+.section-tone-autobahn #resultCount {
+    color: var(--white);
+}
+
+.section-tone-autobahn #resultMeta {
+    color: #dbe9ff;
+}
+
+.section-tone-city .result-summary {
+    color: var(--ink);
+    border-bottom-color: #e9b900;
+    background: linear-gradient(180deg, #fff8cf 0%, #ffef8a 100%);
+}
+
+.section-tone-city #resultCount {
+    color: var(--ink);
+}
+
+.section-tone-city #resultMeta {
+    color: var(--gray-700);
 }
 
 .result-info {
@@ -785,6 +911,14 @@ select:focus {
     display: grid;
     grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.35fr);
     gap: 6px;
+}
+
+.detail-open .result-summary {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.detail-open .quick-actions {
+    display: none;
 }
 
 .quick-actions .location-button,
@@ -808,6 +942,19 @@ select:focus {
     justify-content: center;
     gap: 4px;
     font-size: 0.68rem;
+}
+
+.favorites-mode .quick-actions {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.favorites-mode .quick-actions .location-button {
+    display: none;
+}
+
+.favorites-mode .quick-actions .sort-toggle-button {
+    font-size: 0.74rem;
+    white-space: nowrap;
 }
 
 .sort-toggle {
@@ -1075,38 +1222,6 @@ select:focus {
 .city-fuel-tabs button strong {
     font-size: 1rem;
     white-space: nowrap;
-}
-
-.autobahn-filter {
-    display: grid;
-    gap: 0;
-    color: var(--gray-700);
-    font-size: 0.7rem;
-    font-weight: 900;
-}
-
-.autobahn-filter select {
-    width: 100%;
-    min-height: 54px;
-    border: 2px solid var(--ink);
-    border-radius: 8px;
-    padding: 0 14px;
-    color: var(--ink);
-    background: var(--cream-100);
-    font-size: 1rem;
-    font-weight: 950;
-}
-
-.autobahn-compact-toolbar {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    align-items: stretch;
-    gap: 8px;
-    padding: 8px;
-    border: 2px solid var(--ink);
-    border-radius: 8px;
-    background: var(--cream-100);
-    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.14);
 }
 
 .autobahn-tab-button {
@@ -1441,59 +1556,43 @@ button.city-row:focus {
     min-width: 0;
 }
 
+.autobahn-filter {
+    display: grid;
+    gap: 0;
+    color: var(--white);
+    font-size: 0.7rem;
+    font-weight: 900;
+}
+
+.autobahn-filter select {
+    width: 100%;
+    min-height: 46px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    padding: 0 14px;
+    color: var(--white);
+    background: #143f9e;
+    font-size: 1rem;
+    font-weight: 950;
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.14);
+}
+
+.autobahn-compact-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 8px;
+    padding: 8px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    background: #1f4fbf;
+    box-shadow: 4px 4px 0 rgba(16, 20, 25, 0.18);
+}
+
 .autobahn-group {
     display: grid;
     gap: 7px;
     min-width: 0;
-}
-
-.autobahn-group h2 {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin: 0;
-    padding: 8px 10px;
-    border: 2px solid var(--ink);
-    border-radius: 8px;
-    color: var(--white);
-    background: var(--blue-600);
-    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.14);
-    font-size: 0.95rem;
-    line-height: 1.1;
-}
-
-.autobahn-group h2 span {
-    min-width: 28px;
-    padding: 3px 7px;
-    border: 2px solid var(--white);
-    border-radius: 999px;
-    color: var(--white);
-    background: rgba(255, 255, 255, 0.14);
-    text-align: center;
-    font-size: 0.76rem;
-}
-
-.autobahn-group-select {
-    width: 100%;
-    min-height: 38px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    border: 0;
-    color: inherit;
-    background: transparent;
-    font: inherit;
-    font-weight: 950;
-    text-align: left;
-}
-
-.autobahn-group-select span {
-    flex: 0 0 auto;
 }
 
 .autobahn-row {
@@ -1594,15 +1693,21 @@ button.city-row:focus {
 
 .driving-dashboard {
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    align-content: start;
+    grid-auto-rows: max-content;
     gap: 10px;
     height: 100%;
     min-width: 0;
-    overflow: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
+    scrollbar-width: thin;
 }
 
 .driving-header,
 .driving-hint,
+.driving-destination-form,
+.driving-destination-toggle,
 .driving-actions {
     display: grid;
     gap: 5px;
@@ -1611,6 +1716,134 @@ button.city-row:focus {
     border-radius: 8px;
     background: var(--cream-100);
     box-shadow: 4px 4px 0 rgba(16, 20, 25, 0.14);
+}
+
+.driving-map-action {
+    display: grid;
+    justify-items: end;
+}
+
+.driving-destination-toggle {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px 10px;
+    color: var(--ink);
+    text-align: left;
+    background: var(--white);
+}
+
+.driving-destination-toggle span {
+    color: var(--gray-700);
+    font-size: 0.76rem;
+    font-weight: 950;
+    text-transform: uppercase;
+}
+
+.driving-destination-toggle .driving-destination-buttons {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    color: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    text-transform: none;
+}
+
+.driving-destination-toggle strong {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--blue-600);
+    font-size: 0.94rem;
+    font-weight: 950;
+    text-overflow: ellipsis;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.driving-destination-toggle button {
+    min-height: 38px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    padding: 0 12px;
+    color: var(--ink);
+    background: var(--blue-100);
+    box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.16);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 950;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.driving-destination-form {
+    grid-template-columns: minmax(0, 1fr) 64px;
+    align-items: center;
+    gap: 8px;
+    background: var(--white);
+}
+
+.driving-destination-form label {
+    min-width: 0;
+    display: grid;
+    gap: 0;
+}
+
+.driving-destination-form span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+.driving-destination-form input {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    height: 42px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    padding: 0 10px;
+    color: var(--ink);
+    background: var(--cream-100);
+    font: inherit;
+    font-size: 16px;
+    font-weight: 850;
+}
+
+.driving-destination-action {
+    width: 64px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    color: var(--ink);
+    background: var(--cream-100);
+    box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.16);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 950;
+    cursor: pointer;
+}
+
+.driving-destination-form small {
+    grid-column: 1 / -1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--gray-700);
+    font-size: 0.72rem;
+    font-weight: 850;
+    text-overflow: ellipsis;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
 }
 
 .driving-dashboard .driving-actions,
@@ -1624,6 +1857,27 @@ button.city-row:focus {
     align-items: center;
 }
 
+.driving-header-actions {
+    grid-template-columns: 1fr;
+    justify-items: end;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    box-shadow: none;
+}
+
+.driving-hint {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+}
+
+.driving-hint strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .driving-header > strong,
 .driving-header > span,
 .driving-header > small {
@@ -1634,6 +1888,32 @@ button.city-row:focus {
     min-width: 0;
     display: grid;
     gap: 2px;
+}
+
+.driving-header-main span,
+.driving-header-main small,
+.driving-route-template small {
+    display: -webkit-box;
+    min-width: 0;
+    overflow: hidden;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.driving-header-map {
+    align-self: center;
+    min-width: 76px;
+    min-height: 38px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    color: var(--ink);
+    background: var(--blue-100);
+    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.16);
+    font: inherit;
+    font-size: 0.84rem;
+    font-weight: 950;
+    cursor: pointer;
 }
 
 .driving-header-stop {
@@ -1879,26 +2159,24 @@ button.city-row:focus {
 
 .driving-card {
     min-height: 0;
-    grid-template-columns: 34px minmax(0, 1fr) 82px;
+    grid-template-columns: 78px minmax(58px, 1fr) 112px;
     grid-template-areas:
-        "rank main distance"
+        "main direction distance"
         "meta meta meta"
-        "prices prices prices"
-        "status status status";
+        "prices prices prices";
     align-items: start;
     gap: 9px 10px;
     padding: 12px 14px 10px;
+    cursor: pointer;
 }
 
 .driving-dashboard > .city-station-list {
     min-height: 0;
     display: grid;
-    grid-auto-rows: minmax(168px, auto);
+    grid-auto-rows: auto;
     gap: 10px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding-right: 4px;
-    scrollbar-width: thin;
+    overflow: visible;
+    padding-right: 0;
 }
 
 .driving-dashboard > .city-station-list .empty-state {
@@ -1906,8 +2184,56 @@ button.city-row:focus {
 }
 
 .driving-dashboard > .city-station-list .driving-card {
-    min-height: 168px;
-    overflow: hidden;
+    min-height: 158px;
+    overflow: visible;
+}
+
+.driving-dashboard > .city-station-list .driving-card:nth-child(odd) {
+    background: #eef6ff;
+}
+
+.driving-dashboard > .city-station-list .driving-card:nth-child(even) {
+    background: #fff8d8;
+}
+
+.driving-route-template {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 6px 10px;
+    padding: 10px 12px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    background: var(--yellow-100);
+    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.12);
+}
+
+.driving-route-template span,
+.driving-route-template small {
+    font-weight: 900;
+}
+
+.driving-route-template span {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+}
+
+.driving-route-template select {
+    min-width: 0;
+    width: 100%;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: var(--ink);
+    background: var(--white);
+    font: inherit;
+    font-weight: 950;
+}
+
+.driving-route-template small {
+    grid-column: 1 / -1;
+    color: var(--gray-700);
+    font-size: 0.72rem;
 }
 
 .driving-row .rank {
@@ -1915,9 +2241,9 @@ button.city-row:focus {
 }
 
 .driving-row .brand-logo {
-    width: 34px;
-    height: 34px;
-    font-size: 0.58rem;
+    width: 68px;
+    height: 68px;
+    font-size: 0.78rem;
 }
 
 .driving-main {
@@ -1930,7 +2256,7 @@ button.city-row:focus {
 .driving-titleline {
     min-width: 0;
     display: grid;
-    grid-template-columns: 38px minmax(0, 1fr);
+    grid-template-columns: 72px;
     align-items: center;
     gap: 9px;
 }
@@ -1990,13 +2316,42 @@ button.city-row:focus {
     grid-area: distance;
     color: var(--blue-600);
     font-weight: 950;
-    text-align: right;
+    text-align: center;
 }
 
 .driving-distance {
     display: grid;
-    justify-items: end;
-    gap: 1px;
+    justify-items: center;
+    gap: 3px;
+}
+
+.driving-direction-arrow {
+    width: 46px;
+    height: 46px;
+    display: grid;
+    place-items: center;
+    border: 2px solid var(--ink);
+    border-radius: 50%;
+    color: var(--ink);
+    background: var(--green-100);
+    box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.18);
+    font-size: 1.55rem;
+    font-weight: 950;
+    line-height: 1;
+    transform: rotate(var(--direction-angle, 0deg));
+    margin-right: 0;
+}
+
+.driving-direction-arrow.unknown {
+    color: var(--gray-700);
+    background: var(--gray-100);
+    font-size: 1.35rem;
+    transform: none;
+}
+
+.driving-direction-arrow.preview {
+    color: var(--white);
+    background: var(--blue-600);
 }
 
 .driving-distance strong {
@@ -2021,13 +2376,24 @@ button.city-row:focus {
     align-self: center;
 }
 
+.driving-card .rank {
+    display: none;
+}
+
 .driving-card .driving-main {
     display: contents;
 }
 
 .driving-card .driving-titleline {
     grid-area: main;
-    grid-template-columns: 38px minmax(0, 1fr);
+    grid-template-columns: 72px;
+    align-self: center;
+}
+
+.driving-card .driving-direction {
+    grid-area: direction;
+    display: grid;
+    place-items: center;
     align-self: center;
 }
 
@@ -2059,6 +2425,7 @@ button.city-row:focus {
 
 .driving-card .driving-distance {
     align-self: center;
+    justify-self: end;
 }
 
 .driving-card .driving-price-grid span {
@@ -2069,10 +2436,6 @@ button.city-row:focus {
 
 .driving-card .driving-price-grid strong {
     font-size: 1.12rem;
-}
-
-.driving-card .driving-status {
-    font-size: 0.78rem;
 }
 
 .user-location-marker {
@@ -2150,16 +2513,29 @@ button.city-row:focus {
 
 .favorite-item {
     display: grid;
-    grid-template-columns: 28px minmax(0, 1fr) 38px 58px 34px;
+    grid-template-columns: 48px minmax(0, 1fr) auto 38px;
     align-items: center;
-    gap: 6px;
-    min-height: 62px;
-    padding: 9px 10px;
+    gap: 8px;
+    min-height: 72px;
+    padding: 10px;
     border: 1px solid var(--gray-200);
     border-radius: 8px;
     background: #f8fbff;
     text-align: left;
     box-shadow: 0 6px 16px rgba(7, 23, 43, 0.05);
+}
+
+.favorite-item > .rank {
+    display: none;
+}
+
+.favorite-item > .brand-logo {
+    order: 1;
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    min-height: 48px;
+    font-size: 0.62rem;
 }
 
 .favorite-item.selected {
@@ -2169,6 +2545,7 @@ button.city-row:focus {
 }
 
 .favorite-open {
+    order: 2;
     min-width: 0;
     overflow: hidden;
     border: 0;
@@ -2200,6 +2577,7 @@ button.city-row:focus {
 }
 
 .favorite-price {
+    order: 3;
     color: var(--green-500);
     font-size: 1rem;
     font-weight: 950;
@@ -2208,12 +2586,14 @@ button.city-row:focus {
 }
 
 .favorite-remove {
-    width: 34px;
-    height: 34px;
-    border: 0;
+    order: 4;
+    width: 38px;
+    height: 38px;
+    border: 2px solid transparent;
     border-radius: 8px;
     color: var(--gray-700);
     background: var(--white);
+    font-size: 1.05rem;
     font-weight: 900;
 }
 
@@ -2372,9 +2752,13 @@ button.city-row:focus {
     gap: 8px;
     padding: 8px;
     overflow: auto;
+    overflow-x: hidden;
     overscroll-behavior: contain;
+    scrollbar-gutter: stable;
     flex: 1 1 auto;
     min-height: 0;
+    min-width: 0;
+    max-width: 100%;
     align-content: start;
 }
 
@@ -2466,10 +2850,35 @@ button.city-row:focus {
 .brand-logo.hem { background: #0b4ea2; color: #ffd200; }
 .brand-logo.total { background: #e30613; }
 .brand-logo.avia { background: #e30613; }
+.brand-logo.avex { background: #00884b; }
 .brand-logo.star { background: #0069b4; }
 .brand-logo.bft { background: #009ee3; }
+.brand-logo.honsel { background: #e23814; color: #ffffff; }
+.brand-logo.raiffeisen { background: #5bb80f; color: #ffffff; }
 .brand-logo.agip { background: #ffd200; color: #111111; }
 .brand-logo.score { background: #4c148c; }
+
+.brand-logo.image-logo {
+    overflow: hidden;
+    padding: 0;
+    background: var(--white);
+}
+
+.brand-logo.image-logo img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+}
+
+.brand-logo.shell.image-logo {
+    background: #ffffff;
+    border-color: #d71920;
+}
+
+.brand-logo.shell.image-logo img {
+    padding: 2px;
+}
 
 .station-topline {
     display: block;
@@ -2614,34 +3023,35 @@ button.city-row:focus {
     display: grid;
     place-items: center;
     padding: 0;
-    width: 58px;
-    min-height: 48px;
+    width: 52px;
+    min-height: 44px;
     justify-self: end;
     font-size: 0;
     line-height: 1;
-    border-width: 3px;
-    background: var(--red-100);
-    box-shadow: 4px 4px 0 var(--red-500);
+    border-width: 2px;
+    border-radius: 10px;
+    background: #fff6e6;
+    box-shadow: 3px 3px 0 rgba(226, 61, 53, 0.72);
 }
 
 .detail-close::before {
-    content: "X";
+    content: "×";
     color: var(--ink);
-    font-size: 1.65rem;
+    font-size: 1.75rem;
     font-weight: 950;
-    line-height: 1;
+    line-height: 0.9;
 }
 
 .detail-close:hover,
 .detail-close:focus-visible {
-    background: var(--red-500);
+    background: #ffe4df;
     outline: 3px solid var(--yellow-300);
     outline-offset: 2px;
 }
 
 .detail-close:hover::before,
 .detail-close:focus-visible::before {
-    color: var(--white);
+    color: var(--red-500);
 }
 
 .detail-panel h2 {
@@ -2659,7 +3069,7 @@ button.city-row:focus {
 
 .detail-header {
     display: grid;
-    grid-template-columns: 46px 1fr;
+    grid-template-columns: 72px minmax(0, 1fr) auto;
     align-items: center;
     gap: 10px;
     margin: 0 -2px;
@@ -2668,10 +3078,14 @@ button.city-row:focus {
     background: #f0f6ff;
 }
 
+.detail-titleblock {
+    min-width: 0;
+}
+
 .detail-header .brand-logo {
-    width: 46px;
-    height: 46px;
-    font-size: 0.68rem;
+    width: 72px;
+    height: 72px;
+    font-size: 0.82rem;
 }
 
 .detail-price {
@@ -2732,8 +3146,7 @@ button.city-row:focus {
     margin-top: 10px;
 }
 
-.detail-grid > .detail-cell:first-child,
-.detail-grid > .detail-cell:last-child {
+.detail-cell-inline {
     min-height: 0;
     display: flex;
     align-items: baseline;
@@ -2741,24 +3154,14 @@ button.city-row:focus {
     gap: 8px;
 }
 
-.detail-grid > .detail-cell:first-child {
-    grid-column: 1;
-    grid-row: 1;
-}
-
-.detail-grid > .detail-cell:last-child {
-    grid-column: 2;
-    grid-row: 1;
-}
-
-.detail-grid > .detail-cell:nth-child(3) {
+.detail-updated-cell.full,
+.detail-address-cell,
+.detail-status-cell {
     grid-column: 1 / -1;
-    grid-row: 2;
+}
+
+.detail-address-cell {
     min-height: 0;
-}
-
-.detail-grid > .detail-cell:nth-child(2) {
-    grid-column: 1 / -1;
 }
 
 .detail-cell {
@@ -2785,19 +3188,17 @@ button.city-row:focus {
     overflow-wrap: anywhere;
 }
 
-.detail-grid > .detail-cell:first-child .detail-value,
-.detail-grid > .detail-cell:last-child .detail-value {
+.detail-cell-inline .detail-value {
     margin-top: 0;
     white-space: nowrap;
 }
 
-.detail-grid > .detail-cell:nth-child(3) .detail-value {
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding-bottom: 2px;
-    white-space: nowrap;
-    overflow-wrap: normal;
-    scrollbar-width: thin;
+.detail-address-cell .detail-value {
+    overflow: visible;
+    padding-bottom: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.22;
 }
 
 .detail-highway {
@@ -2812,6 +3213,8 @@ button.city-row:focus {
     background: var(--blue-600);
     box-shadow: 0 0 0 2px var(--blue-600);
     letter-spacing: 0;
+    justify-self: end;
+    white-space: nowrap;
 }
 
 .detail-footer-nav {
@@ -2833,15 +3236,18 @@ button.city-row:focus {
 .navigation-picker summary {
     min-height: 38px;
     margin: 0;
-    border: 0;
+    border: 2px solid var(--ink);
     border-radius: 8px;
+    color: var(--ink);
+    background: var(--cream-100);
+    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.18);
     font-weight: 900;
     font-size: 0.82rem;
 }
 
 .detail-footer-nav button {
-    color: var(--navy-900);
-    background: #eaf1f9;
+    color: var(--ink);
+    background: var(--cream-100);
 }
 
 .navigation-picker {
@@ -2854,7 +3260,7 @@ button.city-row:focus {
     place-items: center;
     height: 100%;
     color: var(--ink);
-    background: var(--yellow-300);
+    background: var(--cream-100);
     cursor: pointer;
     list-style: none;
 }
@@ -2891,7 +3297,7 @@ button.city-row:focus {
 
 .detail-footer-nav button.active {
     color: var(--ink);
-    background: var(--blue-600);
+    background: var(--yellow-300);
 }
 
 .detail-footer-nav .nav-link {
@@ -2905,6 +3311,27 @@ button.city-row:focus {
 .view-map .results,
 .view-map .station-detail {
     display: none;
+}
+
+.driving-mode.view-map.detail-open .station-detail.visible {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    z-index: 650;
+    display: block;
+    max-height: min(72vh, 620px);
+    padding: 0;
+    border: 3px solid var(--ink);
+    border-radius: 8px;
+    background: #eaf3ff;
+    box-shadow: 0 18px 42px rgba(7, 23, 43, 0.28);
+}
+
+.driving-mode.view-map.detail-open .station-detail .detail-panel {
+    border: 0;
+    border-radius: 5px;
+    box-shadow: none;
 }
 
 .view-list .map-pane {
@@ -2957,6 +3384,50 @@ button.city-row:focus {
 .popup-meta {
     margin: 3px 0;
     color: var(--gray-700);
+}
+
+.popup-meta.strong {
+    color: var(--ink);
+    font-weight: 900;
+}
+
+.popup-card {
+    min-width: 220px;
+    max-width: 280px;
+}
+
+.popup-price-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+    margin: 8px 0;
+}
+
+.popup-price-grid span {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    padding: 6px;
+    border: 2px solid var(--gray-200);
+    border-radius: 7px;
+    background: #f8fbff;
+    font-weight: 900;
+}
+
+.popup-price-grid span.selected {
+    border-color: var(--ink);
+    background: var(--yellow-100);
+}
+
+.popup-price-grid small {
+    color: var(--gray-700);
+    font-size: 0.66rem;
+}
+
+.popup-price-grid strong {
+    color: inherit;
+    font-size: 0.85rem;
+    white-space: nowrap;
 }
 
 .popup-price {
@@ -3155,13 +3626,6 @@ button.city-row:focus {
         font-size: 0.66rem;
     }
 
-    .autobahn-compact-toolbar {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 6px;
-        padding: 7px;
-    }
-
-    .autobahn-filter select,
     .autobahn-tab-button {
         min-height: 48px;
         font-size: 0.9rem;
@@ -3184,6 +3648,56 @@ button.city-row:focus {
 }
 
 @media (max-width: 420px) {
+    .driving-destination-toggle {
+        grid-template-columns: 1fr auto;
+    }
+
+    .driving-destination-toggle span,
+    .driving-destination-toggle strong {
+        grid-column: 1;
+    }
+
+    .driving-destination-toggle button {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        align-self: center;
+        max-width: 132px;
+        padding-left: 8px;
+        padding-right: 8px;
+        white-space: normal;
+    }
+
+    .driving-destination-toggle .driving-destination-buttons {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        align-self: center;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .driving-destination-toggle .driving-destination-buttons button {
+        grid-column: auto;
+        grid-row: auto;
+        max-width: 132px;
+    }
+
+    .driving-destination-form {
+        grid-template-columns: minmax(0, 1fr) 64px;
+    }
+
+    .driving-destination-form label {
+        grid-column: 1;
+    }
+
+    .driving-destination-form small {
+        grid-column: 1 / -1;
+    }
+
+    .driving-destination-action {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
     .brand-bar {
         grid-template-columns: 46px minmax(0, 1fr) 148px;
         gap: 8px;
@@ -3250,18 +3764,25 @@ button.city-row:focus {
     }
 
     .favorite-item {
-        grid-template-columns: 26px minmax(0, 1fr) 34px 54px 32px;
+        grid-template-columns: 44px minmax(0, 1fr) auto 34px;
         gap: 6px;
         padding: 8px;
     }
 
+    .favorite-item > .brand-logo {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+    }
+
     .favorite-price {
-        font-size: 0.95rem;
+        font-size: 0.9rem;
     }
 
     .favorite-remove {
-        width: 32px;
-        height: 32px;
+        width: 34px;
+        height: 34px;
     }
 
     .station-item {
@@ -3313,6 +3834,9 @@ button.city-row:focus {
     min-height: 20px;
     display: none;
     align-items: center;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     justify-content: center;
     margin-left: 0;
     padding: 2px 7px;

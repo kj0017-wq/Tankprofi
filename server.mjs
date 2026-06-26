@@ -52,11 +52,27 @@ function normalizeStation(station, fuel) {
     lat: Number(station.lat || 0),
     lng: Number(station.lng || 0),
     distance: Number(station.dist || 0),
-    is_open: Boolean(station.isOpen),
+    is_open: station.isOpen === true ? true : station.isOpen === false ? false : null,
     fuel_type: fuel,
     price: Number.isFinite(price) ? price : null,
     last_update: new Date().toISOString(),
   };
+}
+
+async function readJsonResponse(response, sourceName) {
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    const preview = text.slice(0, 280).replace(/\s+/g, ' ').trim();
+    const isRateLimit = /rate limit/i.test(preview);
+    const message = isRateLimit
+      ? `${sourceName} Rate-Limit erreicht. Bitte kurz warten und gespeicherte Preise nutzen.`
+      : `${sourceName} liefert keine JSON-Daten. HTTP ${response.status}: ${preview || response.statusText}`;
+    const error = new Error(message);
+    error.status = isRateLimit ? 429 : (response.status >= 400 ? response.status : 502);
+    throw error;
+  }
 }
 
 async function handleGeocode(url, res) {
@@ -78,7 +94,7 @@ async function handleGeocode(url, res) {
       'user-agent': 'Tankprofi/1.0 (local-dev)',
     },
   });
-  const data = await response.json();
+  const data = await readJsonResponse(response, 'Nominatim');
   const items = data.map((item) => ({
     label: String(item.display_name || ''),
     lat: Number(item.lat || 0),
@@ -116,7 +132,7 @@ async function handleSearch(url, res) {
   }).toString();
 
   const response = await fetch(upstream, { headers: { accept: 'application/json' } });
-  const data = await response.json();
+  const data = await readJsonResponse(response, 'Tankerkoenig');
   if (!data.ok) return sendJson(res, { error: data.message || 'Tankerkoenig request failed.' }, 502);
 
   let stations = data.stations.map((station) => normalizeStation(station, fuel)).slice(0, limit);
@@ -130,6 +146,24 @@ async function handleSearch(url, res) {
     updated_at: new Date().toISOString(),
     stations,
   });
+}
+
+async function handleRouteTankpoints(url, res) {
+  const route = String(url.searchParams.get('route') || 'ALL').trim() || 'ALL';
+  const upstream = new URL('https://tankprofi.web.app/api/route/tankpoints.php');
+  upstream.searchParams.set('route', route);
+  const response = await fetch(upstream, { headers: { accept: 'application/json' } });
+  const text = await response.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return sendJson(res, { error: 'Route-Tankpunkte lokal nicht als JSON erreichbar.', tankpoints: [] }, 502);
+  }
+  if (!response.ok || data.error) {
+    return sendJson(res, { error: data.error || 'Route-Tankpunkte konnten nicht geladen werden.', tankpoints: [] }, response.status || 502);
+  }
+  sendJson(res, data);
 }
 
 async function serveStatic(url, res) {
@@ -151,10 +185,12 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://${req.headers.host}`);
     if (url.pathname === '/api/geocode.php') return await handleGeocode(url, res);
     if (url.pathname === '/api/search.php') return await handleSearch(url, res);
+    if (url.pathname === '/api/route/tankpoints.php') return await handleRouteTankpoints(url, res);
     if (url.pathname === '/api/history.php') return sendJson(res, { items: [] });
+    if (url.pathname.startsWith('/api/')) return sendJson(res, { error: `Lokaler API-Endpunkt fehlt: ${url.pathname}` }, 404);
     await serveStatic(url, res);
   } catch (error) {
-    sendJson(res, { error: error.message || 'Server error.' }, 500);
+    sendJson(res, { error: error.message || 'Server error.' }, error.status || 500);
   }
 });
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tankprofi-shell-v113';
+const CACHE_NAME = 'tankprofi-shell-v231';
 const CORE_ASSETS = [
   '/',
   '/index.html',
@@ -7,6 +7,30 @@ const CORE_ASSETS = [
   '/assets/js/firebase-app.js',
   '/assets/img/tankprofi-splash-popart.png',
   '/assets/img/tankprofi-home-icon.png',
+  '/assets/img/star-logo.webp',
+  '/assets/img/shell-logo.webp',
+  '/assets/img/total-logo.webp',
+  '/assets/img/eni-logo.webp',
+  '/assets/img/aral-logo.webp',
+  '/assets/img/avia-logo.webp',
+  '/assets/img/avex-logo.webp',
+  '/assets/img/westphal-logo.webp',
+  '/assets/img/freie-logo.webp',
+  '/assets/img/bp-logo.webp',
+  '/assets/img/bft-logo.webp',
+  '/assets/img/hoyer-logo.webp',
+  '/assets/img/honsel-logo.webp',
+  '/assets/img/raiffeisen-logo.webp',
+  '/assets/img/svg-logo.webp',
+  '/assets/img/q1-logo.webp',
+  '/assets/img/a1-logo.webp',
+  '/assets/img/tamoil-logo.webp',
+  '/assets/img/orlen-logo.webp',
+  '/assets/img/esso-logo.webp',
+  '/assets/img/jet-logo.webp',
+  '/assets/img/bavaria-petrol-logo.webp',
+  '/assets/img/sprint-logo.webp',
+  '/assets/img/hem-logo.webp',
   '/manifest.webmanifest'
 ];
 
