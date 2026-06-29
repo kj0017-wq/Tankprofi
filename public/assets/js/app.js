@@ -2,9 +2,10 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260629-charging-layout-fix';
+const appVersion = '20260629-electric-drive';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
+const ELECTRIC_DRIVE_RADIUS_KM = 25;
 const DRIVE_HIGHWAY_PRICE_MAX_AGE_MS = 15 * 60 * 1000;
 const USAGE_PRICE_MAX_AGE_MS = 30 * 60 * 1000;
 const DRIVE_UPDATE_INTERVAL_MS = 5000;
@@ -157,6 +158,7 @@ const state = {
     activeDataRequests: 0,
     startupLocationPending: false,
     vehicleMode: DEFAULT_VEHICLE_MODE,
+    drivingVehicleMode: DEFAULT_VEHICLE_MODE,
 };
 
 const startupFallbackLocation = {
@@ -2723,9 +2725,10 @@ function setDirectoryMode(active) {
 function updateSectionHeaderTone() {
     const isDriving = state.listMode === 'driving';
     const isRural = isDriving && state.drivingContext === 'rural';
-    const isAutobahn = state.listMode === 'autobahn' || (isDriving && state.drivingContext === 'highway');
-    const isCity = state.listMode === 'cities' || (isDriving && state.drivingContext === 'city');
-    const isCharging = state.listMode === 'charging';
+    const isElectricDrive = isDriving && state.drivingVehicleMode === 'electric';
+    const isAutobahn = state.listMode === 'autobahn' || (isDriving && state.drivingContext === 'highway' && !isElectricDrive);
+    const isCity = state.listMode === 'cities' || (isDriving && state.drivingContext === 'city' && !isElectricDrive);
+    const isCharging = state.listMode === 'charging' || isElectricDrive;
     els.appShell.classList.toggle('section-tone-autobahn', isAutobahn);
     els.appShell.classList.toggle('section-tone-city', isCity && !isAutobahn);
     els.appShell.classList.toggle('section-tone-rural', isRural);
@@ -4939,6 +4942,33 @@ function drivingTankpointRowHtml(station, rank, thresholds) {
 }
 
 function drivingTankpointCardHtml(station, rank, thresholds) {
+    if (station.chargingMode) {
+        const mode = station.acDc || (station.fastCharging ? 'DC' : 'AC');
+        const directionHtml = `<span class="driving-direction">${drivingTankpointDirectionHtml(station, rank)}</span>`;
+        const statusClass = /betrieb/i.test(station.status || '') ? 'live' : 'missing';
+        return `
+            <article class="driving-row driving-card driving-card-charging" tabindex="0" data-driving-station-id="${escapeHtml(station.tankerkoenig_id || station.stationId || station.id)}">
+                <span class="driving-main">
+                    <span class="driving-titleline">
+                        <span class="brand-logo charging-detail-logo">EV</span>
+                        <span class="driving-route-badge">${escapeHtml(mode)}</span>
+                    </span>
+                    <span class="driving-data-status ${statusClass}">${escapeHtml(station.status || 'Status offen')}</span>
+                    <small>${escapeHtml(station.name || station.operatorName || 'Ladepunkt')}</small>
+                    <small>${escapeHtml(chargingAddress(station) || chargingConnectorText(station))}</small>
+                </span>
+                ${directionHtml}
+                <span class="driving-distance">
+                    <strong>${Number(station.distance || 0).toFixed(1).replace('.', ',')}</strong>
+                    <small>km entfernt</small>
+                </span>
+                <span class="driving-selected-price price-rank-green-light">
+                    <small>${escapeHtml(chargingConnectorText(station))}</small>
+                    <strong>${escapeHtml(chargingPowerText(station))}</strong>
+                </span>
+            </article>
+        `;
+    }
     const cls = markerClass(station, thresholds);
     const typeLabel = routeTankpointTypeLabel(station.typ);
     const isCity = isLocalDrivingContext() || isLocalDrivingContext(station.drivingContext);
@@ -5013,6 +5043,7 @@ function drivingPriceStatus(station) {
 }
 
 function drivingRefreshVisualizationHtml(stations = state.stations) {
+    if (state.drivingVehicleMode === 'electric') return '';
     if (isLocalDrivingContext() || !stations.length) return '';
     const counts = stations.reduce((result, station) => {
         const key = drivingPriceStatus(station).key;
@@ -5043,6 +5074,7 @@ function drivingRefreshVisualizationHtml(stations = state.stations) {
 }
 
 function drivingPriceVisualizationHtml(thresholds) {
+    if (state.drivingVehicleMode === 'electric') return '';
     if (!state.stations.length) return '';
     const selectedFuel = els.fuel.value;
     const isCity = isLocalDrivingContext();
@@ -5129,14 +5161,18 @@ function renderDrivingModeList() {
         ? 'Landmodus'
         : state.drivingContext === 'city'
             ? 'Stadtmodus'
-            : `Autobahn ${routeLabel()}`;
+            : state.drivingContext === 'charging'
+                ? 'Elektro Drive'
+                : `Autobahn ${routeLabel()}`;
     const template = drivingRouteTemplate();
     const visibleStations = [...state.stations]
         .sort((a, b) => Number(a.distance || 0) - Number(b.distance || 0));
     const currentPriceCount = isLocalDrivingContext()
         ? visibleStations.length
         : visibleStations.filter((station) => hasCurrentDrivingPrice(station, els.fuel.value, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS)).length;
-    const driveTitle = state.drivingContext === 'rural'
+    const driveTitle = state.drivingVehicleMode === 'electric'
+        ? 'Drive Elektro'
+        : state.drivingContext === 'rural'
         ? 'Drive Land'
         : `Drive ${state.drivingContext === 'city' ? 'Stadt' : routeLabel()}`;
     const mapListButton = state.view === 'map'
@@ -5148,7 +5184,9 @@ function renderDrivingModeList() {
         <span class="drive-speed-chip" aria-label="Geschwindigkeit">${escapeHtml(speed)}</span>
     `;
     updateSectionHeaderTone();
-    const priceMeta = isLocalDrivingContext()
+    const priceMeta = state.drivingVehicleMode === 'electric'
+        ? `${visibleStations.length} Ladeorte`
+        : isLocalDrivingContext()
         ? drivingModePriceStandText(state.stations)
         : `${currentPriceCount}/${visibleStations.length} aktuelle Preise`;
     els.resultMeta.textContent = `${accuracy} · ${axisPosition} · ${priceMeta}`;
@@ -5373,6 +5411,22 @@ async function applyDrivingTestPosition(formData) {
     await updateDrivingMode();
 }
 
+async function updateElectricDrivingMode(position) {
+    state.drivingContext = 'charging';
+    state.drivingDirection = Number.isFinite(visualDrivingBearing()) ? 'Elektro' : null;
+    state.drivingNearestRouteDistanceKm = null;
+    state.drivingCurrentRoutePosition = null;
+    state.drivingLivePriceMessage = '';
+    const stations = await loadElectricDriveStations(position, 20);
+    state.stations = stations;
+    state.drivingStatus = stations.length ? 'ready' : 'empty';
+    state.drivingMessage = stations.length
+        ? `${stations.length} Ladeorte bis ${ELECTRIC_DRIVE_RADIUS_KM} km${Number.isFinite(visualDrivingBearing()) ? ' in Fahrtrichtung' : ''}`
+        : `Keine Ladeorte bis ${ELECTRIC_DRIVE_RADIUS_KM} km gefunden`;
+    if (state.view === 'map') updateDrivingModeMapMarkers();
+    if (!isDrivingDestinationInputActive()) renderDrivingModeList();
+}
+
 async function updateDrivingMode(options = {}) {
     if (!state.drivingActive) return;
     setStatus('Fahrt');
@@ -5391,6 +5445,10 @@ async function updateDrivingMode(options = {}) {
     }
 
     state.selectedLocation = { label: 'Aktuelle Position', lat: position.lat, lng: position.lng };
+    if (state.drivingVehicleMode === 'electric' || state.vehicleMode === 'electric') {
+        await updateElectricDrivingMode(position);
+        return;
+    }
     await loadRouteTankpoints(state.drivingRouteId);
     const route = stabilizedDrivingRoute(detectCurrentRoute(position, state.drivingRouteId), position);
     if (route.projection && state.drivingSamples.length) {
@@ -5653,6 +5711,7 @@ async function startDrivingMode(routeId = 'ALL') {
     requestPortraitOrientationLock();
     state.drivingControlsVisibleUntil = Date.now() + DRIVE_CONTROL_REVEAL_MS;
     state.listMode = 'driving';
+    state.drivingVehicleMode = state.vehicleMode || DEFAULT_VEHICLE_MODE;
     state.drivingRouteId = routeId;
     state.drivingDetectedRouteId = null;
     state.drivingActive = true;
@@ -5695,13 +5754,17 @@ async function startDrivingMode(routeId = 'ALL') {
     state.drivingUpdateTimer = window.setInterval(evaluateDrivingModeList, DRIVE_UPDATE_INTERVAL_MS);
     refreshDrivingCurrentPosition().then(() => evaluateDrivingModeList());
 
-    try {
-        await loadRouteTankpoints(routeId);
+    if (state.drivingVehicleMode === 'electric') {
         evaluateDrivingModeList();
-    } catch (error) {
-        state.drivingStatus = 'error';
-        state.drivingMessage = error.message || 'Autobahn-Tankpunkte konnten nicht geladen werden.';
-        renderDrivingModeList();
+    } else {
+        try {
+            await loadRouteTankpoints(routeId);
+            evaluateDrivingModeList();
+        } catch (error) {
+            state.drivingStatus = 'error';
+            state.drivingMessage = error.message || 'Autobahn-Tankpunkte konnten nicht geladen werden.';
+            renderDrivingModeList();
+        }
     }
 }
 
@@ -5716,6 +5779,7 @@ function stopDrivingMode(restore = true) {
     state.drivingUpdateTimer = null;
     state.drivingUpdateInProgress = false;
     state.drivingActive = false;
+    state.drivingVehicleMode = DEFAULT_VEHICLE_MODE;
     clearDrivingControlsTimer();
     state.drivingControlsVisibleUntil = 0;
     state.drivingSamples = [];
@@ -5770,6 +5834,51 @@ function chargingConnectorText(station) {
 function chargingPowerText(station) {
     const power = Number(station.maxConnectorPowerKw || station.nominalPowerKw || 0);
     return power > 0 ? `${power.toLocaleString('de-DE')} kW` : 'kW offen';
+}
+
+function normalizeChargingStation(station) {
+    const stationId = station.stationId || station.id;
+    return {
+        ...station,
+        stationId,
+        tankerkoenig_id: stationId,
+        chargingMode: true,
+        price: null,
+        is_open: /betrieb/i.test(station.status || ''),
+    };
+}
+
+async function loadElectricDriveStations(position, limit = 20) {
+    if (!position || !Number.isFinite(Number(position.lat)) || !Number.isFinite(Number(position.lng))) return [];
+    const params = new URLSearchParams({
+        lat: String(position.lat),
+        lng: String(position.lng),
+        radius: String(ELECTRIC_DRIVE_RADIUS_KM),
+        limit: String(Math.max(limit * 3, 40)),
+    });
+    const data = await fetchJson(`/api/charging/stations.php?${params.toString()}`, { timeoutMs: 30000 });
+    const bearing = visualDrivingBearing();
+    return (data.stations || [])
+        .map(normalizeChargingStation)
+        .map((station) => {
+            const stationBearing = calculateBearing(position, station);
+            const bearingDelta = Number.isFinite(bearing) && Number.isFinite(stationBearing)
+                ? angularDifference(bearing, stationBearing)
+                : null;
+            return {
+                ...station,
+                drivingContext: 'charging',
+                drivingBearingDelta: bearingDelta,
+                drivingDirectionRelative: bearingDelta,
+            };
+        })
+        .filter((station) => {
+            if (!Number.isFinite(bearing)) return true;
+            if (Number(station.distance || 0) <= 0.35) return true;
+            return station.drivingBearingDelta === null || station.drivingBearingDelta <= 115;
+        })
+        .sort((a, b) => Number(a.distance || 0) - Number(b.distance || 0))
+        .slice(0, limit);
 }
 
 function chargingRowHtml(station, index) {
@@ -5868,13 +5977,7 @@ async function loadChargingStations(requestId = state.navRequestId) {
     try {
         const data = await fetchJson(`/api/charging/stations.php?${params.toString()}`, { timeoutMs: 30000 });
         if (!isCurrentNavigation(requestId, 'charging')) return;
-        state.chargingStations = (data.stations || []).map((station) => ({
-            ...station,
-            chargingMode: true,
-            tankerkoenig_id: station.stationId || station.id,
-            price: null,
-            is_open: /betrieb/i.test(station.status || ''),
-        }));
+        state.chargingStations = (data.stations || []).map(normalizeChargingStation);
         renderChargingList();
     } catch (error) {
         if (!isCurrentNavigation(requestId, 'charging')) return;
