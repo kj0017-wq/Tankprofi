@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260629-electric-search-options';
+const appVersion = '20260629-separated-vehicle-modes';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -2660,13 +2660,40 @@ function prepareNormalSearch(clearLocation = false) {
     updateBottomNav();
 }
 
+function isElectricMode() {
+    return state.vehicleMode === 'electric';
+}
+
+function prepareChargingSearch(clearLocation = false) {
+    if (state.drivingActive) stopDrivingMode(false);
+    state.listMode = 'charging';
+    state.cityMapMode = 'overview';
+    state.selectedCityId = null;
+    state.selectedHighway = 'all';
+    if (clearLocation) state.selectedLocation = null;
+    setCityMode(false);
+    setDirectoryMode(false);
+    renderDetail(null);
+    if (state.view !== 'list') setView('list');
+    updateBottomNav();
+}
+
 function runManualSearch() {
+    if (isElectricMode()) {
+        prepareChargingSearch(true);
+        loadChargingStations(beginNavigation());
+        return;
+    }
     prepareNormalSearch(true);
     loadStations({ force: true });
 }
 
 function runCurrentLocationSearch(options = {}) {
-    prepareNormalSearch(true);
+    if (isElectricMode()) {
+        prepareChargingSearch(true);
+    } else {
+        prepareNormalSearch(true);
+    }
     useCurrentLocation(options);
 }
 
@@ -5961,6 +5988,10 @@ function selectChargingStation(id, pan = false) {
 
 async function loadChargingStations(requestId = state.navRequestId) {
     if (!isCurrentNavigation(requestId, 'charging')) return;
+    if (!state.selectedLocation && els.searchInput?.value?.trim()) {
+        await chooseFirstSuggestion();
+        if (!isCurrentNavigation(requestId, 'charging')) return;
+    }
     const location = state.selectedLocation;
     const params = new URLSearchParams({ limit: String(els.limit?.value || '50') });
     if (location && Number.isFinite(location.lat) && Number.isFinite(location.lng)) {
@@ -6478,6 +6509,8 @@ function setVehicleMode(mode, options = {}) {
     const nextMode = mode === 'electric' ? 'electric' : DEFAULT_VEHICLE_MODE;
     state.vehicleMode = nextMode;
     if (els.vehicleMode) els.vehicleMode.value = nextMode;
+    els.appShell?.classList.toggle('vehicle-electric', nextMode === 'electric');
+    els.appShell?.classList.toggle('vehicle-combustion', nextMode !== 'electric');
     syncVehicleOptionSets();
     if (options.persist !== false) {
         saveUserSettings();
@@ -6493,6 +6526,13 @@ function setVehicleMode(mode, options = {}) {
 function chooseVehicleMode(mode) {
     setVehicleMode(mode);
     if (els.vehicleChoice) els.vehicleChoice.hidden = true;
+    if (isElectricMode() && state.selectedLocation) {
+        prepareChargingSearch(false);
+        loadChargingStations(beginNavigation());
+    } else if (!isElectricMode() && state.listMode === 'charging') {
+        prepareNormalSearch(false);
+        if (state.selectedLocation) loadStations({ force: true });
+    }
 }
 
 function showVehicleChoiceIfNeeded() {
@@ -6901,6 +6941,11 @@ function renderSuggestions(items) {
             els.searchInput.value = item.label;
             saveLastLocation(item);
             els.suggestions.innerHTML = '';
+            if (isElectricMode()) {
+                prepareChargingSearch(false);
+                loadChargingStations(beginNavigation());
+                return;
+            }
             prepareNormalSearch(false);
             loadStations();
         });
@@ -6985,6 +7030,15 @@ async function useCurrentLocation(options = {}) {
         saveLastLocation(state.selectedLocation);
         els.searchInput.value = label;
         els.suggestions.innerHTML = '';
+        if (isElectricMode()) {
+            state.listMode = 'charging';
+            state.cityMapMode = 'overview';
+            state.selectedCityId = null;
+            state.selectedHighway = 'all';
+            renderDetail(null);
+            await loadChargingStations(beginNavigation());
+            return;
+        }
         state.listMode = 'results';
         state.cityMapMode = 'overview';
         state.selectedCityId = null;
@@ -7013,6 +7067,11 @@ function restoreStoredStartState(lastLocation = loadLastLocation()) {
         state.selectedLocation = lastLocation;
         els.searchInput.value = lastLocation.label;
         els.resultMeta.textContent = 'Letzte Adresse wird geladen ...';
+        if (isElectricMode()) {
+            state.listMode = 'charging';
+            loadChargingStations(beginNavigation());
+            return;
+        }
         loadStations();
         return;
     }
@@ -7035,6 +7094,11 @@ function loadStartupFallbackList() {
     state.selectedLocation = { ...startupFallbackLocation };
     els.searchInput.value = state.selectedLocation.label;
     els.resultMeta.textContent = 'Startliste wird geladen ...';
+    if (isElectricMode()) {
+        state.listMode = 'charging';
+        loadChargingStations(beginNavigation());
+        return;
+    }
     loadStations();
 }
 
@@ -7044,7 +7108,12 @@ function restoreStartState() {
         state.selectedLocation = lastLocation;
         els.searchInput.value = lastLocation.label;
         els.resultMeta.textContent = 'Letzter Standort wird geladen ...';
-        loadStations();
+        if (isElectricMode()) {
+            state.listMode = 'charging';
+            loadChargingStations(beginNavigation());
+        } else {
+            loadStations();
+        }
     } else {
         els.resultMeta.textContent = 'Standort wird waehrend des Ladens ermittelt ...';
     }
@@ -7186,6 +7255,15 @@ function bindEvents() {
 
             if (action === 'list') {
                 if (state.drivingActive) stopDrivingMode(false);
+                if (isElectricMode()) {
+                    prepareChargingSearch(false);
+                    if (state.chargingStations.length) {
+                        renderChargingList();
+                    } else {
+                        loadChargingStations(navRequestId);
+                    }
+                    return;
+                }
                 state.listMode = 'results';
                 state.cityMapMode = 'overview';
                 state.selectedCityId = null;
@@ -7271,6 +7349,17 @@ function bindEvents() {
         el.addEventListener('change', () => {
             if (el === els.vehicleMode) {
                 setVehicleMode(els.vehicleMode.value);
+                if (isElectricMode()) {
+                    prepareChargingSearch(false);
+                    state.chargingLoadKey = null;
+                    loadChargingStations(beginNavigation());
+                    return;
+                }
+                if (state.listMode === 'charging') {
+                    prepareNormalSearch(false);
+                    if (state.selectedLocation) loadStations({ force: true });
+                    return;
+                }
             } else {
                 saveUserSettings();
             }
@@ -7308,6 +7397,7 @@ function bindEvents() {
 loadFavorites();
 startSplashScreen();
 restoreUserSettings();
+setVehicleMode(state.vehicleMode, { persist: false, silent: true });
 initInstallPrompt();
 registerServiceWorker();
 setupTopControls();
