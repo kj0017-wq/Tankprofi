@@ -12,7 +12,10 @@ ui-debug.log
 .firebase/
 /var/cache/*.json
 !/var/cache/.gitkeep
+/var/*.csv
+/VBA/*.xlsm
 __pycache__/
 *.pyc
 .DS_Store
 Thumbs.db
+~$*

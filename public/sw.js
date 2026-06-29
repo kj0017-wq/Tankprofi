@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tankprofi-shell-v231';
+const CACHE_NAME = 'tankprofi-shell-v334';
 const CORE_ASSETS = [
   '/',
   '/index.html',
@@ -26,10 +26,22 @@ const CORE_ASSETS = [
   '/assets/img/a1-logo.webp',
   '/assets/img/tamoil-logo.webp',
   '/assets/img/orlen-logo.webp',
+  '/assets/img/oil-logo.webp',
+  '/assets/img/sb-tank-logo.webp',
+  '/assets/img/markant-logo.webp',
+  '/assets/img/access-logo.webp',
+  '/assets/img/v-markt-logo.webp',
+  '/assets/img/elan-logo.webp',
+  '/assets/img/bk-logo.webp',
+  '/assets/img/allguth-logo.webp',
   '/assets/img/esso-logo.webp',
   '/assets/img/jet-logo.webp',
   '/assets/img/bavaria-petrol-logo.webp',
   '/assets/img/sprint-logo.webp',
+  '/assets/img/seitz-martin-logo.webp',
+  '/assets/img/sued-treibstoff-logo.webp',
+  '/assets/img/reitmayr-logo.webp',
+  '/assets/img/baywa-logo.webp',
   '/assets/img/hem-logo.webp',
   '/manifest.webmanifest'
 ];

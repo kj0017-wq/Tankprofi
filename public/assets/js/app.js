@@ -2,26 +2,40 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260626-raiffeisen-logo';
+const appVersion = '20260629-start-vehicle-choice-every-start';
+const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
+const DEFAULT_VEHICLE_MODE = 'combustion';
 const DRIVE_HIGHWAY_PRICE_MAX_AGE_MS = 15 * 60 * 1000;
 const USAGE_PRICE_MAX_AGE_MS = 30 * 60 * 1000;
 const DRIVE_UPDATE_INTERVAL_MS = 5000;
 const NORMAL_SEARCH_REFRESH_MS = 60 * 1000;
 const CITY_DRIVE_PRICE_REFRESH_MS = 60 * 1000;
-const DRIVE_HIGHWAY_LIVE_PRICE_LIMIT = 12;
-const DRIVE_HIGHWAY_LIVE_CLUSTER_LIMIT = 3;
+const DRIVE_HIGHWAY_LIVE_PRICE_LIMIT = 24;
+const DRIVE_HIGHWAY_LIVE_CLUSTER_LIMIT = 5;
 const DRIVE_HIGHWAY_LIVE_CLUSTER_RADIUS_KM = 5;
 const DRIVE_HIGHWAY_LIVE_PRICE_DELAY_MS = 650;
-const DRIVE_HIGHWAY_PRICE_RETRY_MS = 10 * 60 * 1000;
+const DRIVE_HIGHWAY_PRICE_RETRY_MS = 2 * 60 * 1000;
+const DRIVE_ROUTE_DESTINATION_PREVIEW_LIMIT = 500;
 const DRIVE_ROUTE_PREVIEW_CORRIDOR_KM = 8;
-const DRIVE_ROUTE_PREVIEW_BEHIND_KM = 0.25;
+const DRIVE_ROUTE_PREVIEW_BEHIND_KM = 0.5;
 const CITY_DRIVE_BEHIND_KEEP_KM = 0.2;
+const DRIVE_RURAL_MAX_TANKPOINTS = 4;
 const DRIVE_BEARING_MEMORY_MS = 3 * 60 * 1000;
 const DRIVE_ROUTE_ON_ROUTE_MAX_KM = 1.5;
 const DRIVE_ROUTE_STABLE_MAX_KM = 0.8;
 const DRIVE_ROUTE_LEFT_AFTER_MS = 45 * 1000;
+const DRIVE_ROUTE_HOLD_MS = 90 * 1000;
+const DRIVE_ROUTE_HOLD_MAX_KM = 4;
 const DRIVE_POSITION_STALE_MS = 15 * 1000;
 const DRIVE_COMPASS_REFRESH_MS = 30 * 1000;
+const DRIVE_COMPASS_RENDER_FAST_MS = 1200;
+const DRIVE_MAP_FOLLOW_MIN_MS = 350;
+const DRIVE_MAP_MANUAL_PAUSE_MS = 15 * 1000;
+const DRIVE_MAP_INITIAL_ZOOM_DELAY_MS = 5 * 1000;
+const DRIVE_CITY_MAP_RADIUS_KM = 1.5;
+const DRIVE_CONTROL_REVEAL_MS = 10 * 1000;
+const DRIVE_CONTROL_MOVING_KMH = 5;
+const DRIVE_LIST_AUTO_TOP_MS = 10 * 1000;
 const DRIVE_ROUTE_TEMPLATES = [
     { id: 'a9-muenchen', label: 'A9 Richtung Muenchen', routeIds: ['A9'], direction: 'Muenchen' },
     { id: 'a9-berlin', label: 'A9 Richtung Berlin', routeIds: ['A9'], direction: 'Berlin' },
@@ -34,6 +48,17 @@ const state = {
     drivingMarkerLayer: null,
     drivingRouteLayer: null,
     drivingDirectionLayer: null,
+    detailMapZoomTimer: null,
+    drivingMapFocusTimer: null,
+    drivingMapInitialZoomTimer: null,
+    drivingMapFocusKey: null,
+    drivingMapFocusActive: false,
+    drivingMapFollowAt: null,
+    drivingMapUserPanUntil: 0,
+    drivingMapProgrammaticMove: false,
+    drivingControlsVisibleUntil: 0,
+    drivingControlsTimer: null,
+    drivingListAutoTopTimer: null,
     markers: new Map(),
     userLocationMarker: null,
     selectedId: null,
@@ -64,11 +89,17 @@ const state = {
     drivingRouteId: 'ALL',
     drivingRouteTemplateId: 'a9-muenchen',
     drivingRouteSuggestion: null,
+    drivingRouteInfo: null,
+    drivingRouteInfoVisible: false,
     drivingDestinationQuery: '',
     drivingDestination: null,
     drivingDestinationOpen: false,
     drivingDestinationEdited: false,
     drivingDestinationConfirmedOpen: false,
+    drivingDestinationHighwayKey: null,
+    drivingDestinationHighwayReevaluatedAt: null,
+    drivingDestinationReevalInProgress: false,
+    drivingRoutePreviewCache: null,
     drivingRouteGeometry: [],
     drivingRouteLoadKey: null,
     drivingDetectedRouteId: null,
@@ -90,6 +121,9 @@ const state = {
     drivingNearestRouteDistanceKm: null,
     drivingCurrentRoutePosition: null,
     drivingRouteProjection: null,
+    drivingLastHighwayAt: null,
+    drivingLastHighwayRouteId: null,
+    drivingLastHighwayProjection: null,
     drivingRouteStartAxisKm: null,
     drivingRouteDestinationAxisKm: null,
     drivingRouteStartAccessKm: null,
@@ -98,8 +132,13 @@ const state = {
     drivingContext: 'unknown',
     drivingCityLastLoadAt: null,
     drivingCityLastLoadKey: null,
+    drivingRuralLastLoadAt: null,
+    drivingRuralLastLoadKey: null,
+    drivingRuralLastMessage: '',
     drivingLivePriceMessage: '',
     drivingPriceAttemptAt: new Map(),
+    detailImportingIds: new Set(),
+    detailImportAttemptAt: new Map(),
     detailReturnView: null,
     wakeLock: null,
     drivingMessage: 'Fahrmodus starten.',
@@ -109,11 +148,13 @@ const state = {
     normalSearchLastKey: null,
     normalSearchLastLoadedAt: null,
     normalSearchLastMeta: null,
+    normalSearchSnapshotBeforeDrive: null,
     installPrompt: null,
     splashStartedAt: 0,
     splashHidden: false,
     activeDataRequests: 0,
     startupLocationPending: false,
+    vehicleMode: DEFAULT_VEHICLE_MODE,
 };
 
 const startupFallbackLocation = {
@@ -131,6 +172,7 @@ const els = {
     help: document.querySelector('#helpButton'),
     helpSheet: document.querySelector('#helpSheet'),
     helpClose: document.querySelector('#helpCloseButton'),
+    vehicleChoice: document.querySelector('#vehicleChoice'),
     suggestions: document.querySelector('#suggestions'),
     settingsSheet: document.querySelector('#settingsSheet'),
     settingsBackdrop: document.querySelector('#settingsBackdrop'),
@@ -150,7 +192,12 @@ const els = {
     tankprofiRastCount: document.querySelector('#tankprofiRastCount'),
     tankprofiChargingCount: document.querySelector('#tankprofiChargingCount'),
     tankprofiTruckCount: document.querySelector('#tankprofiTruckCount'),
+    tankprofiKoenigSearchCount: document.querySelector('#tankprofiKoenigSearchCount'),
+    tankprofiBerlinKoenigCount: document.querySelector('#tankprofiBerlinKoenigCount'),
+    tankprofiKoenigAuditStats: document.querySelector('#tankprofiKoenigAuditStats'),
+    tankprofiDeviceStats: document.querySelector('#tankprofiDeviceStats'),
     tankprofiStatsStatus: document.querySelector('#tankprofiStatsStatus'),
+    vehicleMode: document.querySelector('#vehicleModeSelect'),
     radius: document.querySelector('#radiusSelect'),
     fuel: document.querySelector('#fuelSelect'),
     limit: document.querySelector('#limitSelect'),
@@ -162,6 +209,7 @@ const els = {
     resultCount: document.querySelector('#resultCount'),
     resultMeta: document.querySelector('#resultMeta'),
     drivingMapBack: document.querySelector('#drivingMapBackButton'),
+    drivingMapSpeed: document.querySelector('#drivingMapSpeed'),
     globalProgress: document.querySelector('#globalProgress'),
     status: document.querySelector('#statusPill'),
     splash: document.querySelector('#splashScreen'),
@@ -171,6 +219,46 @@ const els = {
     bottomNavButtons: document.querySelectorAll('.bottom-nav-button'),
     template: document.querySelector('#stationTemplate'),
 };
+
+function updateViewportHeightVar() {
+    if (!els.appShell?.classList.contains('driving-keyboard-open')) {
+        document.documentElement.style.removeProperty('--app-viewport-height');
+        return;
+    }
+    const viewportHeight = Math.round(window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight || 0);
+    if (viewportHeight > 0) {
+        document.documentElement.style.setProperty('--app-viewport-height', `${viewportHeight}px`);
+    }
+}
+
+function setDrivingKeyboardOpen(open) {
+    els.appShell?.classList.toggle('driving-keyboard-open', Boolean(open));
+    window.setTimeout(updateViewportHeightVar, open ? 0 : 220);
+}
+
+function clearDrivingListAutoTopTimer() {
+    if (!state.drivingListAutoTopTimer) return;
+    clearTimeout(state.drivingListAutoTopTimer);
+    state.drivingListAutoTopTimer = null;
+}
+
+function shouldAutoTopDrivingList() {
+    return state.drivingActive
+        && state.listMode === 'driving'
+        && state.view === 'list'
+        && !els.detail.classList.contains('visible')
+        && !isDrivingDestinationInputActive();
+}
+
+function scheduleDrivingListAutoTop() {
+    clearDrivingListAutoTopTimer();
+    if (!shouldAutoTopDrivingList()) return;
+    state.drivingListAutoTopTimer = window.setTimeout(() => {
+        state.drivingListAutoTopTimer = null;
+        if (!shouldAutoTopDrivingList() || !els.results || els.results.scrollTop <= 4) return;
+        els.results.scrollTo({ top: 0, behavior: 'smooth' });
+    }, DRIVE_LIST_AUTO_TOP_MS);
+}
 
 function setupTopControls() {
     const summary = document.querySelector('.result-summary');
@@ -309,11 +397,30 @@ function initMap() {
     if (state.map) return;
     if (window.L) {
         state.map = L.map('map', { zoomControl: false }).setView([51.1657, 10.4515], 6);
+        state.map.on('dragstart', pauseDrivingMapFollow);
+        state.map.on('zoomstart', () => {
+            if (!state.drivingMapProgrammaticMove) pauseDrivingMapFollow();
+        });
         L.control.zoom({ position: 'bottomright' }).addTo(state.map);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '&copy; OpenStreetMap',
+        const baseLayer = L.tileLayer(`https://api.maptiler.com/maps/streets-v2/256/{z}/{x}/{y}.png?key=${MAPTILER_API_KEY}`, {
+            maxZoom: 20,
+            tileSize: 256,
+            crossOrigin: true,
+            attribution: '&copy; OpenStreetMap contributors &copy; MapTiler',
         }).addTo(state.map);
+        let fallbackInstalled = false;
+        baseLayer.on('tileerror', () => {
+            if (fallbackInstalled || !state.map) return;
+            fallbackInstalled = true;
+            window.setTimeout(() => {
+                if (!state.map || state.map.type === 'fallback') return;
+                state.map.removeLayer(baseLayer);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; OpenStreetMap',
+                }).addTo(state.map);
+            }, 0);
+        });
         state.layer = L.markerClusterGroup
             ? L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 42 }).addTo(state.map)
             : L.layerGroup().addTo(state.map);
@@ -426,7 +533,12 @@ function routePriceStand(tankpoint) {
 
 function selectedFuelPriceStand(station, fuel = els.fuel.value) {
     if (!isValidPriceValue(fuelPriceValue(station, fuel))) return null;
-    return station.prices?.[fuel]?.recordedAt || station.last_update || station.lastUpdated || null;
+    return station.prices?.[fuel]?.recordedAt
+        || autobahnPriceStand(station)
+        || routePriceStand(station)
+        || station.last_update
+        || station.lastUpdated
+        || null;
 }
 
 function validDateMs(value) {
@@ -479,6 +591,51 @@ function autobahnDataStandText(stations = state.stations) {
 function distanceText(station) {
     const distance = Number(station.distance);
     return Number.isFinite(distance) ? `${distance.toFixed(1).replace('.', ',')} km` : '-';
+}
+
+function drivingSpeedText() {
+    return Number.isFinite(state.drivingSpeedKmh)
+        ? `${Math.round(state.drivingSpeedKmh)} km/h`
+        : '0 km/h';
+}
+
+function updateDrivingMapSpeed() {
+    if (!els.drivingMapSpeed) return;
+    els.drivingMapSpeed.textContent = drivingSpeedText();
+}
+
+function isDrivingMoving() {
+    return Number(state.drivingSpeedKmh) >= DRIVE_CONTROL_MOVING_KMH;
+}
+
+function clearDrivingControlsTimer() {
+    if (!state.drivingControlsTimer) return;
+    clearTimeout(state.drivingControlsTimer);
+    state.drivingControlsTimer = null;
+}
+
+function shouldCollapseDrivingControls() {
+    if (!state.drivingActive || state.listMode !== 'driving' || state.view !== 'list') return false;
+    if (state.drivingDestinationOpen || state.drivingRouteInfoVisible) return false;
+    if (isDrivingDestinationInputActive()) return false;
+    return Date.now() > Number(state.drivingControlsVisibleUntil || 0);
+}
+
+function syncDrivingControlsVisibility() {
+    const collapsed = shouldCollapseDrivingControls();
+    els.appShell?.classList.toggle('driving-controls-collapsed', collapsed);
+    clearDrivingControlsTimer();
+    if (!state.drivingActive || state.listMode !== 'driving' || state.view !== 'list') return;
+    const remainingMs = Number(state.drivingControlsVisibleUntil || 0) - Date.now();
+    if (remainingMs > 0) {
+        state.drivingControlsTimer = window.setTimeout(syncDrivingControlsVisibility, remainingMs + 40);
+    }
+}
+
+function revealDrivingControls(durationMs = DRIVE_CONTROL_REVEAL_MS) {
+    if (!state.drivingActive || state.listMode !== 'driving' || state.view !== 'list') return;
+    state.drivingControlsVisibleUntil = Date.now() + durationMs;
+    syncDrivingControlsVisibility();
 }
 
 function address(station) {
@@ -550,15 +707,36 @@ function brandInfo(station) {
         ['bavaria patrol', 'Bavaria', 'bavaria-petrol'],
         ['bavaria', 'Bavaria', 'bavaria-petrol'],
         ['sprint', 'Sprint', 'sprint'],
+        ['seitz martin', 'Seitz Martin', 'seitz-martin'],
+        ['martin tank', 'Seitz Martin', 'seitz-martin'],
+        ['seitz', 'Seitz Martin', 'seitz-martin'],
+        ['süd treibstoff', 'Sued Treibstoff', 'sued-treibstoff'],
+        ['sued treibstoff', 'Sued Treibstoff', 'sued-treibstoff'],
+        ['suedtreibstoff', 'Sued Treibstoff', 'sued-treibstoff'],
+        ['reitmayr ts', 'Reitmayr', 'reitmayr'],
+        ['reitmayr', 'Reitmayr', 'reitmayr'],
+        ['baywa', 'BayWa', 'baywa'],
         ['bp', 'BP', 'bp'],
         ['bft', 'BFT', 'bft'],
         ['hoyer', 'Hoyer', 'hoyer'],
         ['honsel', 'Honsel', 'honsel'],
         ['raiffeisen', 'Raiffeisen', 'raiffeisen'],
+        ['sb tank', 'SB Tank', 'sb-tank'],
+        ['sb-tank', 'SB Tank', 'sb-tank'],
+        ['markant', 'Markant', 'markant'],
+        ['access', 'Access', 'access'],
+        ['accsess', 'Access', 'access'],
+        ['v-markt', 'V-Markt', 'v-markt'],
+        ['v markt', 'V-Markt', 'v-markt'],
+        ['elan', 'ELAN', 'elan'],
+        ['bk', 'BK', 'bk'],
+        ['allguth', 'Allguth', 'allguth'],
         ['svg', 'SVG', 'svg'],
         ['q1', 'Q1', 'q1'],
         ['tamoil', 'Tamoil', 'tamoil'],
         ['orlen', 'Orlen', 'orlen'],
+        ['oil!', 'OIL!', 'oil'],
+        ['oil ', 'OIL!', 'oil'],
         ['agip', 'Agip', 'agip'],
         ['eni', 'Eni', 'agip'],
         ['score', 'Score', 'score'],
@@ -605,13 +783,25 @@ function brandLogoHtml(station) {
         hoyer: 'hoyer-logo.webp',
         honsel: 'honsel-logo.webp',
         raiffeisen: 'raiffeisen-logo.webp',
+        'sb-tank': 'sb-tank-logo.webp',
+        markant: 'markant-logo.webp',
+        access: 'access-logo.webp',
+        'v-markt': 'v-markt-logo.webp',
+        elan: 'elan-logo.webp',
+        bk: 'bk-logo.webp',
+        allguth: 'allguth-logo.webp',
         svg: 'svg-logo.webp',
         q1: 'q1-logo.webp',
         a1: 'a1-logo.webp',
         tamoil: 'tamoil-logo.webp',
         orlen: 'orlen-logo.webp',
+        oil: 'oil-logo.webp',
         'bavaria-petrol': 'bavaria-petrol-logo.webp',
         sprint: 'sprint-logo.webp',
+        'seitz-martin': 'seitz-martin-logo.webp',
+        'sued-treibstoff': 'sued-treibstoff-logo.webp',
+        reitmayr: 'reitmayr-logo.webp',
+        baywa: 'baywa-logo.webp',
     };
     if (imageLogos[brand.className]) {
         return `<span class="brand-logo ${brand.className} image-logo"><img src="assets/img/${imageLogos[brand.className]}?v=${appVersion}" alt="${escapeHtml(brand.label)}"></span>`;
@@ -733,23 +923,59 @@ function sortStations() {
 
 function iconFor(station, thresholds, selected = false) {
     const price = station.price ? String(Math.round(station.price * 100)).slice(-2) : '';
-    const cls = selected ? 'selected' : markerClass(station, thresholds);
+    const cls = selected ? 'selected' : markerClass({
+        price,
+        is_open: station.is_open ?? station.isOpen,
+        priceCategory: station.priceCategory,
+    }, thresholds);
+    const driveStatus = station.drivingMode ? drivingPriceStatus(station).key : '';
+    const statusHtml = driveStatus && driveStatus !== 'current' && driveStatus !== 'live'
+        ? `<i class="marker-data-status ${driveStatus}" aria-hidden="true"></i>`
+        : '';
     return L.divIcon({
         className: '',
-        html: `<span class="price-marker ${cls}">${price}</span>`,
+        html: `<span class="price-marker ${cls}${statusHtml ? ` drive-${driveStatus}` : ''}">${price}${statusHtml}</span>`,
         iconSize: [28, 28],
         iconAnchor: [14, 14],
         popupAnchor: [0, -14],
     });
 }
 
+function driveMapIconFor(station, thresholds, selected = false) {
+    const selectedFuel = els.fuel.value;
+    const price = fuelPriceValue(station, selectedFuel);
+    const priceText = isValidPriceValue(price)
+        ? `${Number(price).toFixed(3).replace('.', ',')} €`
+        : '-';
+    const cls = selected ? 'selected' : markerClass(station, thresholds);
+    const status = drivingPriceStatus(station).key;
+    const statusHtml = status && status !== 'current' && status !== 'live'
+        ? `<i class="marker-data-status ${status}" aria-hidden="true"></i>`
+        : '';
+    return L.divIcon({
+        className: '',
+        html: `<span class="drive-map-price-marker ${cls}"><span class="drive-map-logo">${brandLogoHtml(station)}</span><strong>${escapeHtml(priceText)}</strong>${statusHtml}</span>`,
+        iconSize: [104, 40],
+        iconAnchor: [52, 20],
+        popupAnchor: [0, -22],
+    });
+}
+
+function driveMapThresholdsFor(stations) {
+    const selectedFuel = els.fuel.value;
+    return thresholdsFor(stations.map((station) => ({
+        price: fuelPriceValue(station, selectedFuel),
+        is_open: station.is_open ?? station.isOpen,
+    })));
+}
+
 function userLocationIcon() {
     return L.divIcon({
         className: '',
         html: '<span class="user-location-marker"><i></i></span>',
-        iconSize: [34, 34],
-        iconAnchor: [17, 17],
-        popupAnchor: [0, -17],
+        iconSize: [38, 38],
+        iconAnchor: [19, 19],
+        popupAnchor: [0, -19],
     });
 }
 
@@ -765,6 +991,7 @@ function renderUserLocationMarker() {
 
     if (state.userLocationMarker) {
         state.userLocationMarker.setLatLng([lat, lng]);
+        state.userLocationMarker.setIcon(userLocationIcon());
     } else {
         state.userLocationMarker = L.marker([lat, lng], {
             icon: userLocationIcon(),
@@ -919,6 +1146,7 @@ function formatCompactDateTime(value) {
 }
 
 function setView(view) {
+    const previousView = state.view;
     state.view = view;
     els.appShell.classList.toggle('view-list', view === 'list');
     els.appShell.classList.toggle('view-map', view === 'map');
@@ -927,10 +1155,39 @@ function setView(view) {
     });
     updateBottomNav();
 
+    if (view !== 'map') {
+        clearDetailMapZoomTimer();
+        clearDrivingMapFocusTimer();
+        clearDrivingMapInitialZoomTimer();
+        state.drivingMapFocusKey = null;
+        state.drivingMapFocusActive = false;
+        state.drivingMapFollowAt = null;
+        updateDrivingMapRotation();
+    }
+
     if (view === 'map') {
         ensureMap();
         if (state.map.type !== 'fallback') {
-            state.map.setView([51.1657, 10.4515], state.stations.length ? 7 : 6, { animate: false });
+            if (state.listMode === 'driving') {
+                if (previousView !== 'map') {
+                    const now = Date.now();
+                    state.drivingMapUserPanUntil = now + DRIVE_MAP_INITIAL_ZOOM_DELAY_MS;
+                    state.drivingMapFollowAt = now;
+                    scheduleDrivingMapInitialZoom();
+                }
+                const anchor = drivingMapFallbackPosition(state.drivingSamples[state.drivingSamples.length - 1] || state.selectedLocation);
+                const lat = Number(anchor?.lat);
+                const lng = Number(anchor?.lng);
+                if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                    state.drivingMapProgrammaticMove = true;
+                    state.map.setView([lat, lng], Math.min(state.map.getZoom() || 12, 12), { animate: true });
+                    window.setTimeout(() => {
+                        state.drivingMapProgrammaticMove = false;
+                    }, 0);
+                }
+            } else {
+                state.map.setView([51.1657, 10.4515], state.stations.length ? 7 : 6, { animate: false });
+            }
         }
         setTimeout(() => {
             if (state.listMode === 'cities' && state.cityMapMode === 'overview') {
@@ -941,11 +1198,45 @@ function setView(view) {
             renderMarkers();
             const station = getVisibleStations().find((item) => item.tankerkoenig_id === state.selectedId)
                 || state.stations.find((item) => item.tankerkoenig_id === state.selectedId);
-            if (station && state.map.type !== 'fallback') {
+            if (station && state.listMode !== 'driving' && state.map.type !== 'fallback') {
                 state.map.setView([station.lat, station.lng], Math.max(state.map.getZoom(), 14), { animate: true });
             }
         }, 180);
     }
+}
+
+function clearDetailMapZoomTimer() {
+    if (!state.detailMapZoomTimer) return;
+    clearTimeout(state.detailMapZoomTimer);
+    state.detailMapZoomTimer = null;
+}
+
+function stationMapId(station) {
+    return station?.tankerkoenig_id || station?.stationId || station?.id || '';
+}
+
+function openDetailStationMap(station) {
+    if (!station || !Number.isFinite(Number(station.lat)) || !Number.isFinite(Number(station.lng))) return;
+    const stationId = stationMapId(station);
+    if (stationId) state.selectedId = stationId;
+    clearDetailMapZoomTimer();
+    renderDetail(null);
+    setView('map');
+    window.setTimeout(() => {
+        if (state.view !== 'map' || !state.map || state.map.type === 'fallback') return;
+        refreshMapLayout();
+        if (state.listMode === 'driving') updateDrivingModeMapMarkers();
+        else renderMarkers();
+        state.map.setView([station.lat, station.lng], 12, { animate: true });
+        state.detailMapZoomTimer = window.setTimeout(() => {
+            state.detailMapZoomTimer = null;
+            if (state.view !== 'map' || !state.map || state.map.type === 'fallback') return;
+            if (stationId && state.selectedId !== stationId) return;
+            state.map.setView([station.lat, station.lng], 17, { animate: true });
+            const marker = stationId ? state.markers.get(stationId) : null;
+            marker?.openPopup?.();
+        }, 3000);
+    }, 240);
 }
 
 function renderMarkers() {
@@ -1015,8 +1306,12 @@ function renderMarkers() {
 function renderDrivingMap() {
     if (!state.map) return;
     state.markers.clear();
+    updateDrivingMapSpeed();
+    updateDrivingMapRotation();
+    const userPosition = state.drivingSamples[state.drivingSamples.length - 1] || state.selectedLocation;
+    const stationsToShow = drivingMapStationsToShow(userPosition);
     if (state.map.type === 'fallback') {
-        renderFallbackMap(state.drivingDestination ? state.stations : [], thresholdsFor(state.stations));
+        renderFallbackMap(state.drivingDestination ? stationsToShow : [], thresholdsFor(stationsToShow));
         return;
     }
     if (state.layer) state.layer.clearLayers();
@@ -1024,39 +1319,217 @@ function renderDrivingMap() {
     renderUserLocationMarker();
     renderDrivingRouteOverlay();
 
-    const thresholds = thresholdsFor(state.stations);
-    const showRouteTankpoints = Boolean(state.drivingDestination || state.drivingRouteSuggestion);
-    const stationsToShow = showRouteTankpoints
-        ? state.stations
-        : state.stations.filter((station) => station.tankerkoenig_id === state.selectedId);
-    const userPosition = state.drivingSamples[state.drivingSamples.length - 1] || state.selectedLocation;
+    const thresholds = driveMapThresholdsFor(stationsToShow);
 
     stationsToShow
         .filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lng))
         .forEach((station) => {
             const isSelected = station.tankerkoenig_id === state.selectedId;
             const marker = L.marker([station.lat, station.lng], {
-                icon: iconFor(station, thresholds, isSelected),
+                icon: driveMapIconFor(station, thresholds, isSelected),
             }).bindPopup(popupHtml(station));
             marker.on('click', () => {
                 state.selectedId = station.tankerkoenig_id;
                 state.detailReturnView = 'driving-map';
                 renderDetail(station);
+                importMissingDetailStationData(station, { force: true });
                 marker.openPopup();
             });
             marker.addTo(state.drivingMarkerLayer || state.layer);
             state.markers.set(station.tankerkoenig_id, marker);
         });
 
-    const fitPoints = [
-        ...(state.drivingRouteGeometry || []),
-        ...stationsToShow.map((station) => [station.lat, station.lng]),
-        ...(userPosition ? [[userPosition.lat, userPosition.lng]] : []),
-        ...(state.drivingDestination ? [[state.drivingDestination.lat, state.drivingDestination.lng]] : []),
-    ].filter(([lat, lng]) => Number.isFinite(Number(lat)) && Number.isFinite(Number(lng)));
-    if (fitPoints.length) {
-        state.map.fitBounds(L.latLngBounds(fitPoints).pad(0.2), { maxZoom: 13 });
+    focusDrivingMapByHeading(stationsToShow, userPosition, { force: !state.drivingMapFollowAt });
+}
+
+function drivingMapStationsToShow(position) {
+    const byId = new Map();
+    state.stations
+        .filter((station) => Number.isFinite(Number(station.lat)) && Number.isFinite(Number(station.lng)))
+        .forEach((station) => byId.set(drivingPointId(station), station));
+
+    if (state.drivingDestination && state.drivingRouteSuggestion) {
+        routePreviewStationsForDriving(position, DRIVE_ROUTE_DESTINATION_PREVIEW_LIMIT)
+            .filter((station) => Number.isFinite(Number(station.lat)) && Number.isFinite(Number(station.lng)))
+            .forEach((station) => {
+                const id = drivingPointId(station);
+                if (!byId.has(id)) byId.set(id, station);
+            });
     }
+
+    return [...byId.values()];
+}
+
+function drivingMapFallbackPosition(position) {
+    const lastGpsPosition = state.drivingSamples[state.drivingSamples.length - 1];
+    const candidates = [position, lastGpsPosition, state.selectedLocation, startupFallbackLocation];
+    return candidates.find((candidate) => (
+        candidate
+        && Number.isFinite(Number(candidate.lat))
+        && Number.isFinite(Number(candidate.lng))
+    )) || startupFallbackLocation;
+}
+
+function drivingMapHeading(position) {
+    const motionBearing = visualDrivingBearing();
+    if (Number.isFinite(motionBearing)) return motionBearing;
+    return 0;
+}
+
+function updateDrivingMapRotation() {
+    const mapEl = document.querySelector('#map');
+    if (!mapEl) return;
+    mapEl.style.setProperty('--driving-map-rotation', '0deg');
+}
+
+function pauseDrivingMapFollow() {
+    if (state.listMode !== 'driving' || state.view !== 'map') return;
+    state.drivingMapUserPanUntil = Date.now() + DRIVE_MAP_MANUAL_PAUSE_MS;
+}
+
+function drivingMapBoundsAround(lat, lng, radiusKm) {
+    const latDelta = radiusKm / 111.32;
+    const cosLat = Math.max(0.18, Math.cos((lat * Math.PI) / 180));
+    const lngDelta = radiusKm / (111.32 * cosLat);
+    return L.latLngBounds(
+        [lat - latDelta, lng - lngDelta],
+        [lat + latDelta, lng + lngDelta],
+    );
+}
+
+function focusDrivingMapByHeading(stationsToShow, userPosition, { force = false } = {}) {
+    if (!state.map || state.map.type === 'fallback' || state.listMode !== 'driving' || state.view !== 'map') return;
+    if (els.detail.classList.contains('visible')) return;
+    const now = Date.now();
+    if (!force && now < Number(state.drivingMapUserPanUntil || 0)) return;
+    if (!force && now - Number(state.drivingMapFollowAt || 0) < DRIVE_MAP_FOLLOW_MIN_MS) return;
+    const anchor = drivingMapFallbackPosition(userPosition);
+    const speed = Number(state.drivingSpeedKmh);
+    const lat = Number(anchor.lat);
+    const lng = Number(anchor.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    state.drivingMapFollowAt = now;
+    state.drivingMapProgrammaticMove = true;
+    if (state.drivingContext === 'city') {
+        state.map.fitBounds(drivingMapBoundsAround(lat, lng, DRIVE_CITY_MAP_RADIUS_KM), {
+            animate: false,
+            padding: [18, 18],
+            maxZoom: 15,
+        });
+    } else {
+        const targetZoom = Number.isFinite(speed) && speed > 40 ? 14 : 15;
+        const zoom = Math.max(state.map.getZoom() || targetZoom, targetZoom);
+        state.map.setView([lat, lng], zoom, { animate: false });
+    }
+    window.setTimeout(() => {
+        state.drivingMapProgrammaticMove = false;
+    }, 0);
+    updateDrivingMapRotation();
+}
+
+function clearDrivingMapFocusTimer() {
+    if (state.drivingMapFocusTimer) {
+        clearTimeout(state.drivingMapFocusTimer);
+        state.drivingMapFocusTimer = null;
+    }
+}
+
+function clearDrivingMapInitialZoomTimer() {
+    if (!state.drivingMapInitialZoomTimer) return;
+    clearTimeout(state.drivingMapInitialZoomTimer);
+    state.drivingMapInitialZoomTimer = null;
+}
+
+function scheduleDrivingMapInitialZoom() {
+    clearDrivingMapInitialZoomTimer();
+    state.drivingMapInitialZoomTimer = window.setTimeout(() => {
+        state.drivingMapInitialZoomTimer = null;
+        if (state.listMode !== 'driving' || state.view !== 'map') return;
+        const position = state.drivingSamples[state.drivingSamples.length - 1] || state.selectedLocation;
+        state.drivingMapUserPanUntil = 0;
+        state.drivingMapFollowAt = null;
+        focusDrivingMapByHeading(drivingMapStationsToShow(position), position, { force: true });
+    }, DRIVE_MAP_INITIAL_ZOOM_DELAY_MS);
+}
+
+function drivingMapFocusPointKey(point) {
+    const lat = Number(point?.lat);
+    const lng = Number(point?.lng);
+    return Number.isFinite(lat) && Number.isFinite(lng)
+        ? `${lat.toFixed(4)},${lng.toFixed(4)}`
+        : '';
+}
+
+function drivingMapLocalFocusKey(stations, position) {
+    const firstIds = stations
+        .slice(0, 3)
+        .map((station) => drivingPointId(station))
+        .join(',');
+    return [
+        state.drivingContext,
+        routeLabel(),
+        drivingMapFocusPointKey(position || state.selectedLocation),
+        firstIds,
+    ].join('|');
+}
+
+function scheduleDrivingMapLocalFocus(stationsToShow, userPosition) {
+    if (state.listMode !== 'driving' || state.view !== 'map' || isLocalDrivingContext() || els.detail.classList.contains('visible')) {
+        clearDrivingMapFocusTimer();
+        if (!els.detail.classList.contains('visible')) {
+            state.drivingMapFocusKey = null;
+            state.drivingMapFocusActive = false;
+        }
+        return;
+    }
+    if (!state.map || state.map.type === 'fallback') return;
+    const focusStations = stationsToShow
+        .filter((station) => Number.isFinite(Number(station.lat)) && Number.isFinite(Number(station.lng)))
+        .sort((a, b) => Number(a.distance || 0) - Number(b.distance || 0))
+        .slice(0, 3);
+    const anchor = userPosition || state.selectedLocation;
+    const focusPoints = [
+        ...(anchor ? [[anchor.lat, anchor.lng]] : []),
+        ...focusStations.map((station) => [station.lat, station.lng]),
+    ].filter(([lat, lng]) => Number.isFinite(Number(lat)) && Number.isFinite(Number(lng)));
+    if (!focusPoints.length) return;
+
+    const focusKey = drivingMapLocalFocusKey(focusStations, anchor);
+    if (state.drivingMapFocusKey === focusKey) return;
+    state.drivingMapFocusKey = focusKey;
+    state.drivingMapFocusActive = false;
+    clearDrivingMapFocusTimer();
+    state.drivingMapFocusTimer = setTimeout(() => {
+        state.drivingMapFocusTimer = null;
+        focusDrivingMapToLocalSegment();
+    }, 1200);
+}
+
+function focusDrivingMapToLocalSegment() {
+    if (els.detail.classList.contains('visible')) return;
+    if (state.listMode !== 'driving' || state.view !== 'map' || isLocalDrivingContext()) return;
+    if (!state.map || state.map.type === 'fallback') return;
+    const anchor = state.drivingSamples[state.drivingSamples.length - 1] || state.selectedLocation;
+    const focusStations = state.stations
+        .filter((station) => Number.isFinite(Number(station.lat)) && Number.isFinite(Number(station.lng)))
+        .sort((a, b) => Number(a.distance || 0) - Number(b.distance || 0))
+        .slice(0, 3);
+    const focusPoints = [
+        ...(anchor ? [[anchor.lat, anchor.lng]] : []),
+        ...focusStations.map((station) => [station.lat, station.lng]),
+    ].filter(([lat, lng]) => Number.isFinite(Number(lat)) && Number.isFinite(Number(lng)));
+    if (!focusPoints.length) return;
+    state.drivingMapFocusActive = true;
+    if (focusPoints.length === 1) {
+        state.map.setView(focusPoints[0], 14, { animate: true });
+        return;
+    }
+    const bounds = L.latLngBounds(focusPoints);
+    if (!bounds.isValid()) return;
+    const flyToBounds = typeof state.map.flyToBounds === 'function'
+        ? state.map.flyToBounds.bind(state.map)
+        : state.map.fitBounds.bind(state.map);
+    flyToBounds(bounds.pad(0.14), { maxZoom: 15, animate: true, duration: 0.9 });
 }
 
 function clearDrivingRouteOverlay() {
@@ -1143,7 +1616,7 @@ function renderDrivingRouteOverlay() {
         ...(state.drivingDestination ? [[state.drivingDestination.lat, state.drivingDestination.lng]] : []),
         ...(selectedStation ? [[selectedStation.lat, selectedStation.lng]] : []),
     ].filter(([lat, lng]) => Number.isFinite(Number(lat)) && Number.isFinite(Number(lng)));
-    if (fitPoints.length) {
+    if (fitPoints.length && !state.drivingMapFocusActive) {
         state.map.fitBounds(L.latLngBounds(fitPoints).pad(0.22), { maxZoom: 13 });
     }
 }
@@ -1286,16 +1759,18 @@ function selectStation(id, pan = false, showDetailView = false) {
 
 function stationDetailExtraHtml(station) {
     const priceGrid = stationFuelPriceGridHtml(station);
-    if (!station?.autobahnMode) return priceGrid;
-    const isLoading = state.autobahnPriceLoadingId === station.tankerkoenig_id;
-    const priceStand = autobahnPriceStand(station);
+    const isLoading = state.detailImportingIds.has(detailStationImportId(station))
+        || state.autobahnPriceLoadingId === station.tankerkoenig_id
+        || state.autobahnPriceLoadingId === station.stationId;
+    if (!station?.autobahnMode && !station?.drivingMode) return priceGrid;
+    const priceStand = autobahnPriceStand(station) || routePriceStand(station);
     const match = station.priceMatch
         ? `Zuordnung: ${escapeHtml(station.priceMatch.brand || station.priceMatch.name || 'gespeicherte Tankstelle')} (${Number(station.priceMatch.distanceKm || 0).toFixed(2).replace('.', ',')} km)`
-        : 'Keine gespeicherte Preiszuordnung gefunden';
+        : 'Keine passende Preiszuordnung gefunden';
     return `
-        ${tankRastBadgeHtml(station)}
+        ${station.autobahnMode ? tankRastBadgeHtml(station) : ''}
         ${priceGrid}
-        <p class="detail-note">${isLoading ? 'Live-Preise werden gezielt geladen ...' : priceStand ? `Preisdaten: ${formatDateTime(priceStand)}` : 'Noch keine gespeicherten Preisdaten vorhanden.'}</p>
+        <p class="detail-note">${isLoading ? 'Live-Daten werden gezielt geladen ...' : priceStand ? `Preisdaten: ${formatDateTime(priceStand)}` : 'Noch keine gespeicherten Preisdaten vorhanden.'}</p>
         <p class="detail-note">${match}</p>
     `;
 }
@@ -1403,6 +1878,227 @@ async function refreshDetailStation(station) {
     setStatus('Aktuell');
 }
 
+function detailStationImportId(station) {
+    return String(
+        station?.tankerkoenig_id
+        || station?.stationId
+        || station?.priceStationId
+        || station?.id
+        || `${station?.lat}:${station?.lng}`,
+    );
+}
+
+function detailNeedsImmediateImport(station) {
+    if (!station) return false;
+    const hasPrice = ['diesel', 'e5', 'e10'].some((fuel) => isValidPriceValue(fuelPriceValue(station, fuel)));
+    const hasDetailAddress = Boolean(address(station));
+    const hasStatus = station.is_open === true || station.is_open === false;
+    return !hasPrice || !hasDetailAddress || !hasStatus;
+}
+
+function canRunDetailImport(station, { force = false } = {}) {
+    const id = detailStationImportId(station);
+    if (!id || state.detailImportingIds.has(id)) return false;
+    if (force) return true;
+    const attemptedAt = state.detailImportAttemptAt.get(id);
+    return !attemptedAt || Date.now() - attemptedAt >= 2 * 60 * 1000;
+}
+
+function rememberDetailImportAttempt(station) {
+    const id = detailStationImportId(station);
+    if (id) state.detailImportAttemptAt.set(id, Date.now());
+}
+
+function stationSameIdentity(candidate, station) {
+    if (!candidate || !station) return false;
+    const candidateIds = [
+        candidate.tankerkoenig_id,
+        candidate.stationId,
+        candidate.priceStationId,
+        candidate.tankerkoenigId,
+        candidate.id,
+    ].map(cleanTankerkoenigStationId).filter(Boolean);
+    const stationIds = [
+        station.tankerkoenig_id,
+        station.stationId,
+        station.priceStationId,
+        station.tankerkoenigId,
+        station.id,
+    ].map(cleanTankerkoenigStationId).filter(Boolean);
+    if (candidateIds.some((id) => stationIds.includes(id))) return true;
+    const latA = Number(candidate.lat);
+    const lngA = Number(candidate.lng);
+    const latB = Number(station.lat);
+    const lngB = Number(station.lng);
+    return [latA, lngA, latB, lngB].every(Number.isFinite)
+        && routeDistanceKm(latA, lngA, latB, lngB) <= 0.08;
+}
+
+function cleanTankerkoenigStationId(value) {
+    const id = String(value || '').replace(/^tankkoenig_/i, '').trim();
+    if (!id) return '';
+    if (/^(node|way|relation|osm|addr|station|scan)_/i.test(id)) return '';
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return '';
+    return id;
+}
+
+function tankerkoenigIdFromStation(station) {
+    return cleanTankerkoenigStationId(
+        station?.priceStationId
+        || station?.tankerkoenigId
+        || station?.tankerkoenig_id
+        || station?.externalStationId
+        || station?.stationId
+        || station?.id
+        || '',
+    );
+}
+
+function mergeDetailStationIntoState(original, updated) {
+    if (!updated) return original;
+    const merged = { ...original, ...updated };
+    state.stations = state.stations.map((item) => (
+        stationSameIdentity(item, original) ? { ...item, ...updated } : item
+    ));
+    state.cityStations = state.cityStations.map((item) => (
+        stationSameIdentity(item, original) ? { ...item, ...updated } : item
+    ));
+    state.drivingRouteTankpoints = state.drivingRouteTankpoints.map((item) => (
+        stationSameIdentity(item, original) ? { ...item, ...updated } : item
+    ));
+    state.autobahnStations = state.autobahnStations.map((item) => (
+        stationSameIdentity(item, original) ? { ...item, ...updated } : item
+    ));
+    state.favorites = state.favorites.map((item) => (
+        stationSameIdentity(item, original) ? { ...item, ...updated } : item
+    ));
+    if (state.drivingRoutePreviewCache?.stations?.length) {
+        state.drivingRoutePreviewCache = {
+            ...state.drivingRoutePreviewCache,
+            stations: state.drivingRoutePreviewCache.stations.map((item) => (
+                stationSameIdentity(item, original) ? { ...item, ...updated } : item
+            )),
+        };
+    }
+    saveFavorites();
+    return merged;
+}
+
+function refreshCurrentListAfterDetailUpdate(mergedStation) {
+    if (!mergedStation) return;
+    if (state.selectedId && stationSameIdentity(mergedStation, { tankerkoenig_id: state.selectedId, stationId: state.selectedId, id: state.selectedId })) {
+        state.selectedId = mergedStation.tankerkoenig_id || mergedStation.stationId || mergedStation.id || state.selectedId;
+    }
+
+    if (state.listMode === 'driving') {
+        if (state.view === 'map') updateDrivingModeMapMarkers();
+        renderDrivingModeList();
+    } else {
+        renderResults();
+        renderMarkers();
+    }
+
+    if (state.view === 'map') {
+        if (state.listMode === 'driving') updateDrivingModeMapMarkers();
+        else renderMarkers();
+    }
+}
+
+async function loadLiveDetailForStation(station) {
+    const lat = Number(station?.lat);
+    const lng = Number(station?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return station;
+    const stationId = drivingStationRefreshId(station);
+    if (stationId) {
+        const params = new URLSearchParams({
+            stationId,
+            prices: '1',
+            refresh: '1',
+        });
+        const data = await fetchJson(`/api/autobahn/stations.php?${params.toString()}`, { timeoutMs: 22000, progress: false });
+        const updated = (data.stations || [])
+            .map(normalizeAutobahnStation)
+            .find((item) => stationSameIdentity(item, station) || item.tankerkoenig_id === stationId);
+        if (updated && (updated.priceMatch || hasAnyFuelPrice(updated) || address(updated))) {
+            return {
+                ...station,
+                ...updated,
+                drivingMode: station.drivingMode,
+                drivingContext: station.drivingContext,
+                distance: station.distance,
+                tankerkoenig_id: station.tankerkoenig_id || updated.tankerkoenig_id,
+                stationId: station.stationId || updated.stationId || updated.tankerkoenig_id,
+                price: fuelPriceValue(updated, els.fuel.value),
+                last_update: autobahnPriceStand(updated) || updated.last_update || station.last_update,
+            };
+        }
+    }
+    const params = new URLSearchParams({
+        lat: String(lat),
+        lng: String(lng),
+        radius: '5',
+        fuel: els.fuel.value,
+        limit: '25',
+        open: '0',
+        priced: '0',
+        live: '1',
+        sort: 'distance',
+        q: station.name || station.brand || 'Detailimport',
+    });
+    const data = await fetchJson(`/api/search.php?${params.toString()}`, { timeoutMs: 22000, progress: false });
+    const match = bestLiveMatchForDrivingStation(station, data.stations || []);
+    return match ? mergeLiveDrivingPrice(station, match) : station;
+}
+
+async function importMissingDetailStationData(station, options = {}) {
+    const force = options.force === true;
+    if (!force && !detailNeedsImmediateImport(station)) return;
+    if (!canRunDetailImport(station, { force })) return;
+    const importId = detailStationImportId(station);
+    const loadingId = station.tankerkoenig_id || station.stationId || station.id;
+    state.detailImportingIds.add(importId);
+    rememberDetailImportAttempt(station);
+    if (!station.autobahnMode) {
+        state.autobahnPriceLoadingId = loadingId || state.autobahnPriceLoadingId;
+    }
+    if (state.selectedId === station.tankerkoenig_id || state.selectedId === station.stationId || state.selectedId === station.id) renderDetail(station);
+    try {
+        let updated = null;
+        if (station.autobahnMode) {
+            await refreshAutobahnStationPrices(station.tankerkoenig_id);
+            return;
+        }
+        if (station.drivingMode || station.priceStationId || station.stationId) {
+            updated = await loadLiveDetailForStation(station);
+        } else {
+            await refreshDetailStation(station);
+            return;
+        }
+        if (updated && updated !== station) {
+            const merged = mergeDetailStationIntoState(station, updated);
+            refreshCurrentListAfterDetailUpdate(merged);
+            if (state.selectedId === station.tankerkoenig_id || state.selectedId === station.stationId || state.selectedId === station.id) {
+                renderDetail(merged);
+            }
+        }
+    } catch (error) {
+        if (state.selectedId === station.tankerkoenig_id) {
+            els.resultMeta.textContent = error.message || 'Detaildaten konnten nicht geladen werden.';
+        }
+    } finally {
+        state.detailImportingIds.delete(importId);
+        if (state.autobahnPriceLoadingId === station.tankerkoenig_id || state.autobahnPriceLoadingId === station.stationId) {
+            state.autobahnPriceLoadingId = null;
+        }
+        if (loadingId && (state.selectedId === station.tankerkoenig_id || state.selectedId === station.stationId || state.selectedId === station.id)) {
+            const current = state.stations.find((item) => item.tankerkoenig_id === loadingId || item.stationId === loadingId || item.id === loadingId)
+                || state.autobahnStations.find((item) => item.tankerkoenig_id === loadingId || item.stationId === loadingId || item.id === loadingId)
+                || station;
+            renderDetail(current);
+        }
+    }
+}
+
 function renderDetail(station) {
     if (!station) {
         const returnView = state.detailReturnView;
@@ -1415,12 +2111,14 @@ function renderDetail(station) {
             setView('map');
             window.requestAnimationFrame(() => {
                 refreshMapLayout();
+                state.drivingMapFocusActive = true;
                 updateDrivingModeMapMarkers();
             });
         }
         return;
     }
 
+    clearDrivingMapFocusTimer();
     const wazeUrl = `https://waze.com/ul?ll=${station.lat}%2C${station.lng}&navigate=yes`;
     const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lng}`;
     const appleUrl = `https://maps.apple.com/?daddr=${station.lat},${station.lng}`;
@@ -1428,6 +2126,9 @@ function renderDetail(station) {
     const detailPriceClass = visiblePriceClass(station);
     const distanceValue = Number(station.distance);
     const showDistance = !(station.autobahnMode && (!Number.isFinite(distanceValue) || distanceValue <= 0.05));
+    const detailIsLoading = state.detailImportingIds.has(detailStationImportId(station))
+        || state.autobahnPriceLoadingId === station.tankerkoenig_id
+        || state.autobahnPriceLoadingId === station.stationId;
     els.appShell.classList.add('detail-open');
     els.detail.classList.add('visible');
     updateBottomNav();
@@ -1468,6 +2169,7 @@ function renderDetail(station) {
             </div>
             <nav class="detail-footer-nav" aria-label="Detailaktionen">
                 <button class="${isFavorite(station.tankerkoenig_id) ? 'active' : ''}" type="button" id="favoriteButton">Favorit</button>
+                <button type="button" id="detailUpdateButton"${detailIsLoading ? ' disabled' : ''}>${detailIsLoading ? 'Laedt' : 'Aktualisieren'}</button>
                 <button type="button" id="showMapButton">Karte</button>
                 <details class="navigation-picker">
                     <summary>Navigation</summary>
@@ -1485,7 +2187,11 @@ function renderDetail(station) {
     document.querySelector('#detailBackButton')?.addEventListener('click', () => renderDetail(null));
     document.querySelector('#detailCloseButton')?.addEventListener('click', () => renderDetail(null));
     document.querySelector('#favoriteButton')?.addEventListener('click', () => toggleFavorite(station));
-    document.querySelector('#showMapButton')?.addEventListener('click', () => setView('map'));
+    document.querySelector('#detailUpdateButton')?.addEventListener('click', () => {
+        importMissingDetailStationData(station, { force: true });
+    });
+    document.querySelector('#showMapButton')?.addEventListener('click', () => openDetailStationMap(station));
+    window.setTimeout(() => importMissingDetailStationData(station), 0);
 }
 
 function htmlToElement(html) {
@@ -1501,10 +2207,25 @@ async function fetchJson(url, options = {}) {
     if (options.progress !== false) beginDataRequest();
     try {
         const { timeoutMs: _timeoutMs, progress: _progress, ...fetchOptions } = options;
-        const response = await fetch(url, {
-            ...fetchOptions,
-            signal: fetchOptions.signal || controller.signal,
-        });
+        let response;
+        try {
+            response = await fetch(url, {
+                ...fetchOptions,
+                signal: fetchOptions.signal || controller.signal,
+            });
+        } catch (error) {
+            if (error?.name === 'AbortError') {
+                const path = (() => {
+                    try {
+                        return new URL(url, window.location.href).pathname;
+                    } catch {
+                        return String(url);
+                    }
+                })();
+                throw new Error(`Anfrage abgebrochen oder zu langsam: ${path}`);
+            }
+            throw error;
+        }
         const text = await response.text();
         let data;
         try {
@@ -1528,6 +2249,38 @@ async function fetchJson(url, options = {}) {
         window.clearTimeout(timeout);
         if (options.progress !== false) endDataRequest();
     }
+}
+
+function isAbortOrTimeoutError(error) {
+    const message = String(error?.message || error || '').toLowerCase();
+    return error?.name === 'AbortError'
+        || message.includes('abgebrochen')
+        || message.includes('zu langsam')
+        || message.includes('abort')
+        || message.includes('timeout')
+        || message.includes('timed out');
+}
+
+async function fetchJsonWithRetry(url, options = {}, retryOptions = {}) {
+    const attempts = Math.max(1, Number(retryOptions.attempts || 2));
+    let lastError = null;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+        try {
+            const attemptOptions = attempt > 1 && retryOptions.retryTimeoutMs
+                ? { ...options, timeoutMs: retryOptions.retryTimeoutMs }
+                : options;
+            return await fetchJson(url, attemptOptions);
+        } catch (error) {
+            lastError = error;
+            if (attempt >= attempts || !isAbortOrTimeoutError(error)) throw error;
+            if (typeof retryOptions.onRetry === 'function') retryOptions.onRetry(error, attempt + 1);
+            const delayMs = Number(retryOptions.delayMs || 650);
+            await new Promise((resolve) => {
+                window.setTimeout(resolve, delayMs);
+            });
+        }
+    }
+    throw lastError;
 }
 
 async function geocodeDirect(query) {
@@ -1605,6 +2358,40 @@ function renderCachedNormalSearch() {
     hideSplashScreen();
 }
 
+function captureNormalSearchBeforeDrive() {
+    if (state.listMode !== 'results' || !state.stations.length) return;
+    state.normalSearchSnapshotBeforeDrive = {
+        stations: state.stations.map((station) => ({ ...station })),
+        selectedLocation: state.selectedLocation ? { ...state.selectedLocation } : null,
+        searchInputValue: els.searchInput?.value || '',
+        selectedId: state.selectedId,
+        normalSearchLastKey: state.normalSearchLastKey,
+        normalSearchLastLoadedAt: state.normalSearchLastLoadedAt,
+        normalSearchLastMeta: state.normalSearchLastMeta ? { ...state.normalSearchLastMeta } : null,
+    };
+}
+
+function restoreNormalSearchAfterDrive() {
+    const snapshot = state.normalSearchSnapshotBeforeDrive;
+    if (!snapshot?.stations?.length) {
+        restoreStoredStartState();
+        return;
+    }
+    state.stations = snapshot.stations.map((station) => ({ ...station }));
+    state.selectedLocation = snapshot.selectedLocation ? { ...snapshot.selectedLocation } : null;
+    state.selectedId = snapshot.selectedId || null;
+    state.normalSearchLastKey = snapshot.normalSearchLastKey || null;
+    state.normalSearchLastLoadedAt = snapshot.normalSearchLastLoadedAt || null;
+    state.normalSearchLastMeta = snapshot.normalSearchLastMeta ? { ...snapshot.normalSearchLastMeta } : null;
+    if (els.searchInput) els.searchInput.value = snapshot.searchInputValue || state.selectedLocation?.label || '';
+    renderCachedNormalSearch();
+
+    const stale = !state.normalSearchLastLoadedAt || Date.now() - state.normalSearchLastLoadedAt >= NORMAL_SEARCH_REFRESH_MS;
+    if (stale && state.selectedLocation) {
+        refreshNormalSearchInBackground().catch(() => null);
+    }
+}
+
 async function loadStations(options = {}) {
     if (!state.selectedLocation) {
         await chooseFirstSuggestion();
@@ -1647,7 +2434,16 @@ async function loadStations(options = {}) {
     els.results.innerHTML = '<div class="empty-state">Standort wird abgefragt und Tankstellen werden geladen ...</div>';
 
     try {
-        const data = await fetchJson(`/api/search.php?${params.toString()}`, { timeoutMs: 15000 });
+        const data = await fetchJsonWithRetry(`/api/search.php?${params.toString()}`, { timeoutMs: 24000 }, {
+            attempts: 2,
+            retryTimeoutMs: 42000,
+            onRetry: () => {
+                if (requestId !== state.stationRequestId) return;
+                els.resultCount.textContent = 'Suche läuft';
+                els.resultMeta.textContent = 'Antwort dauert laenger - zweiter Versuch ...';
+                els.results.innerHTML = '<div class="empty-state">Tankstellen werden erneut abgefragt ...</div>';
+            },
+        });
         if (requestId !== state.stationRequestId) return;
 
         state.selectedId = null;
@@ -1676,6 +2472,47 @@ async function loadStations(options = {}) {
         els.results.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
         renderDetail(null);
         hideSplashScreen();
+    }
+}
+
+async function refreshNormalSearchInBackground() {
+    if (!state.selectedLocation) return;
+    const params = new URLSearchParams({
+        lat: state.selectedLocation.lat,
+        lng: state.selectedLocation.lng,
+        radius: els.radius.value,
+        fuel: els.fuel.value,
+        limit: els.limit.value,
+        open: els.openOnly.checked ? '1' : '0',
+        priced: els.pricedOnly.checked ? '1' : '0',
+        sort: document.querySelector('.sort-toggle-button.active')?.dataset.sort || 'price',
+        q: els.searchInput.value.trim(),
+    });
+    const cacheKey = normalSearchCacheKey(params);
+    els.resultMeta.textContent = 'Gespeicherte Liste wird geprueft ...';
+    try {
+        const data = await fetchJsonWithRetry(`/api/search.php?${params.toString()}`, { timeoutMs: 24000 }, {
+            attempts: 2,
+            retryTimeoutMs: 42000,
+            onRetry: () => {
+                els.resultMeta.textContent = 'Aktualisierung dauert laenger - Liste bleibt sichtbar ...';
+            },
+        });
+        state.stations = data.stations || [];
+        state.normalSearchLastKey = cacheKey;
+        state.normalSearchLastLoadedAt = Date.now();
+        state.normalSearchLastMeta = { fallback: data.fallback === true || data.stored === true };
+        sortStations();
+        els.resultCount.textContent = `${state.stations.length} Treffer`;
+        els.resultMeta.textContent = data.fallback
+            ? `Gespeichert Â· ${fuelShortLabel(els.fuel.value)} Â· ${els.radius.value} km`
+            : `${fuelShortLabel(els.fuel.value)} Â· ${els.radius.value} km`;
+        renderResults();
+        if (state.view === 'map') renderMarkers();
+        setStatus(data.fallback ? 'Cache' : 'Live');
+    } catch (error) {
+        setStatus('Cache');
+        els.resultMeta.textContent = `Aktualisierung nicht erreichbar - ${error.message}`;
     }
 }
 
@@ -1761,10 +2598,12 @@ function setDirectoryMode(active) {
 
 function updateSectionHeaderTone() {
     const isDriving = state.listMode === 'driving';
-    const isAutobahn = state.listMode === 'autobahn' || (isDriving && state.drivingContext !== 'city');
+    const isRural = isDriving && state.drivingContext === 'rural';
+    const isAutobahn = state.listMode === 'autobahn' || (isDriving && state.drivingContext === 'highway');
     const isCity = state.listMode === 'cities' || (isDriving && state.drivingContext === 'city');
     els.appShell.classList.toggle('section-tone-autobahn', isAutobahn);
     els.appShell.classList.toggle('section-tone-city', isCity && !isAutobahn);
+    els.appShell.classList.toggle('section-tone-rural', isRural);
 }
 
 function citySnapshotAgeMs(snapshot = state.citySnapshot) {
@@ -2302,6 +3141,28 @@ function calculateBearing(from, to) {
     return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
 
+function pointAtBearing(start, bearing, distanceKm) {
+    const lat = Number(start?.lat);
+    const lng = Number(start?.lng);
+    const brng = Number(bearing) * Math.PI / 180;
+    const distance = Number(distanceKm) / 6371;
+    if (![lat, lng, brng, distance].every(Number.isFinite)) return null;
+    const lat1 = lat * Math.PI / 180;
+    const lng1 = lng * Math.PI / 180;
+    const lat2 = Math.asin(
+        Math.sin(lat1) * Math.cos(distance)
+        + Math.cos(lat1) * Math.sin(distance) * Math.cos(brng)
+    );
+    const lng2 = lng1 + Math.atan2(
+        Math.sin(brng) * Math.sin(distance) * Math.cos(lat1),
+        Math.cos(distance) - Math.sin(lat1) * Math.sin(lat2)
+    );
+    return {
+        lat: lat2 * 180 / Math.PI,
+        lng: ((lng2 * 180 / Math.PI + 540) % 360) - 180,
+    };
+}
+
 function angularDifference(a, b) {
     const diff = Math.abs(Number(a) - Number(b)) % 360;
     return diff > 180 ? 360 - diff : diff;
@@ -2327,10 +3188,29 @@ function isDrivingRestMode(samples = state.drivingSamples) {
     return !Number.isFinite(distance) || distance < 0.02;
 }
 
+function estimateDrivingSpeedKmh(samples = state.drivingSamples) {
+    const usable = samples
+        .filter((sample) => Number.isFinite(sample.lat) && Number.isFinite(sample.lng) && Number.isFinite(sample.timestamp))
+        .slice(-4);
+    const last = usable.at(-1);
+    if (!last) return null;
+    if (Number.isFinite(last.speedKmh) && last.speedKmh >= 0) return Math.max(0, last.speedKmh);
+    if (usable.length < 2) return 0;
+    const first = usable[0];
+    const distance = routeDistanceKm(first.lat, first.lng, last.lat, last.lng);
+    const elapsedHours = Math.max(0, (last.timestamp - first.timestamp) / 3600000);
+    if (!Number.isFinite(distance) || elapsedHours <= 0) return 0;
+    const speedKmh = distance / elapsedHours;
+    if (distance < 0.015 || Number(last.accuracy) > 100) return 0;
+    return Math.max(0, speedKmh);
+}
+
 function visualDrivingBearing(samples = state.drivingSamples) {
+    const compassBearing = currentCompassBearing();
+    if (Number.isFinite(compassBearing)) return compassBearing;
     const motionBearing = detectDrivingBearing(samples);
     if (!isDrivingRestMode(samples)) return motionBearing;
-    return currentCompassBearing() ?? motionBearing;
+    return motionBearing;
 }
 
 function detectDrivingBearing(samples = state.drivingSamples) {
@@ -2408,16 +3288,48 @@ function routePointKey(point) {
     return String(point.id || point.tankerkoenig_id || point.stationId || `${point.lat}:${point.lng}`);
 }
 
+function drivingPointId(point) {
+    return routePointKey(point);
+}
+
 function normalizeNameKey(value) {
     return String(value || '')
         .toLowerCase()
+        .replace(/ä/g, 'ae')
+        .replace(/ö/g, 'oe')
+        .replace(/ü/g, 'ue')
+        .replace(/ß/g, 'ss')
         .replace(/autohof|tankstelle|totalenergies|total|shell|aral|esso|jet|avia|bft|mbh|mhb|leo/g, '')
+        .replace(/autobahnraststaette|autobahnraststatte|raststaette|raststatte|rasthof|sued|nord|ost|west/g, '')
         .replace(/[^a-z0-9]+/g, '');
 }
 
+function normalizeBrandKey(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/ä/g, 'ae')
+        .replace(/ö/g, 'oe')
+        .replace(/ü/g, 'ue')
+        .replace(/ß/g, 'ss')
+        .replace(/totalenergies/g, 'total')
+        .replace(/[^a-z0-9]+/g, '');
+}
+
+function normalizedNameTokens(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/ä/g, 'ae')
+        .replace(/ö/g, 'oe')
+        .replace(/ü/g, 'ue')
+        .replace(/ß/g, 'ss')
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token.length >= 4)
+        .filter((token) => !['tankstelle', 'autohof', 'autobahn', 'raststaette', 'raststatte', 'totalenergies'].includes(token));
+}
+
 function routeTankpointDedupKey(point) {
-    const priceId = String(point.priceStationId || point.tankerkoenigId || point.tankerkoenig_id || '').replace(/^tankkoenig_/, '').trim();
-    if (priceId && !/^node_|^way_|^osm_/i.test(priceId)) return `price:${priceId}`;
+    const priceId = tankerkoenigIdFromStation(point);
+    if (priceId) return `price:${priceId}`;
     const lat = Number(point.lat);
     const lng = Number(point.lng);
     const coord = Number.isFinite(lat) && Number.isFinite(lng)
@@ -2429,7 +3341,7 @@ function routeTankpointDedupKey(point) {
 function routeTankpointScore(point) {
     let score = 0;
     if (String(point.source || '').includes('tank')) score += 8;
-    if (point.priceStationId && !/^node_|^way_/i.test(String(point.priceStationId))) score += 6;
+    if (tankerkoenigIdFromStation(point)) score += 6;
     if (hasAnyFuelPrice(point)) score += 5;
     if (point.brand) score += 2;
     if (point.street || point.address) score += 1;
@@ -2529,7 +3441,14 @@ function projectPositionToRouteAxis(position, routeId) {
         const distanceKm = Math.sqrt((px - x) ** 2 + (py - y) ** 2);
         const axisDistanceKm = start.axisDistanceKm + t * (end.axisDistanceKm - start.axisDistanceKm);
         if (!best || distanceKm < best.distanceKm) {
-            best = { routeId, distanceKm, axisDistanceKm, segmentIndex: index - 1, axis };
+            best = {
+                routeId,
+                distanceKm,
+                axisDistanceKm,
+                segmentIndex: index - 1,
+                segmentBearing: calculateBearing(start, end),
+                axis,
+            };
         }
     }
     return best;
@@ -2546,17 +3465,23 @@ function drivingRouteTemplate() {
     return DRIVE_ROUTE_TEMPLATES.find((template) => template.id === state.drivingRouteTemplateId) || DRIVE_ROUTE_TEMPLATES[0];
 }
 
+function drivingUsesSuggestedRoute() {
+    return state.drivingRouteTemplateId === 'suggested' && Boolean(state.drivingRouteSuggestion);
+}
+
 function drivingTemplateRouteIds() {
+    if (!drivingUsesSuggestedRoute()) return [];
     const routeIds = drivingRouteTemplate().routeIds || ['ALL'];
     return routeIds.includes('ALL') ? [] : routeIds;
 }
 
 function drivingTemplateDirection() {
+    if (!drivingUsesSuggestedRoute()) return null;
     return drivingRouteTemplate().direction || null;
 }
 
 function drivingRouteRequestId(routeId = state.drivingRouteId, ignoreTemplate = false) {
-    if (ignoreTemplate) return routeId || 'ALL';
+    if (ignoreTemplate || !drivingUsesSuggestedRoute()) return routeId || 'ALL';
     const routeIds = drivingTemplateRouteIds();
     if (routeIds.length === 1) return routeIds[0];
     if (routeIds.length > 1) return 'ALL';
@@ -2643,19 +3568,23 @@ function drivingDestinationFormHtml() {
     const hasDestination = Boolean(state.drivingDestination && (state.drivingRouteGeometry.length || state.drivingRouteSuggestion));
     const modeText = state.drivingContext === 'city'
         ? 'Stadtmodus'
-        : state.drivingDestination
-            ? 'Autobahnmodus mit Ziel'
-            : 'Autobahnmodus ohne Ziel';
+        : state.drivingContext === 'rural'
+            ? 'Landmodus'
+            : state.drivingDestination
+                ? 'Autobahnmodus mit Ziel'
+                : 'Autobahnmodus ohne Ziel';
     if (!state.drivingDestinationOpen) {
         return `
-            <div class="driving-destination-toggle">
-                <span>${escapeHtml(hasDestination ? 'Ziel / Route' : 'Modus')}</span>
-                <strong>${escapeHtml(routeText || modeText)}</strong>
-                <span class="driving-destination-buttons">
-                    <button type="button" data-driving-destination-toggle>Ziel eingeben</button>
-                    ${hasDestination ? '<button type="button" data-driving-map>Karte</button>' : ''}
-                </span>
-            </div>
+            <form class="driving-destination-form driving-destination-form-compact" data-driving-destination-form>
+                <label>
+                    <span>Ziel</span>
+                    <input name="destination" type="search" value="${escapeHtml(visibleTarget)}" placeholder="Ziel eingeben" autocomplete="street-address">
+                </label>
+                <button class="driving-destination-action" type="button" data-driving-destination-action="ok" aria-label="Ziel bestaetigen">OK</button>
+                <small>${escapeHtml(suggestion
+                    ? `${suggestion.label}${destinationLabel ? ` - Ziel: ${destinationLabel}` : ''}`
+                    : modeText)}</small>
+            </form>
         `;
     }
     const actionLabel = state.drivingDestinationEdited
@@ -2682,11 +3611,75 @@ function openDrivingDestinationMap() {
     state.drivingDestinationOpen = false;
     state.drivingDestinationEdited = false;
     state.drivingDestinationConfirmedOpen = false;
+    state.drivingRouteInfoVisible = false;
     setView('map');
     window.requestAnimationFrame(() => {
         refreshMapLayout();
         updateDrivingModeMapMarkers();
     });
+}
+
+function drivingRouteGeometryDistanceKm(start, destination) {
+    const points = Array.isArray(state.drivingRouteGeometry) ? state.drivingRouteGeometry : [];
+    if (points.length > 1) {
+        return points.slice(1).reduce((sum, point, index) => {
+            const previous = points[index];
+            return sum + routeDistanceKm(previous?.[0], previous?.[1], point?.[0], point?.[1]);
+        }, 0);
+    }
+    return routeDistanceKm(start?.lat, start?.lng, destination?.lat, destination?.lng);
+}
+
+function showDrivingRouteInfoOverlay(start, destination, routePreviewStations = []) {
+    const distanceKm = drivingRouteGeometryDistanceKm(start, destination);
+    const routeLabelText = state.drivingRouteSuggestion?.label || 'Route zum Ziel';
+    const destinationLabel = destination?.label || state.drivingDestinationQuery || 'Ziel';
+    state.drivingRouteInfo = {
+        distanceKm: Number.isFinite(distanceKm) ? distanceKm : null,
+        tankpointCount: Array.isArray(routePreviewStations) ? routePreviewStations.length : 0,
+        routeLabel: routeLabelText,
+        destinationLabel,
+    };
+    state.drivingRouteInfoVisible = true;
+}
+
+function drivingRouteInfoOverlayHtml() {
+    if (!state.drivingRouteInfoVisible || !state.drivingRouteInfo) return '';
+    const info = state.drivingRouteInfo;
+    const distance = Number.isFinite(info.distanceKm)
+        ? `${Math.round(info.distanceKm).toLocaleString('de-DE')} km`
+        : '-';
+    const count = Number(info.tankpointCount || 0);
+    return `
+        <div class="driving-route-info-layer" data-driving-route-info-dismiss>
+            <section class="driving-route-info-card" role="dialog" aria-modal="true" aria-label="Routenplanung">
+                <button class="driving-route-info-close" type="button" data-driving-route-info-dismiss aria-label="Routeninfo schliessen">×</button>
+                <span>Route geplant</span>
+                <strong>${escapeHtml(info.destinationLabel)}</strong>
+                <div class="driving-route-info-grid">
+                    <div>
+                        <small>Entfernung zum Ziel</small>
+                        <b>${escapeHtml(distance)}</b>
+                    </div>
+                    <div>
+                        <small>Tankpunkte an der Route</small>
+                        <b>${count.toLocaleString('de-DE')}</b>
+                    </div>
+                </div>
+                <p>${escapeHtml(info.routeLabel)}</p>
+                <button class="driving-route-info-ok" type="button" data-driving-route-info-dismiss>OK</button>
+            </section>
+        </div>
+    `;
+}
+
+function drivingViewToggleHtml() {
+    return `
+        <div class="driving-view-toggle" aria-label="Drive Ansicht">
+            <button type="button" class="active" data-driving-view="list">Liste</button>
+            <button type="button" data-driving-view="map">Karte</button>
+        </div>
+    `;
 }
 
 async function applyDrivingDestination(query, options = {}) {
@@ -2700,6 +3693,7 @@ async function applyDrivingDestination(query, options = {}) {
     state.drivingDestinationOpen = options.keepOpen === true;
     state.drivingDestinationEdited = false;
     state.drivingDestinationConfirmedOpen = false;
+    resetDrivingRoutePreviewCache();
     state.drivingMessage = 'Ziel wird gesucht';
     renderDrivingModeList();
     const [destination] = await geocode(destinationQuery);
@@ -2752,7 +3746,9 @@ async function applyDrivingDestination(query, options = {}) {
     state.drivingRouteLoadKey = null;
     state.drivingMessage = `Vorschlag aktiv: ${state.drivingRouteSuggestion.label}`;
     await loadRouteTankpoints(state.drivingRouteId);
-    await updateDrivingMode();
+    const routePreviewStations = buildDrivingRoutePreviewCache(start, DRIVE_ROUTE_DESTINATION_PREVIEW_LIMIT);
+    showDrivingRouteInfoOverlay(start, destination, routePreviewStations);
+    await updateDrivingMode({ force: true });
     if (options.keepOpen === true) {
         state.drivingDestinationOpen = true;
         state.drivingDestinationEdited = false;
@@ -2761,21 +3757,121 @@ async function applyDrivingDestination(query, options = {}) {
     }
 }
 
+function isConfirmedDestinationHighwayRoute(route) {
+    if (!state.drivingDestination || !route?.onRoute || !route.routeId || !route.projection) return false;
+    if (!Number.isFinite(route.distanceKm) || route.distanceKm > DRIVE_ROUTE_STABLE_MAX_KM) return false;
+    const speed = Number(state.drivingSpeedKmh);
+    if (Number.isFinite(speed) && speed < 15 && route.distanceKm <= 0.4) return true;
+    const bearing = detectDrivingBearing();
+    const segmentBearing = Number(route.projection.segmentBearing);
+    if (!Number.isFinite(bearing) || !Number.isFinite(segmentBearing)) return route.distanceKm <= 0.35;
+    const parallelDelta = angularDifference(bearing, segmentBearing);
+    return parallelDelta <= 35 || parallelDelta >= 145;
+}
+
+async function reevaluateDrivingDestinationFromHighway(position, route) {
+    if (!state.drivingDestination || !route?.routeId || state.drivingDestinationReevalInProgress) return false;
+    const destinationKey = `${state.drivingDestination.lat?.toFixed?.(3) || state.drivingDestination.label}:${state.drivingDestination.lng?.toFixed?.(3) || ''}`;
+    const key = `${route.routeId}:${destinationKey}`;
+    if (
+        state.drivingDestinationHighwayKey === key
+        && state.drivingDestinationHighwayReevaluatedAt
+        && Date.now() - state.drivingDestinationHighwayReevaluatedAt < 2 * 60 * 1000
+    ) {
+        return false;
+    }
+
+    state.drivingDestinationReevalInProgress = true;
+    try {
+        const start = { label: 'Aktuelle Autobahnposition', lat: Number(position.lat), lng: Number(position.lng) };
+        state.drivingRouteGeometry = await loadDrivingRouteGeometry(start, state.drivingDestination);
+        const previousTemplateId = state.drivingRouteTemplateId;
+        const previousSuggestion = state.drivingRouteSuggestion;
+        try {
+            state.drivingRouteTemplateId = DRIVE_ROUTE_TEMPLATES[0].id;
+            state.drivingRouteSuggestion = null;
+            state.drivingRouteLoadKey = null;
+            await loadRouteTankpoints('ALL', { ignoreTemplate: true });
+        } finally {
+            state.drivingRouteTemplateId = previousTemplateId;
+            state.drivingRouteSuggestion = previousSuggestion;
+        }
+
+        const startProjection = projectPositionToRouteAxis(start, route.routeId) || nearestDrivingRouteProjection(start);
+        const destinationProjection = nearestDrivingRouteProjection(state.drivingDestination);
+        if (!startProjection || !destinationProjection) return false;
+
+        const corridorRouteIds = drivingRouteCorridorIds(start, state.drivingDestination, startProjection, destinationProjection);
+        const geometryRouteIds = drivingRouteGeometryRouteIds([route.routeId, ...corridorRouteIds]);
+        const routeIds = [...new Set([
+            route.routeId,
+            ...(geometryRouteIds.length ? geometryRouteIds : corridorRouteIds),
+            destinationProjection.routeId,
+        ].filter(Boolean))];
+        const primaryRouteId = routeIds[0] || route.routeId;
+        const startOnDestinationRoute = projectPositionToRouteAxis(start, primaryRouteId) || startProjection;
+        const direction = Number.isFinite(startOnDestinationRoute?.axisDistanceKm)
+            && Number.isFinite(destinationProjection?.axisDistanceKm)
+            ? (destinationProjection.axisDistanceKm >= startOnDestinationRoute.axisDistanceKm ? 'Muenchen' : 'Berlin')
+            : state.drivingStableDirection;
+
+        state.drivingRouteSuggestion = {
+            id: 'suggested',
+            label: `${routeIds.slice(0, 3).join(' / ')} zum Ziel`,
+            routeIds,
+            direction,
+        };
+        state.drivingRouteTemplateId = 'suggested';
+        state.drivingRouteId = routeIds.length === 1 ? routeIds[0] : 'ALL';
+        state.drivingDetectedRouteId = route.routeId;
+        state.drivingStableDirection = direction;
+        state.drivingRouteProjection = startOnDestinationRoute;
+        state.drivingRouteStartAxisKm = Number.isFinite(startOnDestinationRoute?.axisDistanceKm) ? startOnDestinationRoute.axisDistanceKm : null;
+        state.drivingRouteDestinationAxisKm = Number.isFinite(destinationProjection?.axisDistanceKm) ? destinationProjection.axisDistanceKm : null;
+        state.drivingRouteStartAccessKm = Number.isFinite(startOnDestinationRoute?.distanceKm) ? startOnDestinationRoute.distanceKm : 0;
+        state.drivingRouteLoadedAt = null;
+        state.drivingRouteLoadKey = null;
+        state.drivingDestinationHighwayKey = key;
+        state.drivingDestinationHighwayReevaluatedAt = Date.now();
+        await loadRouteTankpoints(state.drivingRouteId);
+        buildDrivingRoutePreviewCache(start, DRIVE_ROUTE_DESTINATION_PREVIEW_LIMIT);
+        return true;
+    } catch (error) {
+        state.drivingMessage = `Zielroute bleibt aktiv - neue Autobahnroute konnte nicht berechnet werden: ${error.message || 'unbekannter Fehler'}`;
+        return false;
+    } finally {
+        state.drivingDestinationReevalInProgress = false;
+    }
+}
+
 function routeTankpointsFor(routeId) {
     const templateRouteIds = drivingTemplateRouteIds();
     return state.drivingRouteTankpoints.filter((point) => {
         const pointRoute = String(point.routeId || point.autobahn || '').toUpperCase();
-        if (routeId === 'ALL' && templateRouteIds.length) return templateRouteIds.includes(pointRoute);
+        if (routeId === 'ALL' && drivingUsesSuggestedRoute() && templateRouteIds.length) return templateRouteIds.includes(pointRoute);
         return routeId === 'ALL' || pointRoute === routeId;
     });
+}
+
+function isDrivingDestinationInputActive() {
+    const activeElement = document.activeElement;
+    return Boolean(
+        state.drivingDestinationOpen
+        && (
+            state.drivingDestinationEdited
+            || activeElement?.matches?.('[data-driving-destination-form] input[name="destination"]')
+        )
+    );
 }
 
 function hasAnyFuelPrice(point) {
     return ['diesel', 'e5', 'e10'].some((fuel) => isValidPriceValue(fuelPriceValue(point, fuel)));
 }
 
-function routeHasEnoughPricedPoints(routeId, minCount = 2) {
-    return routeTankpointsFor(routeId).filter(hasAnyFuelPrice).length >= minCount;
+function routeHasEnoughDetectionPoints(routeId, minCount = 2) {
+    return routeTankpointsFor(routeId)
+        .filter((point) => Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lng)))
+        .length >= minCount;
 }
 
 function detectCurrentRoute(position, routeId = state.drivingRouteId) {
@@ -2790,7 +3886,7 @@ function detectCurrentRoute(position, routeId = state.drivingRouteId) {
     let best = { onRoute: false, distanceKm: Number.POSITIVE_INFINITY, routeId, projection: null };
 
     routeIds.forEach((currentRouteId) => {
-        if (!routeHasEnoughPricedPoints(currentRouteId)) return;
+        if (!routeHasEnoughDetectionPoints(currentRouteId)) return;
         const projection = projectPositionToRouteAxis(position, currentRouteId);
         const distanceKm = projection?.distanceKm ?? Number.POSITIVE_INFINITY;
         if (distanceKm < best.distanceKm) {
@@ -2808,6 +3904,39 @@ function detectCurrentRoute(position, routeId = state.drivingRouteId) {
     state.drivingDetectedRouteId = best.onRoute ? best.routeId : null;
     state.drivingRouteProjection = best.projection;
     return best;
+}
+
+function rememberDrivingHighwayRoute(route) {
+    if (!route?.onRoute || !route.routeId || !route.projection) return;
+    state.drivingLastHighwayAt = Date.now();
+    state.drivingLastHighwayRouteId = route.routeId;
+    state.drivingLastHighwayProjection = route.projection;
+}
+
+function stabilizedDrivingRoute(route, position) {
+    if (route?.onRoute) {
+        rememberDrivingHighwayRoute(route);
+        return route;
+    }
+    const lastRouteId = state.drivingLastHighwayRouteId;
+    const lastAt = Number(state.drivingLastHighwayAt || 0);
+    if (!lastRouteId || !lastAt || Date.now() - lastAt > DRIVE_ROUTE_HOLD_MS) return route;
+
+    const projection = projectPositionToRouteAxis(position, lastRouteId) || state.drivingLastHighwayProjection;
+    const distanceKm = projection?.distanceKm ?? Number.POSITIVE_INFINITY;
+    if (distanceKm > DRIVE_ROUTE_HOLD_MAX_KM) return route;
+
+    state.drivingDetectedRouteId = lastRouteId;
+    state.drivingRouteProjection = projection;
+    return {
+        ...route,
+        onRoute: true,
+        uncertain: true,
+        held: true,
+        distanceKm,
+        routeId: lastRouteId,
+        projection,
+    };
 }
 
 function estimateCurrentRoutePosition(position) {
@@ -2903,7 +4032,9 @@ function getNextTankpointsOnRoute({ position, direction, limit = 5 } = {}) {
             if (pointDirection !== 'beide' && pointDirection !== direction) return false;
             const value = routeAxisValueForPoint(point, axis);
             if (!Number.isFinite(value)) return false;
-            return direction === 'Muenchen' ? value > currentPosition : value < currentPosition;
+            return direction === 'Muenchen'
+                ? value >= currentPosition - DRIVE_ROUTE_PREVIEW_BEHIND_KM
+                : value <= currentPosition + DRIVE_ROUTE_PREVIEW_BEHIND_KM;
         })
         .map((point) => ({
             ...point,
@@ -2933,7 +4064,7 @@ function getRoutePreviewTankpoints(position, limit = 120) {
             .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
             .map((point) => {
                 const projection = projectPointToRouteGeometry(point);
-                if (!projection || !Number.isFinite(projection.routeKm) || projection.routeKm < currentRouteKm + DRIVE_ROUTE_PREVIEW_BEHIND_KM) return null;
+                if (!projection || !Number.isFinite(projection.routeKm) || projection.routeKm < currentRouteKm - DRIVE_ROUTE_PREVIEW_BEHIND_KM) return null;
                 if (projection.distanceKm > DRIVE_ROUTE_PREVIEW_CORRIDOR_KM) return null;
                 const routeDistance = Math.max(0, projection.routeKm - currentRouteKm) + projection.distanceKm;
                 return {
@@ -2950,10 +4081,9 @@ function getRoutePreviewTankpoints(position, limit = 120) {
             .filter(Boolean)
             .sort((a, b) => a.routePreviewKm - b.routePreviewKm)
             .slice(0, limit);
-        if (projectedTankpoints.length) return projectedTankpoints;
-        if (state.drivingDestination && state.drivingRouteSuggestion) return [];
-
-        return routeTankpointsFor(activeRouteId)
+        if (projectedTankpoints.length || (state.drivingDestination && state.drivingRouteSuggestion)) return projectedTankpoints;
+        if (!state.drivingDestination || !state.drivingRouteSuggestion) {
+            return routeTankpointsFor(activeRouteId)
             .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
             .map((point) => ({
                 ...point,
@@ -2966,6 +4096,7 @@ function getRoutePreviewTankpoints(position, limit = 120) {
             .filter((point) => Number.isFinite(point.distance))
             .sort((a, b) => a.distance - b.distance)
             .slice(0, Math.min(limit, 20));
+        }
     }
 
     const axis = routeAxisFor(activeRouteId);
@@ -3014,6 +4145,73 @@ function getRoutePreviewTankpoints(position, limit = 120) {
             return directionSign * (axisA - axisB);
         })
         .slice(0, limit);
+}
+
+function drivingRoutePreviewCacheKey() {
+    const template = drivingRouteTemplate();
+    const routeIds = (template.routeIds || [state.drivingRouteId || 'ALL']).join(',');
+    const destination = state.drivingDestination
+        ? `${Number(state.drivingDestination.lat).toFixed(4)}:${Number(state.drivingDestination.lng).toFixed(4)}`
+        : '';
+    const geometryKey = Array.isArray(state.drivingRouteGeometry)
+        ? `${state.drivingRouteGeometry.length}:${JSON.stringify(state.drivingRouteGeometry[0] || [])}:${JSON.stringify(state.drivingRouteGeometry.at(-1) || [])}`
+        : '';
+    return [routeIds, destination, geometryKey].join('|');
+}
+
+function resetDrivingRoutePreviewCache() {
+    state.drivingRoutePreviewCache = null;
+}
+
+function updateRoutePreviewDistancesFromPosition(stations, position) {
+    if (!position || !Array.isArray(stations)) return stations || [];
+    const currentProjection = projectPointToRouteGeometry(position);
+    if (!Number.isFinite(currentProjection?.routeKm)) return stations;
+    return stations
+        .map((station) => {
+            const routePreviewKm = Number(station.routePreviewKm);
+            if (!Number.isFinite(routePreviewKm)) return station;
+            return {
+                ...station,
+                distance: Math.max(0, routePreviewKm - currentProjection.routeKm)
+                    + Math.max(0, Number(station.routeDistanceFromGeometryKm || 0)),
+            };
+        })
+        .sort((a, b) => Number(a.routePreviewKm || a.distance || 0) - Number(b.routePreviewKm || b.distance || 0));
+}
+
+function buildDrivingRoutePreviewCache(position, limit = 120) {
+    const stations = getRoutePreviewTankpoints(position, limit);
+    state.drivingRoutePreviewCache = {
+        key: drivingRoutePreviewCacheKey(),
+        createdAt: Date.now(),
+        stations,
+    };
+    return stations;
+}
+
+function routePreviewStationsForDriving(position, limit = 120) {
+    const key = drivingRoutePreviewCacheKey();
+    if (!state.drivingRoutePreviewCache || state.drivingRoutePreviewCache.key !== key) {
+        return buildDrivingRoutePreviewCache(position, limit);
+    }
+    const stations = updateRoutePreviewDistancesFromPosition(state.drivingRoutePreviewCache.stations, position)
+        .slice(0, limit);
+    state.drivingRoutePreviewCache = {
+        ...state.drivingRoutePreviewCache,
+        stations,
+    };
+    return stations;
+}
+
+function mergeRoutePreviewCachePrices(updatedStations) {
+    if (!state.drivingRoutePreviewCache?.stations?.length || !Array.isArray(updatedStations)) return updatedStations;
+    const byId = new Map(updatedStations.map((station) => [drivingPointId(station), station]));
+    state.drivingRoutePreviewCache = {
+        ...state.drivingRoutePreviewCache,
+        stations: state.drivingRoutePreviewCache.stations.map((station) => byId.get(drivingPointId(station)) || station),
+    };
+    return state.drivingRoutePreviewCache.stations;
 }
 
 async function loadCityDriveStations(position, limit = 5) {
@@ -3080,20 +4278,34 @@ function mergeLiveDrivingPrice(station, liveStation) {
 }
 
 function bestLiveMatchForDrivingStation(station, liveStations = []) {
-    const stationId = String(station.tankerkoenigId || station.tankerkoenig_id || station.stationId || station.priceStationId || '').replace(/^tankkoenig_/, '');
+    const stationId = tankerkoenigIdFromStation(station);
     const direct = liveStations.find((candidate) => {
-        const candidateId = String(candidate.tankerkoenigId || candidate.tankerkoenig_id || candidate.stationId || '').replace(/^tankkoenig_/, '');
+        const candidateId = tankerkoenigIdFromStation(candidate);
         return stationId && candidateId && stationId === candidateId;
     });
     if (direct) return direct;
 
+    const stationText = [station.name, station.brand, station.operator].filter(Boolean).join(' ');
+    const stationNameKey = normalizeNameKey(stationText);
+    const stationBrandKey = normalizeBrandKey(station.brand || station.operator || station.name || '');
+    const stationTokens = normalizedNameTokens(stationText);
     return liveStations
-        .map((candidate) => ({
-            candidate,
-            distance: routeDistanceKm(station.lat, station.lng, candidate.lat, candidate.lng),
-        }))
-        .filter((item) => Number.isFinite(item.distance) && item.distance <= 0.35)
-        .sort((a, b) => a.distance - b.distance)[0]?.candidate || null;
+        .map((candidate) => {
+            const distance = routeDistanceKm(station.lat, station.lng, candidate.lat, candidate.lng);
+            const candidateText = [candidate.name, candidate.brand].filter(Boolean).join(' ');
+            const candidateNameKey = normalizeNameKey(candidateText);
+            const candidateBrandKey = normalizeBrandKey(candidate.brand || candidate.name || '');
+            const candidateTokens = normalizedNameTokens(candidateText);
+            const sharedTokens = stationTokens.filter((token) => candidateTokens.includes(token)).length;
+            const brandMatches = stationBrandKey && candidateBrandKey
+                && (stationBrandKey.includes(candidateBrandKey) || candidateBrandKey.includes(stationBrandKey));
+            const nameMatches = stationNameKey && candidateNameKey
+                && (stationNameKey.includes(candidateNameKey) || candidateNameKey.includes(stationNameKey));
+            const score = (brandMatches ? 20 : 0) + (nameMatches ? 14 : 0) + (sharedTokens * 8) - distance;
+            return { candidate, distance, score, sharedTokens };
+        })
+        .filter((item) => Number.isFinite(item.distance) && item.distance <= (item.score >= 12 || item.sharedTokens ? 5 : 0.8))
+        .sort((a, b) => b.score - a.score || a.distance - b.distance)[0]?.candidate || null;
 }
 
 function canRetryDrivingPrice(station) {
@@ -3142,12 +4354,86 @@ function buildDrivingPriceClusters(stations) {
         .sort((a, b) => a.stations[0].distance - b.stations[0].distance);
 }
 
-async function loadLivePricesForDrivingStations(stations) {
-    const staleStations = stations
+function drivingStationRefreshId(station) {
+    return tankerkoenigIdFromStation(station);
+}
+
+function staleDrivingStations(stations) {
+    return stations
         .filter((station) => !hasCurrentDrivingPrice(station, els.fuel.value, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS))
-        .filter(canRetryDrivingPrice)
+        .filter(canRetryDrivingPrice);
+}
+
+function mergeRefreshedDrivingStation(original, refreshed) {
+    if (!refreshed) return original;
+    const selectedFuel = els.fuel.value;
+    return {
+        ...original,
+        ...refreshed,
+        drivingMode: original.drivingMode,
+        drivingContext: original.drivingContext,
+        distance: original.distance,
+        routeDistanceKm: original.routeDistanceKm,
+        routeAxisKm: original.routeAxisKm,
+        aheadKm: original.aheadKm,
+        stationId: original.stationId || refreshed.stationId || refreshed.tankerkoenig_id,
+        priceStationId: original.priceStationId || refreshed.priceStationId || refreshed.tankerkoenigId || refreshed.tankerkoenig_id,
+        tankerkoenig_id: original.tankerkoenig_id || refreshed.tankerkoenig_id || refreshed.stationId,
+        price: fuelPriceValue(refreshed, selectedFuel),
+        last_update: autobahnPriceStand(refreshed) || routePriceStand(refreshed) || refreshed.last_update || original.last_update,
+    };
+}
+
+async function refreshDrivingStationsByKnownIds(stations) {
+    const candidates = staleDrivingStations(stations)
+        .filter((station) => drivingStationRefreshId(station))
         .slice(0, DRIVE_HIGHWAY_LIVE_PRICE_LIMIT);
-    if (!staleStations.length) return stations;
+    if (!candidates.length) return { stations, refreshedCount: 0 };
+
+    const refreshedById = new Map();
+    for (const [index, station] of candidates.entries()) {
+        const stationId = drivingStationRefreshId(station);
+        const params = new URLSearchParams({
+            stationId,
+            prices: '1',
+            refresh: '1',
+        });
+        try {
+            const data = await fetchJson(`/api/autobahn/stations.php?${params.toString()}`, { timeoutMs: 22000, progress: false });
+            const refreshed = (data.stations || [])
+                .map(normalizeAutobahnStation)
+                .find((item) => stationSameIdentity(item, station)
+                    || item.tankerkoenig_id === stationId
+                    || item.tankerkoenigId === stationId
+                    || item.stationId === stationId);
+            if (refreshed && hasCurrentDrivingPrice(refreshed, els.fuel.value, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS)) {
+                refreshedById.set(drivingPointId(station), mergeRefreshedDrivingStation(station, refreshed));
+            }
+        } catch (error) {
+            state.drivingLivePriceMessage = state.drivingLivePriceMessage || `Gezieltes Nachladen nicht erreichbar - ${error.message || 'unbekannter Fehler'}`;
+        }
+        rememberDrivingPriceAttempt([station]);
+        if (index < candidates.length - 1) {
+            await new Promise((resolve) => {
+                window.setTimeout(resolve, Math.min(450, DRIVE_HIGHWAY_LIVE_PRICE_DELAY_MS));
+            });
+        }
+    }
+
+    return {
+        stations: stations.map((station) => refreshedById.get(drivingPointId(station)) || station),
+        refreshedCount: refreshedById.size,
+    };
+}
+
+async function loadLivePricesForDrivingStations(stations) {
+    const targeted = await refreshDrivingStationsByKnownIds(stations);
+    const staleStations = staleDrivingStations(targeted.stations)
+        .slice(0, DRIVE_HIGHWAY_LIVE_PRICE_LIMIT);
+    if (!staleStations.length) {
+        if (targeted.refreshedCount) state.drivingLivePriceMessage = `${targeted.refreshedCount} Tankpunkte gezielt aktualisiert`;
+        return targeted.stations;
+    }
     const refreshedById = new Map();
     let firstErrorMessage = '';
     const clusters = buildDrivingPriceClusters(staleStations).slice(0, DRIVE_HIGHWAY_LIVE_CLUSTER_LIMIT);
@@ -3165,7 +4451,7 @@ async function loadLivePricesForDrivingStations(stations) {
             q: 'Fahrmodus Preise',
         });
         try {
-            const data = await fetchJson(`/api/search.php?${params.toString()}`, { timeoutMs: 15000, progress: false });
+            const data = await fetchJson(`/api/search.php?${params.toString()}`, { timeoutMs: 22000, progress: false });
             cluster.stations.forEach((station) => {
                 const match = bestLiveMatchForDrivingStation(station, data.stations || []);
                 if (match) refreshedById.set(drivingPointId(station), mergeLiveDrivingPrice(station, match));
@@ -3183,13 +4469,19 @@ async function loadLivePricesForDrivingStations(stations) {
         }
     }
 
+    if (!refreshedById.size && !targeted.refreshedCount && !firstErrorMessage) {
+        state.drivingLivePriceMessage = 'Live-Preise abgefragt - keine passende Tankerkoenig-Zuordnung gefunden';
+    } else if (targeted.refreshedCount || refreshedById.size) {
+        state.drivingLivePriceMessage = `${targeted.refreshedCount + refreshedById.size} Tankpunkte aktualisiert`;
+    }
+
     if (firstErrorMessage) {
         state.drivingLivePriceMessage = firstErrorMessage.includes('Rate')
             ? 'Tankerkoenig Rate-Limit erreicht - gespeicherte Preise werden weiter genutzt'
             : `Live-Preise nicht erreichbar - ${firstErrorMessage}`;
     }
 
-    return stations.map((station) => refreshedById.get(drivingPointId(station)) || station);
+    return targeted.stations.map((station) => refreshedById.get(drivingPointId(station)) || station);
 }
 
 function cityDriveStationWithDirection(station, position, drivingBearing) {
@@ -3209,12 +4501,43 @@ function cityDriveStationWithDirection(station, position, drivingBearing) {
     };
 }
 
+function isLocalDrivingContext(context = state.drivingContext) {
+    return context === 'city' || context === 'rural';
+}
+
+function localDriveContextFor(stations = []) {
+    return stations.length > 0 && stations.length <= DRIVE_RURAL_MAX_TANKPOINTS ? 'rural' : 'city';
+}
+
+function applyLocalDriveContext(stations = []) {
+    const context = localDriveContextFor(stations);
+    state.drivingContext = context;
+    return stations.map((station) => ({
+        ...station,
+        drivingContext: context,
+    }));
+}
+
 function filterCityDriveStations(stations, position, limit = 10) {
     const drivingBearing = visualDrivingBearing();
     return stations
         .map((station) => cityDriveStationWithDirection(station, position, drivingBearing))
         .filter((station) => (
             Number.isFinite(station.distance)
+            && hasDrivingPrice(station)
+            && (!station.behindDrivingDirection || station.distance <= CITY_DRIVE_BEHIND_KEEP_KM)
+        ))
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, limit);
+}
+
+function filterRuralDriveStations(stations, position, limit = 10) {
+    const drivingBearing = visualDrivingBearing();
+    return stations
+        .map((station) => cityDriveStationWithDirection(station, position, drivingBearing))
+        .filter((station) => (
+            Number.isFinite(station.distance)
+            && station.distance <= 25
             && hasDrivingPrice(station)
             && (!station.behindDrivingDirection || station.distance <= CITY_DRIVE_BEHIND_KEEP_KM)
         ))
@@ -3270,11 +4593,11 @@ async function loadLiveCityDriveStations(position, limit = 10) {
         sort: 'distance',
         q: 'Fahrmodus Live',
     });
-    let data = await fetchJson(`/api/search.php?${params.toString()}`, { timeoutMs: 15000, progress: false });
+    let data = await fetchJson(`/api/search.php?${params.toString()}`, { timeoutMs: 22000, progress: false });
     let usedStoredFallback = data.fallback === true || data.stored === true;
     if (!(data.stations || []).length) {
         params.delete('live');
-        data = await fetchJson(`/api/search.php?${params.toString()}`, { timeoutMs: 15000, progress: false });
+        data = await fetchJson(`/api/search.php?${params.toString()}`, { timeoutMs: 22000, progress: false });
         usedStoredFallback = true;
     }
     state.drivingCityLastLoadAt = Date.now();
@@ -3293,13 +4616,78 @@ async function loadLiveCityDriveStations(position, limit = 10) {
     return filterCityDriveStations(stations, position, limit);
 }
 
+async function loadLiveRuralDriveStations(position, limit = 10) {
+    const lat = Number(position?.lat);
+    const lng = Number(position?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return [];
+    const loadKey = `${lat.toFixed(2)}:${lng.toFixed(2)}:${els.fuel.value}`;
+    const fresh = state.drivingRuralLastLoadKey === loadKey
+        && state.drivingRuralLastLoadAt
+        && Date.now() - state.drivingRuralLastLoadAt < CITY_DRIVE_PRICE_REFRESH_MS;
+    if (fresh && state.stations.length && state.drivingContext === 'rural') {
+        return filterRuralDriveStations(state.stations, position, limit);
+    }
+    const params = new URLSearchParams({
+        lat: String(lat),
+        lng: String(lng),
+        radius: '25',
+        fuel: els.fuel.value,
+        limit: String(Math.max(100, limit * 12)),
+        open: '1',
+        priced: '1',
+        live: '1',
+        sort: 'distance',
+        q: 'Fahrmodus Land',
+    });
+    let data = await fetchJson(`/api/search.php?${params.toString()}`, { timeoutMs: 22000, progress: false });
+    let usedStoredFallback = data.fallback === true || data.stored === true;
+    if (!(data.stations || []).length) {
+        params.delete('live');
+        data = await fetchJson(`/api/search.php?${params.toString()}`, { timeoutMs: 22000, progress: false });
+        usedStoredFallback = true;
+    }
+    state.drivingRuralLastLoadAt = Date.now();
+    state.drivingRuralLastLoadKey = loadKey;
+    state.drivingRuralLastMessage = usedStoredFallback
+        ? (data.message || 'Live-Preise nicht erreichbar - gespeicherte Landpreise koennen abweichen')
+        : '';
+    const stations = (data.stations || [])
+        .map((station) => ({
+            ...station,
+            drivingContext: 'rural',
+            drivingMode: true,
+            priceSource: usedStoredFallback ? 'fallback' : 'live',
+        }));
+    return filterRuralDriveStations(stations, position, limit);
+}
+
+async function loadLocalDriveStations(position, limit = 10) {
+    const cityStations = await loadLiveCityDriveStations(position, limit);
+    if (localDriveContextFor(cityStations) !== 'rural') {
+        return applyLocalDriveContext(cityStations);
+    }
+    const ruralStations = await loadLiveRuralDriveStations(position, limit);
+    if (ruralStations.length) {
+        state.drivingContext = 'rural';
+        return ruralStations.map((station) => ({
+            ...station,
+            drivingContext: 'rural',
+        }));
+    }
+    return applyLocalDriveContext(cityStations);
+}
+
 function normalizeRouteTankpoint(point) {
+    const tankerkoenigId = tankerkoenigIdFromStation(point);
+    const fallbackId = point.id || point.stationId || point.sourceDocId || `${point.routeId || point.autobahn || 'route'}:${point.lat}:${point.lng}`;
+    const stationId = tankerkoenigId || fallbackId;
     return {
         drivingMode: true,
-        tankerkoenig_id: point.id || point.stationId,
-        id: point.id || point.stationId,
-        stationId: point.stationId || point.id,
-        priceStationId: point.priceStationId || '',
+        tankerkoenig_id: stationId,
+        id: stationId,
+        stationId,
+        priceStationId: tankerkoenigId,
+        missingPriceStationId: point.missingPriceStationId === true || !tankerkoenigId,
         name: point.name || 'Tankpunkt',
         brand: point.brand || 'Tankstelle',
         typ: point.typ || point.type || 'tankpunkt',
@@ -3307,8 +4695,8 @@ function normalizeRouteTankpoint(point) {
         routeId: point.routeId || point.autobahn || '',
         richtung: point.richtung || 'beide',
         direktAnAutobahn: point.direktAnAutobahn === true,
-        abfahrtName: point.abfahrtName || '',
-        abfahrtNummer: point.abfahrtNummer || '',
+        abfahrtName: point.abfahrtName || point.exitName || point.ausfahrt || point.exitRef || '',
+        abfahrtNummer: point.abfahrtNummer || point.exitNumber || point.exitRef || '',
         abfahrtEntfernungKm: Number.isFinite(Number(point.abfahrtEntfernungKm)) ? Number(point.abfahrtEntfernungKm) : null,
         abfahrtEntfernungMin: Number.isFinite(Number(point.abfahrtEntfernungMin)) ? Number(point.abfahrtEntfernungMin) : null,
         streckenIndex: point.streckenIndex !== null && point.streckenIndex !== undefined && point.streckenIndex !== '' && Number.isFinite(Number(point.streckenIndex)) ? Number(point.streckenIndex) : null,
@@ -3339,7 +4727,7 @@ async function loadRouteTankpoints(routeId = state.drivingRouteId, options = {})
     const data = await fetchJson(`/api/route/tankpoints.php?route=${encodeURIComponent(requestRouteId)}`);
     state.drivingRouteTankpoints = dedupeRouteTankpoints((data.tankpoints || [])
         .map(normalizeRouteTankpoint)
-        .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng)));
+        .filter((point) => point.tankerkoenig_id && Number.isFinite(point.lat) && Number.isFinite(point.lng)));
     state.drivingRouteLoadKey = loadKey;
     state.drivingRouteLoadedAt = Date.now();
     return state.drivingRouteTankpoints;
@@ -3395,13 +4783,20 @@ function routeTankpointTypeLabel(value) {
     return 'Tankpunkt';
 }
 
+function routeExitNumberLabel(station) {
+    const raw = String(station?.abfahrtNummer || station?.exitNumber || station?.exitRef || '').trim();
+    const match = raw.match(/\d+[a-z]?/i);
+    return match ? `AS ${match[0].toUpperCase()}` : '';
+}
+
 function drivingTankpointRowHtml(station, rank, thresholds) {
     const cls = markerClass(station, thresholds);
     const typeLabel = routeTankpointTypeLabel(station.typ);
     const access = station.direktAnAutobahn
         ? 'direkt an Autobahn'
         : `nahe Abfahrt${station.abfahrtEntfernungMin ? `, ca. ${station.abfahrtEntfernungMin} Min.` : ''}`;
-    const exit = [station.abfahrtNummer ? `AS ${station.abfahrtNummer}` : '', station.abfahrtName].filter(Boolean).join(' ');
+    const exitNumber = routeExitNumberLabel(station);
+    const exit = [exitNumber, station.abfahrtName && station.abfahrtName !== station.abfahrtNummer ? station.abfahrtName : ''].filter(Boolean).join(' ');
     return `
         <button class="driving-row" type="button" data-driving-station-id="${escapeHtml(station.tankerkoenig_id)}">
             <span class="rank ${cls}">${rank}</span>
@@ -3420,45 +4815,111 @@ function drivingTankpointRowHtml(station, rank, thresholds) {
 function drivingTankpointCardHtml(station, rank, thresholds) {
     const cls = markerClass(station, thresholds);
     const typeLabel = routeTankpointTypeLabel(station.typ);
-    const isCity = state.drivingContext === 'city' || station.drivingContext === 'city';
+    const isCity = isLocalDrivingContext() || isLocalDrivingContext(station.drivingContext);
     const isRoutePreview = station.drivingContext === 'route-preview';
     const access = station.direktAnAutobahn
         ? 'direkt an Autobahn'
         : `nahe Abfahrt${station.abfahrtEntfernungMin ? `, ca. ${station.abfahrtEntfernungMin} Min.` : ''}`;
-    const exit = [station.abfahrtNummer ? `AS ${station.abfahrtNummer}` : '', station.abfahrtName].filter(Boolean).join(' ');
+    const exitNumber = routeExitNumberLabel(station);
+    const exit = [exitNumber, station.abfahrtName && station.abfahrtName !== station.abfahrtNummer ? station.abfahrtName : ''].filter(Boolean).join(' ');
     const addressLine = drivingStationAddress(station);
     const routeDetail = `${escapeHtml(typeLabel)} - ${escapeHtml(access)}${exit ? ` - ${escapeHtml(exit)}` : ''}`;
     const subtitle = isCity
         ? `${escapeHtml(addressLine || 'Umkreis')}`
         : `${routeDetail}${addressLine ? ` - ${escapeHtml(addressLine)}` : ''}`;
     const selectedFuel = els.fuel.value;
+    const hasCurrentHighwayPrice = isCity || hasCurrentDrivingPrice(station, selectedFuel, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS);
+    const selectedPrice = hasCurrentHighwayPrice ? fuelPriceValue(station, selectedFuel) : null;
+    const selectedPriceClass = hasCurrentHighwayPrice
+        ? priceClassForFuel(station, selectedFuel)
+        : 'price-rank-unknown';
+    const dataStatus = drivingPriceStatus(station);
+    const directionHtml = isCity
+        ? `<span class="driving-direction">${drivingTankpointDirectionHtml(station, rank)}</span>`
+        : '';
+    const dataStatusHtml = dataStatus.key === 'current' || dataStatus.key === 'live'
+        ? ''
+        : `<span class="driving-data-status ${dataStatus.key}">${escapeHtml(dataStatus.label)}</span>`;
+    const highwayBadgeHtml = isCity
+        ? ''
+        : `<span class="driving-route-badge">${escapeHtml(station.routeId || station.autobahn || station.highway || routeLabel())}</span>`;
     return `
-        <article class="driving-row driving-card" tabindex="0" data-driving-station-id="${escapeHtml(station.tankerkoenig_id)}">
+        <article class="driving-row driving-card${isCity ? ` driving-card-${state.drivingContext === 'rural' ? 'rural' : 'city'}` : ' driving-card-highway'}" tabindex="0" data-driving-station-id="${escapeHtml(station.tankerkoenig_id)}">
             <span class="driving-main">
                 <span class="driving-titleline">
                     ${brandLogoHtml(station)}
+                    ${highwayBadgeHtml}
                 </span>
+                ${dataStatusHtml}
                 <small>${subtitle}</small>
             </span>
-            <span class="driving-direction">
-                ${drivingTankpointDirectionHtml(station, rank)}
-            </span>
+            ${directionHtml}
             <span class="driving-distance">
                 <strong>${Number(station.distance || 0).toFixed(1).replace('.', ',')}</strong>
                 <small>${isCity || isRoutePreview ? 'km entfernt' : 'km voraus'}</small>
             </span>
-            <span class="driving-selected-price ${priceClassForFuel(station, selectedFuel)}">
+            <span class="driving-selected-price ${selectedPriceClass}">
                 <small>${escapeHtml(fuelLabel(selectedFuel))}</small>
-                <strong>${money(fuelPriceValue(station, selectedFuel))}</strong>
+                <strong>${money(selectedPrice)}</strong>
             </span>
         </article>
+    `;
+}
+
+function drivingPriceStatus(station) {
+    const selectedFuel = els.fuel.value;
+    const isCity = isLocalDrivingContext() || isLocalDrivingContext(station?.drivingContext);
+    if (isCity) {
+        return hasCurrentDrivingPrice(station, selectedFuel, NORMAL_SEARCH_REFRESH_MS * 5)
+            ? { key: 'live', label: 'Live' }
+            : { key: 'missing', label: 'keine Daten' };
+    }
+    if (hasCurrentDrivingPrice(station, selectedFuel, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS)) {
+        return { key: 'current', label: 'aktuell' };
+    }
+    if (state.drivingStatus === 'loading-prices' && canRetryDrivingPrice(station)) {
+        return { key: 'loading', label: 'l\u00e4dt' };
+    }
+    if (routePriceStand(station)) {
+        return { key: 'stale', label: 'alt' };
+    }
+    return { key: 'missing', label: 'keine Zuordnung' };
+}
+
+function drivingRefreshVisualizationHtml(stations = state.stations) {
+    if (isLocalDrivingContext() || !stations.length) return '';
+    const counts = stations.reduce((result, station) => {
+        const key = drivingPriceStatus(station).key;
+        result[key] = (result[key] || 0) + 1;
+        return result;
+    }, {});
+    const maxAgeMinutes = Math.round(DRIVE_HIGHWAY_PRICE_MAX_AGE_MS / 60000);
+    const items = [
+        ['current', 'aktuell', counts.current || 0],
+        ['loading', 'l\u00e4dt', counts.loading || 0],
+        ['stale', 'alt', counts.stale || 0],
+        ['missing', 'fehlt', counts.missing || 0],
+    ];
+    return `
+        <section class="driving-refresh-visual" aria-label="Aktualitaet der Drive-Preise">
+            <strong>Preise</strong>
+            <span>Alt ab ${maxAgeMinutes} min</span>
+            <div>
+                ${items.map(([key, label, count]) => `
+                    <span class="driving-refresh-chip ${key}">
+                        <i aria-hidden="true"></i>
+                        ${escapeHtml(label)} ${count}
+                    </span>
+                `).join('')}
+            </div>
+        </section>
     `;
 }
 
 function drivingPriceVisualizationHtml(thresholds) {
     if (!state.stations.length) return '';
     const selectedFuel = els.fuel.value;
-    const isCity = state.drivingContext === 'city';
+    const isCity = isLocalDrivingContext();
     const maxDistance = Math.max(...state.stations.map((station) => Number(station.distance || 0)), 1);
     const cheapestPrice = Math.min(...state.stations
         .map((station) => Number(fuelPriceValue(station, selectedFuel)))
@@ -3493,6 +4954,27 @@ function drivingPriceVisualizationHtml(thresholds) {
     `;
 }
 
+function drivingCalibrationOverlayHtml() {
+    if (!state.drivingActive) return '';
+    const status = String(state.drivingStatus || '');
+    const hasPosition = Boolean(currentDrivingPosition());
+    const hasCompass = Number.isFinite(currentCompassBearing());
+    const hasVisibleStations = Array.isArray(state.stations) && state.stations.length > 0;
+    const isCalibrating = ['starting', 'waiting', 'direction-pending'].includes(status)
+        && (!hasPosition || (!hasVisibleStations && !hasCompass));
+    if (!isCalibrating) return '';
+    const details = isLocalDrivingContext()
+        ? 'Standort wird stabilisiert. Tankstellen werden gleich nach Entfernung und Richtung sortiert.'
+        : 'GPS und Fahrtrichtung werden abgeglichen. Tankpunkte werden gleich in Fahrtrichtung gefiltert.';
+    return `
+        <div class="driving-calibration-overlay" role="status" aria-live="polite">
+            <span class="driving-calibration-spinner" aria-hidden="true"></span>
+            <strong>Drive wird kalibriert</strong>
+            <small>${escapeHtml(details)}</small>
+        </div>
+    `;
+}
+
 function renderDrivingModeList() {
     setCityMode(false);
     setDirectoryMode(false);
@@ -3508,7 +4990,7 @@ function renderDrivingModeList() {
         : null;
     if (destinationFocusState) state.drivingDestinationQuery = destinationFocusState.value;
     const directionLabel = state.drivingDirection === 'Muenchen' ? 'Richtung Sueden' : state.drivingDirection === 'Berlin' ? 'Richtung Norden' : 'wird ermittelt';
-    const speed = Number.isFinite(state.drivingSpeedKmh) ? `${Math.round(state.drivingSpeedKmh)} km/h` : 'Tempo unbekannt';
+    const speed = drivingSpeedText();
     const accuracy = Number.isFinite(state.drivingAccuracy) ? `GPS ${Math.round(state.drivingAccuracy)} m` : 'GPS wird ermittelt';
     const routeDistance = Number.isFinite(state.drivingNearestRouteDistanceKm)
         ? `${state.drivingNearestRouteDistanceKm.toFixed(1).replace('.', ',')} km zur Route`
@@ -3517,35 +4999,70 @@ function renderDrivingModeList() {
         ? `km ${state.drivingCurrentRoutePosition.toFixed(1).replace('.', ',')}`
         : 'km offen';
     const thresholds = thresholdsFor(state.stations);
-    const contextLabel = state.drivingContext === 'city' ? 'Stadtmodus' : `Autobahn ${routeLabel()}`;
+    const contextLabel = state.drivingContext === 'rural'
+        ? 'Landmodus'
+        : state.drivingContext === 'city'
+            ? 'Stadtmodus'
+            : `Autobahn ${routeLabel()}`;
     const template = drivingRouteTemplate();
     const visibleStations = [...state.stations]
         .sort((a, b) => Number(a.distance || 0) - Number(b.distance || 0));
-    els.resultCount.textContent = `Drive ${state.drivingContext === 'city' ? 'Stadt' : routeLabel()}`;
+    const currentPriceCount = isLocalDrivingContext()
+        ? visibleStations.length
+        : visibleStations.filter((station) => hasCurrentDrivingPrice(station, els.fuel.value, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS)).length;
+    const driveTitle = state.drivingContext === 'rural'
+        ? 'Drive Land'
+        : `Drive ${state.drivingContext === 'city' ? 'Stadt' : routeLabel()}`;
+    const mapListButton = state.view === 'map'
+        ? '<button class="drive-header-list-button" type="button" data-driving-header-list>Liste</button>'
+        : '';
+    els.resultCount.innerHTML = `
+        ${mapListButton}
+        <span class="drive-title-text">${escapeHtml(driveTitle)}</span>
+        <span class="drive-speed-chip" aria-label="Geschwindigkeit">${escapeHtml(speed)}</span>
+    `;
     updateSectionHeaderTone();
-    els.resultMeta.textContent = `${accuracy} · ${speed} · ${directionLabel} · ${axisPosition} · ${drivingModePriceStandText(state.stations)}`;
+    const priceMeta = isLocalDrivingContext()
+        ? drivingModePriceStandText(state.stations)
+        : `${currentPriceCount}/${visibleStations.length} aktuelle Preise`;
+    els.resultMeta.textContent = `${accuracy} · ${axisPosition} · ${priceMeta}`;
 
     els.results.innerHTML = `
         <section class="driving-dashboard">
-            ${drivingDestinationFormHtml()}
+            ${drivingRouteInfoOverlayHtml()}
+            ${drivingCalibrationOverlayHtml()}
+            <div class="driving-control-drawer">
+                ${drivingViewToggleHtml()}
+                ${drivingDestinationFormHtml()}
+                ${drivingRefreshVisualizationHtml(visibleStations)}
+            </div>
             ${drivingTestPanelHtml()}
             ${drivingPriceVisualizationHtml(thresholds)}
             <div class="city-station-list">
                 ${visibleStations.length
                     ? visibleStations.map((station, index) => drivingTankpointCardHtml(station, index + 1, thresholds)).join('')
-                    : '<div class="empty-state">Keine passenden Tankpunkte in Fahrtrichtung gefunden.</div>'}
+                    : `<div class="empty-state">${state.drivingStatus === 'loading-prices' ? 'Aktuelle Preise werden geladen ...' : 'Keine Tankpunkte in Fahrtrichtung gefunden.'}</div>`}
             </div>
         </section>
     `;
+    syncDrivingControlsVisibility();
 
-    els.results.querySelector('[data-driving-map]')?.addEventListener('click', () => {
-        openDrivingDestinationMap();
+    els.results.querySelectorAll('[data-driving-view]').forEach((button) => {
+        button.addEventListener('click', () => {
+            if (button.dataset.drivingView === 'map') {
+                openDrivingDestinationMap();
+                return;
+            }
+            setView('list');
+            renderDrivingModeList();
+        });
     });
-    els.results.querySelector('[data-driving-destination-toggle]')?.addEventListener('click', () => {
-        state.drivingDestinationOpen = true;
-        state.drivingDestinationEdited = false;
-        state.drivingDestinationConfirmedOpen = false;
-        renderDrivingModeList();
+    els.results.querySelectorAll('[data-driving-route-info-dismiss]').forEach((element) => {
+        element.addEventListener('click', (event) => {
+            if (event.currentTarget !== event.target && !event.target.closest('.driving-route-info-close, .driving-route-info-ok')) return;
+            state.drivingRouteInfoVisible = false;
+            renderDrivingModeList();
+        });
     });
     els.results.querySelector('[data-driving-route-template]')?.addEventListener('change', (event) => {
         state.drivingRouteTemplateId = event.target.value;
@@ -3562,6 +5079,15 @@ function renderDrivingModeList() {
     const destinationForm = els.results.querySelector('[data-driving-destination-form]');
     const destinationInput = destinationForm?.querySelector('input[name="destination"]');
     const destinationAction = destinationForm?.querySelector('[data-driving-destination-action]');
+    setDrivingKeyboardOpen(Boolean(destinationFocusState));
+    destinationInput?.addEventListener('focus', () => {
+        state.drivingDestinationOpen = true;
+        state.drivingDestinationConfirmedOpen = false;
+        setDrivingKeyboardOpen(true);
+    });
+    destinationInput?.addEventListener('blur', () => {
+        window.setTimeout(() => setDrivingKeyboardOpen(false), 180);
+    });
     destinationInput?.addEventListener('input', (event) => {
         state.drivingDestinationQuery = event.target.value;
         state.drivingDestinationEdited = true;
@@ -3600,6 +5126,7 @@ function renderDrivingModeList() {
         state.drivingDestinationOpen = false;
         state.drivingDestinationEdited = false;
         state.drivingDestinationConfirmedOpen = false;
+        setDrivingKeyboardOpen(false);
         renderDrivingModeList();
         evaluateDrivingModeList();
     });
@@ -3645,6 +5172,20 @@ function renderDrivingModeList() {
 function updateDrivingModeMapMarkers() {
     if (state.view !== 'map') return;
     renderMarkers();
+    const routePoints = Array.isArray(state.drivingRouteGeometry) ? state.drivingRouteGeometry : [];
+    const fallbackPoints = [
+        ...routePoints,
+        ...(state.selectedLocation ? [[state.selectedLocation.lat, state.selectedLocation.lng]] : []),
+        ...(state.drivingDestination ? [[state.drivingDestination.lat, state.drivingDestination.lng]] : []),
+    ].filter(([lat, lng]) => Number.isFinite(Number(lat)) && Number.isFinite(Number(lng)));
+    if (!state.stations.length && fallbackPoints.length && state.map?.type !== 'fallback') {
+        if (fallbackPoints.length === 1) {
+            state.map.setView(fallbackPoints[0], 13, { animate: true });
+        } else {
+            state.map.fitBounds(L.latLngBounds(fallbackPoints).pad(0.22), { maxZoom: 13, animate: true });
+        }
+        return;
+    }
     if (!state.stations.length && state.selectedLocation && state.map?.type !== 'fallback') {
         state.map.setView([state.selectedLocation.lat, state.selectedLocation.lng], 13, { animate: true });
     }
@@ -3652,11 +5193,14 @@ function updateDrivingModeMapMarkers() {
 
 function updateDrivingMapPositionOnly() {
     if (state.view !== 'map' || state.listMode !== 'driving') return;
+    updateDrivingMapSpeed();
+    updateDrivingMapRotation();
     const position = state.drivingSamples[state.drivingSamples.length - 1];
     if (position) {
         state.selectedLocation = { label: 'Aktuelle Position', lat: position.lat, lng: position.lng };
     }
     renderUserLocationMarker();
+    focusDrivingMapByHeading(drivingMapStationsToShow(position || state.selectedLocation), position || state.selectedLocation);
 }
 
 async function applyDrivingTestPosition(formData) {
@@ -3703,10 +5247,10 @@ async function applyDrivingTestPosition(formData) {
     await updateDrivingMode();
 }
 
-async function updateDrivingMode() {
+async function updateDrivingMode(options = {}) {
     if (!state.drivingActive) return;
     setStatus('Fahrt');
-    await loadRouteTankpoints(state.drivingRouteId);
+    if (!options.force && isDrivingDestinationInputActive()) return;
     let position = state.drivingSamples[state.drivingSamples.length - 1];
     const positionStale = !position || Date.now() - Number(position.timestamp || 0) > DRIVE_POSITION_STALE_MS;
     if (positionStale) {
@@ -3721,7 +5265,8 @@ async function updateDrivingMode() {
     }
 
     state.selectedLocation = { label: 'Aktuelle Position', lat: position.lat, lng: position.lng };
-    const route = detectCurrentRoute(position, state.drivingRouteId);
+    await loadRouteTankpoints(state.drivingRouteId);
+    const route = stabilizedDrivingRoute(detectCurrentRoute(position, state.drivingRouteId), position);
     if (route.projection && state.drivingSamples.length) {
         state.drivingSamples[state.drivingSamples.length - 1] = {
             ...state.drivingSamples[state.drivingSamples.length - 1],
@@ -3733,42 +5278,52 @@ async function updateDrivingMode() {
     const templateDirection = drivingTemplateDirection();
     const direction = route.onRoute ? (detectDrivingDirectionOnRoute() || templateDirection) : detectDrivingDirection();
     state.drivingDirection = direction;
-    const showRoutePreview = Boolean(state.drivingDestination && state.drivingRouteSuggestion);
-    const offRouteTooLong = !route.onRoute
+    const hasDestinationRoute = Boolean(state.drivingDestination && state.drivingRouteSuggestion);
+    const hasRoutePreviewCache = Boolean(state.drivingRoutePreviewCache?.stations?.length);
+    const confirmedDestinationHighway = isConfirmedDestinationHighwayRoute(route);
+    const showRoutePreview = hasDestinationRoute && (route.onRoute || route.held || confirmedDestinationHighway);
+    let offRouteTooLong = !route.onRoute
         && state.drivingOffRouteSince
         && Date.now() - state.drivingOffRouteSince >= DRIVE_ROUTE_LEFT_AFTER_MS;
 
     if (showRoutePreview) {
-        state.drivingOffRouteSince = null;
+        if (route.onRoute || confirmedDestinationHighway) {
+            state.drivingOffRouteSince = null;
+        } else if (!state.drivingOffRouteSince) {
+            state.drivingOffRouteSince = Date.now();
+            offRouteTooLong = false;
+        }
         state.drivingContext = 'highway';
         state.drivingLivePriceMessage = '';
-        let routePreviewStations = getRoutePreviewTankpoints(position, 50);
-        const routePreviewDisplayLimit = state.drivingDestination ? 50 : 10;
+        if (confirmedDestinationHighway) await reevaluateDrivingDestinationFromHighway(position, route);
+        if (offRouteTooLong) resetDrivingRoutePreviewCache();
+        let routePreviewStations = routePreviewStationsForDriving(position, state.drivingDestination ? DRIVE_ROUTE_DESTINATION_PREVIEW_LIMIT : 120);
+        const routePreviewDisplayLimit = state.drivingDestination ? routePreviewStations.length : 10;
         if (routePreviewStations.some((station) => !hasCurrentDrivingPrice(station, els.fuel.value, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS))) {
             state.stations = routePreviewStations.slice(0, routePreviewDisplayLimit);
             state.drivingStatus = 'loading-prices';
             state.drivingMessage = 'Preise werden aktualisiert';
-            renderDrivingModeList();
+            if (!isDrivingDestinationInputActive()) renderDrivingModeList();
             routePreviewStations = await loadLivePricesForDrivingStations(routePreviewStations);
+            routePreviewStations = mergeRoutePreviewCachePrices(routePreviewStations);
         }
-        const pricedRoutePreviewStations = routePreviewStations
-            .filter((station) => hasDrivingPrice(station, els.fuel.value));
+        const currentRoutePreviewStations = routePreviewStations
+            .filter((station) => hasCurrentDrivingPrice(station, els.fuel.value, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS));
         state.stations = routePreviewStations.slice(0, routePreviewDisplayLimit);
         state.drivingStatus = state.stations.length ? 'ready' : 'empty';
         state.drivingMessage = state.stations.length
-            ? (state.drivingLivePriceMessage || (pricedRoutePreviewStations.length
-                ? `${state.stations.length} Tankpunkte an der Strecke`
-                : `${state.stations.length} Tankpunkte an der Strecke - Preise noch nicht verfuegbar`))
-            : 'Keine Tankpunkte an der vorbereiteten Strecke gefunden';
+            ? (state.drivingLivePriceMessage || `${currentRoutePreviewStations.length}/${state.stations.length} Tankpunkte mit aktuellen Preisen an der Strecke`)
+            : (state.drivingLivePriceMessage || 'Keine Tankpunkte mit aktuellen Preisen an der vorbereiteten Strecke gefunden');
     } else if (route.onRoute && !direction) {
         state.drivingOffRouteSince = null;
-        state.drivingContext = 'city';
-        state.stations = await loadLiveCityDriveStations(position, 10);
+        state.stations = await loadLocalDriveStations(position, 10);
         state.drivingStatus = state.stations.length ? 'ready' : 'direction-pending';
         state.drivingMessage = state.stations.length
-            ? 'Keine Bewegung erkannt - Standortumkreis aktiv'
+            ? (hasDestinationRoute
+                ? `Ziel aktiv - ${state.drivingContext === 'rural' ? 'Landmodus' : 'Stadtmodus'} bis zur Autobahn`
+                : 'Keine Bewegung erkannt - Standortumkreis aktiv')
             : (route.uncertain ? 'Route unsicher - Standort erkannt, Fahrtrichtung offen' : 'Standort erkannt - Fahrtrichtung offen');
-    } else if (route.onRoute && direction) {
+    } else if (route.onRoute && direction && !hasDestinationRoute) {
         state.drivingOffRouteSince = null;
         state.drivingContext = 'highway';
         state.drivingLivePriceMessage = '';
@@ -3777,43 +5332,41 @@ async function updateDrivingMode() {
             state.stations = [];
             state.drivingStatus = 'loading-prices';
             state.drivingMessage = 'Preise werden aktualisiert';
-            renderDrivingModeList();
+            if (!isDrivingDestinationInputActive()) renderDrivingModeList();
             stationsAhead = await loadLivePricesForDrivingStations(stationsAhead);
         }
-        const pricedStationsAhead = stationsAhead
-            .filter((station) => hasDrivingPrice(station, els.fuel.value));
-        state.stations = (pricedStationsAhead.length ? pricedStationsAhead : stationsAhead)
-            .slice(0, 10);
+        const currentStationsAhead = stationsAhead
+            .filter((station) => hasCurrentDrivingPrice(station, els.fuel.value, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS));
+        state.stations = stationsAhead.slice(0, 10);
         state.drivingStatus = state.stations.length ? 'ready' : 'empty';
         state.drivingMessage = state.stations.length
-            ? (state.drivingLivePriceMessage || (pricedStationsAhead.length
-                ? (route.uncertain ? 'GPS/Route unsicher - Tankpunkte werden weiter entlang der erkannten Achse angezeigt' : '')
-                : 'Tankpunkte gefunden - Preise noch nicht verfuegbar'))
-            : 'Keine passenden Tankpunkte gefunden';
+            ? (state.drivingLivePriceMessage || (currentStationsAhead.length
+                ? (route.held ? 'GPS springt - Autobahnmodus bleibt aktiv' : (route.uncertain ? 'GPS/Route unsicher - Tankpunkte werden weiter entlang der erkannten Achse angezeigt' : ''))
+                : 'Tankpunkte gefunden - aktuelle Preise fehlen noch'))
+            : (state.drivingLivePriceMessage || 'Keine passenden Tankpunkte mit aktuellen Preisen gefunden');
     } else {
         if (!state.drivingOffRouteSince) state.drivingOffRouteSince = Date.now();
-        state.drivingContext = 'city';
         state.drivingDetectedRouteId = null;
-        state.stations = await loadLiveCityDriveStations(position, 10);
+        state.stations = await loadLocalDriveStations(position, 10);
         state.drivingStatus = state.stations.length ? 'ready' : 'empty';
         state.drivingMessage = state.stations.length
-            ? (state.drivingCityLastMessage || (offRouteTooLong ? 'Vorbereitete Strecke verlassen - Umgebungssuche aktiv' : 'Umgebungssuche aktiv - nicht entlang der vorbereiteten Autobahn'))
+            ? ((state.drivingContext === 'rural' ? state.drivingRuralLastMessage : state.drivingCityLastMessage) || (state.drivingContext === 'rural'
+                ? (hasDestinationRoute ? 'Ziel aktiv - Landmodus bis zur Autobahn' : 'Landmodus - wenige Tankpunkte im Umkreis, keine Autobahn erkannt')
+                : (hasDestinationRoute ? 'Ziel aktiv - Stadtmodus bis zur Autobahn' : (offRouteTooLong ? 'Vorbereitete Strecke verlassen - Umgebungssuche aktiv' : 'Umgebungssuche aktiv - nicht entlang der vorbereiteten Autobahn'))))
             : (offRouteTooLong ? 'Vorbereitete Strecke verlassen' : 'Keine Tankstellen mit Preisinformationen im Umkreis gefunden');
     }
 
     if (state.view === 'map') updateDrivingModeMapMarkers();
+    if (isDrivingDestinationInputActive()) return;
     renderDrivingModeList();
 }
 
 async function evaluateDrivingModeList() {
     if (!state.drivingActive || state.drivingUpdateInProgress) return;
     if (state.drivingDestinationOpen) return;
-    if (state.view === 'map') {
-        updateDrivingMapPositionOnly();
-        return;
-    }
     if (isDrivingRestMode() && state.stations.length) {
         state.drivingMessage = state.drivingMessage || 'Ruhemodus - Liste bleibt stabil';
+        if (state.view === 'map') updateDrivingMapPositionOnly();
         return;
     }
     state.drivingUpdateInProgress = true;
@@ -3822,7 +5375,7 @@ async function evaluateDrivingModeList() {
     } catch (error) {
         state.drivingStatus = 'error';
         state.drivingMessage = error.message || 'Fahrmodus konnte nicht aktualisiert werden.';
-        renderDrivingModeList();
+        if (!isDrivingDestinationInputActive()) renderDrivingModeList();
         setStatus('Fehler');
     } finally {
         state.drivingUpdateInProgress = false;
@@ -3847,12 +5400,16 @@ function rememberDrivingPosition(position, { triggerInitialUpdate = true } = {})
     const previousCount = state.drivingSamples.length;
     state.drivingSamples.push(sample);
     state.drivingSamples = state.drivingSamples.slice(-6);
-    if (triggerInitialUpdate && previousCount === 0) evaluateDrivingModeList();
+    state.drivingAccuracy = sample.accuracy;
+    const speedKmh = estimateDrivingSpeedKmh();
+    if (Number.isFinite(speedKmh)) state.drivingSpeedKmh = speedKmh;
+    if (triggerInitialUpdate && previousCount === 0 && !isDrivingDestinationInputActive()) evaluateDrivingModeList();
     return sample;
 }
 
 function handleDrivingPosition(position) {
     rememberDrivingPosition(position);
+    syncDrivingControlsVisibility();
     updateDrivingMapPositionOnly();
 }
 
@@ -3880,6 +5437,16 @@ async function requestDriveWakeLock() {
         });
     } catch {
         state.wakeLock = null;
+    }
+}
+
+async function requestPortraitOrientationLock() {
+    const orientation = screen?.orientation;
+    if (!orientation || typeof orientation.lock !== 'function') return;
+    try {
+        await orientation.lock('portrait');
+    } catch {
+        // Browser may allow orientation lock only in installed PWA/fullscreen mode.
     }
 }
 
@@ -3911,8 +5478,8 @@ function handleDrivingOrientation(event) {
     if (!Number.isFinite(heading)) return;
     state.drivingCompassHeading = heading;
     state.drivingCompassHeadingAt = Date.now();
-    if (!isDrivingRestMode()) return;
-    if (Date.now() - Number(state.drivingCompassRenderAt || 0) < DRIVE_COMPASS_REFRESH_MS) return;
+    if (isDrivingDestinationInputActive()) return;
+    if (Date.now() - Number(state.drivingCompassRenderAt || 0) < DRIVE_COMPASS_RENDER_FAST_MS) return;
     state.drivingCompassRenderAt = Date.now();
     if (state.listMode === 'driving' && state.view === 'list') renderDrivingModeList();
     if (state.listMode === 'driving' && state.view === 'map') updateDrivingMapPositionOnly();
@@ -3956,17 +5523,24 @@ function stopDrivingCompass() {
 }
 
 async function startDrivingMode(routeId = 'ALL') {
+    captureNormalSearchBeforeDrive();
+    requestPortraitOrientationLock();
+    state.drivingControlsVisibleUntil = Date.now() + DRIVE_CONTROL_REVEAL_MS;
     state.listMode = 'driving';
     state.drivingRouteId = routeId;
     state.drivingDetectedRouteId = null;
     state.drivingActive = true;
     state.drivingSamples = [];
     state.drivingRouteGeometry = [];
+    resetDrivingRoutePreviewCache();
     state.drivingStableDirection = drivingTemplateDirection();
     state.drivingRouteProjection = null;
+    state.drivingLastHighwayAt = null;
+    state.drivingLastHighwayRouteId = null;
+    state.drivingLastHighwayProjection = null;
     state.drivingOffRouteSince = null;
     state.drivingStatus = 'starting';
-    state.drivingMessage = 'Fahrtrichtung wird ermittelt';
+    state.drivingMessage = 'Standort wird ermittelt';
     state.selectedId = null;
     setView('list');
     renderDetail(null);
@@ -3977,15 +5551,6 @@ async function startDrivingMode(routeId = 'ALL') {
     if (!navigator.geolocation) {
         state.drivingStatus = 'blocked';
         state.drivingMessage = 'Standortfreigabe erforderlich';
-        renderDrivingModeList();
-        return;
-    }
-
-    try {
-        await loadRouteTankpoints(routeId);
-    } catch (error) {
-        state.drivingStatus = 'error';
-        state.drivingMessage = error.message || 'Autobahn-Tankpunkte konnten nicht geladen werden.';
         renderDrivingModeList();
         return;
     }
@@ -4002,6 +5567,16 @@ async function startDrivingMode(routeId = 'ALL') {
     });
     if (state.drivingUpdateTimer !== null) window.clearInterval(state.drivingUpdateTimer);
     state.drivingUpdateTimer = window.setInterval(evaluateDrivingModeList, DRIVE_UPDATE_INTERVAL_MS);
+    refreshDrivingCurrentPosition().then(() => evaluateDrivingModeList());
+
+    try {
+        await loadRouteTankpoints(routeId);
+        evaluateDrivingModeList();
+    } catch (error) {
+        state.drivingStatus = 'error';
+        state.drivingMessage = error.message || 'Autobahn-Tankpunkte konnten nicht geladen werden.';
+        renderDrivingModeList();
+    }
 }
 
 function stopDrivingMode(restore = true) {
@@ -4015,8 +5590,11 @@ function stopDrivingMode(restore = true) {
     state.drivingUpdateTimer = null;
     state.drivingUpdateInProgress = false;
     state.drivingActive = false;
+    clearDrivingControlsTimer();
+    state.drivingControlsVisibleUntil = 0;
     state.drivingSamples = [];
     state.drivingRouteGeometry = [];
+    resetDrivingRoutePreviewCache();
     state.drivingStatus = 'inactive';
     state.drivingDirection = null;
     state.drivingDetectedRouteId = null;
@@ -4027,15 +5605,22 @@ function stopDrivingMode(restore = true) {
     state.drivingNearestRouteDistanceKm = null;
     state.drivingCurrentRoutePosition = null;
     state.drivingRouteProjection = null;
+    state.drivingLastHighwayAt = null;
+    state.drivingLastHighwayRouteId = null;
+    state.drivingLastHighwayProjection = null;
     state.drivingStableDirection = null;
     state.drivingOffRouteSince = null;
     els.appShell.classList.remove('driving-mode');
+    els.appShell.classList.remove('driving-controls-collapsed');
     clearDrivingRouteOverlay();
-    state.stations = [];
-    state.selectedLocation = null;
     state.listMode = 'results';
     renderDetail(null);
-    if (restore) restoreStoredStartState();
+    if (restore) {
+        restoreNormalSearchAfterDrive();
+    } else {
+        state.stations = [];
+        state.selectedLocation = null;
+    }
     updateBottomNav();
 }
 
@@ -4086,9 +5671,12 @@ function syncAutobahnVisibleStations() {
 }
 
 function normalizeAutobahnStation(station) {
+    const tankerkoenigId = tankerkoenigIdFromStation(station);
     return {
         autobahnMode: true,
-        tankerkoenig_id: station.stationId,
+        tankerkoenig_id: tankerkoenigId,
+        stationId: tankerkoenigId,
+        priceStationId: tankerkoenigId,
         type: station.type || '',
         directorySource: station.directorySource || '',
         name: station.name || 'Autobahn-Tankstelle',
@@ -4111,7 +5699,7 @@ function normalizeAutobahnStation(station) {
         features: Array.isArray(station.features) ? station.features : [],
         prices: station.prices || null,
         priceMatch: station.priceMatch || null,
-        tankerkoenigId: station.tankerkoenigId || '',
+        tankerkoenigId,
     };
 }
 
@@ -4130,7 +5718,7 @@ async function refreshSelectedAutobahnPrices(target = 'list') {
         });
         const data = await fetchJson(`/api/autobahn/stations.php?${params.toString()}`);
         let updated = (data.stations || []).map(normalizeAutobahnStation)
-            .filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lng));
+            .filter((station) => station.tankerkoenig_id && Number.isFinite(station.lat) && Number.isFinite(station.lng));
         const byId = new Map(state.autobahnStations.map((station) => [station.tankerkoenig_id, station]));
         updated.forEach((station) => byId.set(station.tankerkoenig_id, station));
         state.autobahnStations = [...byId.values()];
@@ -4385,7 +5973,7 @@ async function loadAutobahnStations(target = 'list', requestId = state.navReques
         const data = await fetchJson('/api/autobahn/stations.php?hasFuel=1&prices=1');
         if (!isCurrentNavigation(requestId, 'autobahn')) return;
         state.autobahnStations = (data.stations || []).map(normalizeAutobahnStation)
-            .filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lng));
+            .filter((station) => station.tankerkoenig_id && Number.isFinite(station.lat) && Number.isFinite(station.lng));
         syncAutobahnVisibleStations();
 
         setStatus('Aktuell');
@@ -4458,6 +6046,7 @@ function loadLastLocation() {
 
 function saveUserSettings() {
     const settings = {
+        vehicleMode: els.vehicleMode?.value || state.vehicleMode || DEFAULT_VEHICLE_MODE,
         radius: els.radius.value,
         fuel: els.fuel.value,
         limit: els.limit.value,
@@ -4472,6 +6061,9 @@ function restoreUserSettings() {
     try {
         const settings = JSON.parse(localStorage.getItem('tankprofi_user_settings') || 'null');
         if (!settings) return;
+        if (settings.vehicleMode) {
+            setVehicleMode(settings.vehicleMode, { persist: false, silent: true });
+        }
         if (settings.radius && [...els.radius.options].some((option) => option.value === String(settings.radius))) {
             els.radius.value = String(settings.radius);
         }
@@ -4489,6 +6081,31 @@ function restoreUserSettings() {
     } catch {
         localStorage.removeItem('tankprofi_user_settings');
     }
+}
+
+function setVehicleMode(mode, options = {}) {
+    const nextMode = mode === 'electric' ? 'electric' : DEFAULT_VEHICLE_MODE;
+    state.vehicleMode = nextMode;
+    if (els.vehicleMode) els.vehicleMode.value = nextMode;
+    if (options.persist !== false) {
+        saveUserSettings();
+    }
+    if (!options.silent && nextMode === 'electric') {
+        setStatus('Elektro vorgemerkt');
+        if (els.resultMeta && state.listMode === 'results' && !state.stations.length) {
+            els.resultMeta.textContent = 'Ladesaeulen-Modus ist vorgemerkt. Die Datenquelle wird als naechster Schritt angebunden.';
+        }
+    }
+}
+
+function chooseVehicleMode(mode) {
+    setVehicleMode(mode);
+    if (els.vehicleChoice) els.vehicleChoice.hidden = true;
+}
+
+function showVehicleChoiceIfNeeded() {
+    if (!els.vehicleChoice) return;
+    els.vehicleChoice.hidden = false;
 }
 
 function loadFavorites() {
@@ -4708,14 +6325,24 @@ function updateBottomNav() {
     updateSectionHeaderTone();
     els.driveMode?.classList.toggle('active', state.listMode === 'driving');
     if (els.driveMode) {
-        const label = state.drivingActive
-            ? (state.drivingContext === 'city' ? 'Zurück' : 'No Drive')
-            : 'Drive';
         els.driveMode.replaceChildren();
         const badge = document.createElement('span');
         badge.setAttribute('aria-hidden', 'true');
-        badge.textContent = 'A';
-        els.driveMode.append(badge, document.createTextNode(label));
+        if (state.drivingActive) {
+            const icon = document.createElement('span');
+            icon.className = 'drive-back-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.textContent = '←';
+            badge.textContent = 'A';
+            els.driveMode.append(icon, badge);
+            els.driveMode.setAttribute('aria-label', 'Drive beenden und zurück');
+            els.driveMode.title = 'Zurück';
+        } else {
+            badge.textContent = 'A';
+            els.driveMode.append(badge, document.createTextNode('Drive'));
+            els.driveMode.setAttribute('aria-label', 'Drive starten');
+            els.driveMode.title = 'Drive starten';
+        }
         els.driveMode.setAttribute('aria-pressed', state.drivingActive ? 'true' : 'false');
     }
     els.bottomNavButtons.forEach((button) => {
@@ -4753,20 +6380,55 @@ async function loadTankprofiStats() {
 
     els.tankprofiStatsStatus.textContent = 'Datenbestand wird geladen ...';
     try {
-        const data = await fetchJson('/api/admin/stats.php');
-        const format = (value) => new Intl.NumberFormat('de-DE').format(Number(value || 0));
-        els.tankprofiAddressCount.textContent = format(data.addresses);
-        if (els.tankprofiStationCount) els.tankprofiStationCount.textContent = format(data.stations);
-        if (els.tankprofiAutohofCount) els.tankprofiAutohofCount.textContent = format(data.autohoefe);
-        if (els.tankprofiRastCount) els.tankprofiRastCount.textContent = format(data.raststaetten);
-        if (els.tankprofiChargingCount) els.tankprofiChargingCount.textContent = format(data.ladeparks);
-        if (els.tankprofiTruckCount) els.tankprofiTruckCount.textContent = format(data.truckStops);
-        els.tankprofiStatsStatus.textContent = Number.isFinite(Date.parse(data.updatedAt))
-            ? `Stand ${new Date(data.updatedAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`
-            : 'Aktualisiert';
+        const quickData = await fetchJson('/api/admin/stats.php?quick=1', { timeoutMs: 20000 });
+        renderTankprofiStatsData(quickData);
+        if (els.tankprofiKoenigAuditStats) els.tankprofiKoenigAuditStats.textContent = 'Audit und Logs werden geladen ...';
+        if (els.tankprofiDeviceStats) els.tankprofiDeviceStats.textContent = 'Geraetedaten werden geladen ...';
+        els.tankprofiStatsStatus.textContent = 'Basisdaten geladen - Logs werden nachgeladen ...';
+        const fullData = await fetchJson('/api/admin/stats.php', { timeoutMs: 90000 });
+        renderTankprofiStatsData(fullData);
     } catch (error) {
         els.tankprofiStatsStatus.textContent = error.message || 'Datenbestand konnte nicht geladen werden.';
     }
+}
+
+function renderTankprofiStatsData(data) {
+    const format = (value) => new Intl.NumberFormat('de-DE').format(Number(value || 0));
+    els.tankprofiAddressCount.textContent = format(data.addresses);
+    if (els.tankprofiStationCount) els.tankprofiStationCount.textContent = format(data.stations);
+    if (els.tankprofiAutohofCount) els.tankprofiAutohofCount.textContent = format(data.autohoefe);
+    if (els.tankprofiRastCount) els.tankprofiRastCount.textContent = format(data.raststaetten);
+    if (els.tankprofiChargingCount) els.tankprofiChargingCount.textContent = format(data.ladeparks);
+    if (els.tankprofiTruckCount) els.tankprofiTruckCount.textContent = format(data.truckStops);
+    if (els.tankprofiKoenigSearchCount) els.tankprofiKoenigSearchCount.textContent = format(data.tankkoenig?.appSearches);
+    if (els.tankprofiBerlinKoenigCount) {
+        const berlinStats = (data.tankkoenig?.cityStats || []).find((item) => item.city === 'berlin');
+        els.tankprofiBerlinKoenigCount.textContent = data.partial ? '...' : format(berlinStats?.uniqueKoenigIds);
+    }
+    if (!data.partial && els.tankprofiKoenigAuditStats) {
+        const audit = data.tankkoenig?.audit || {};
+        const topSource = audit.sourceCounts?.[0];
+        els.tankprofiKoenigAuditStats.innerHTML = [
+            ['Koenig-IDs', audit.uniqueKoenigIds],
+            ['Preis <= 2h', audit.freshPrice2h],
+            ['Preis <= 24h', audit.freshPrice24h],
+            ['ohne Preis', audit.noStoredPrice],
+            ['ohne ID', audit.withoutKoenigId],
+            ['ID doppelt', audit.duplicateKoenigIdGroups],
+            ['Adressgruppen >1', audit.multiAddressGroups],
+            ['Koordinaten >1', audit.multiCoordinateGroups],
+            [topSource ? `Top Quelle ${topSource.label}` : 'Top Quelle', topSource?.count],
+        ].map(([label, value]) => `<span><b>${escapeHtml(format(value))}</b>${escapeHtml(label)}</span>`).join('');
+    }
+    if (!data.partial && els.tankprofiDeviceStats) {
+        const devices = data.tankkoenig?.deviceStats || [];
+        els.tankprofiDeviceStats.innerHTML = devices.length
+            ? devices.map((item) => `<span><b>${escapeHtml(format(item.count))}</b>${escapeHtml(item.label)}</span>`).join('')
+            : 'Noch keine Geraetedaten.';
+    }
+    els.tankprofiStatsStatus.textContent = Number.isFinite(Date.parse(data.updatedAt))
+        ? `Stand ${new Date(data.updatedAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr${data.partial ? ' - Logs folgen' : ''}`
+        : 'Aktualisiert';
 }
 
 async function copyShareLink() {
@@ -5006,6 +6668,10 @@ function restoreStartState() {
 }
 
 function bindEvents() {
+    updateViewportHeightVar();
+    window.addEventListener('resize', updateViewportHeightVar);
+    window.visualViewport?.addEventListener('resize', updateViewportHeightVar);
+    window.visualViewport?.addEventListener('scroll', updateViewportHeightVar);
     els.searchInput.addEventListener('focus', clearDeliveredSearchText);
     els.searchInput.addEventListener('pointerdown', clearDeliveredSearchText);
     els.searchInput.addEventListener('input', updateSuggestions);
@@ -5033,8 +6699,20 @@ function bindEvents() {
         }
     });
     document.addEventListener('visibilitychange', handleDriveWakeLockVisibility);
+    els.results.addEventListener('pointerdown', () => {
+        if (state.listMode === 'driving' && state.view === 'list') revealDrivingControls();
+    });
+    els.results.addEventListener('scroll', () => {
+        if (els.results.scrollTop > 4) scheduleDrivingListAutoTop();
+    }, { passive: true });
     els.viewButtons.forEach((button) => {
         button.addEventListener('click', () => setView(button.dataset.view));
+    });
+    els.resultCount.addEventListener('click', (event) => {
+        if (!event.target.closest('[data-driving-header-list]')) return;
+        if (state.listMode !== 'driving') return;
+        setView('list');
+        renderDrivingModeList();
     });
     els.bottomNavButtons.forEach((button) => {
         button.addEventListener('click', () => {
@@ -5127,6 +6805,9 @@ function bindEvents() {
         setHelpOpen(!els.helpSheet?.classList.contains('open'));
     });
     els.helpClose?.addEventListener('click', () => setHelpOpen(false));
+    els.vehicleChoice?.querySelectorAll('[data-vehicle-choice]').forEach((button) => {
+        button.addEventListener('click', () => chooseVehicleMode(button.dataset.vehicleChoice));
+    });
     els.shareToggle?.addEventListener('click', () => {
         setShareOpen(els.shareContent?.hidden ?? true);
     });
@@ -5140,6 +6821,11 @@ function bindEvents() {
     });
     els.driveMode?.addEventListener('click', () => {
         if (state.drivingActive) {
+            if (state.listMode === 'driving' && state.view === 'map') {
+                setView('list');
+                renderDrivingModeList();
+                return;
+            }
             stopDrivingMode(true);
             return;
         }
@@ -5165,9 +6851,13 @@ function bindEvents() {
         renderResults();
         renderMarkers();
     });
-    [els.radius, els.fuel, els.limit, els.openOnly, els.pricedOnly].forEach((el) => {
+    [els.vehicleMode, els.radius, els.fuel, els.limit, els.openOnly, els.pricedOnly].filter(Boolean).forEach((el) => {
         el.addEventListener('change', () => {
-            saveUserSettings();
+            if (el === els.vehicleMode) {
+                setVehicleMode(els.vehicleMode.value);
+            } else {
+                saveUserSettings();
+            }
             if (state.listMode === 'cities') {
                 if (state.cityMapMode === 'stationsList') {
                     loadCityStations(state.selectedCityId, 'list');
@@ -5205,3 +6895,4 @@ setView('list');
 updateFavoritesButton();
 els.results.innerHTML = '<div class="empty-state">Adresse eingeben oder Standort verwenden.</div>';
 restoreStartState();
+showVehicleChoiceIfNeeded();

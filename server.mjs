@@ -166,6 +166,32 @@ async function handleRouteTankpoints(url, res) {
   sendJson(res, data);
 }
 
+async function proxyProductionApi(req, url, res) {
+  const upstream = new URL(`https://tankprofi.web.app${url.pathname}${url.search}`);
+  const method = String(req.method || 'GET').toUpperCase();
+  const headers = {
+    accept: 'application/json',
+    'user-agent': 'Tankprofi/1.0 (local-dev-proxy)',
+  };
+  const options = { method, headers };
+  if (!['GET', 'HEAD'].includes(method)) {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const body = Buffer.concat(chunks);
+    if (body.length) {
+      options.body = body;
+      if (req.headers['content-type']) headers['content-type'] = req.headers['content-type'];
+    }
+  }
+  const response = await fetch(upstream, options);
+  const text = await response.text();
+  res.writeHead(response.status, {
+    'content-type': response.headers.get('content-type') || 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+  });
+  res.end(text);
+}
+
 async function serveStatic(url, res) {
   const requested = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
   const filePath = path.normalize(path.join(publicDir, requested));
@@ -187,6 +213,10 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/search.php') return await handleSearch(url, res);
     if (url.pathname === '/api/route/tankpoints.php') return await handleRouteTankpoints(url, res);
     if (url.pathname === '/api/history.php') return sendJson(res, { items: [] });
+    if (url.pathname.startsWith('/api/admin/')) return await proxyProductionApi(req, url, res);
+    if (url.pathname === '/api/city-snapshot.php' || url.pathname === '/api/city-stations.php' || url.pathname === '/api/autobahn/stations.php') {
+      return await proxyProductionApi(req, url, res);
+    }
     if (url.pathname.startsWith('/api/')) return sendJson(res, { error: `Lokaler API-Endpunkt fehlt: ${url.pathname}` }, 404);
     await serveStatic(url, res);
   } catch (error) {

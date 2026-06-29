@@ -6,12 +6,12 @@
     <meta name="theme-color" content="#0b1f3a">
     <title>Tankprofi</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="apple-touch-icon" href="assets/img/tankprofi-home-icon.png?v=20260626-raiffeisen-logo">
+    <link rel="apple-touch-icon" href="assets/img/tankprofi-home-icon.png?v=20260629-start-vehicle-choice-every-start">
     <link rel="preconnect" href="https://unpkg.com">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
-    <link rel="stylesheet" href="assets/css/app.css?v=20260626-raiffeisen-logo">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260629-start-vehicle-choice-every-start">
 </head>
 <body>
     <section class="splash-screen" id="splashScreen" aria-label="Tankprofi wird geladen">
@@ -31,10 +31,26 @@
         </button>
         <div class="splash-loader" aria-hidden="true"></div>
     </section>
+    <section class="vehicle-choice" id="vehicleChoice" aria-label="Antriebsart waehlen" hidden>
+        <div class="vehicle-choice-card">
+            <span class="vehicle-choice-kicker">Tankprofi starten</span>
+            <strong>Wie bist du unterwegs?</strong>
+            <div class="vehicle-choice-actions">
+                <button type="button" data-vehicle-choice="combustion">
+                    <span class="vehicle-choice-icon vehicle-choice-fuel" aria-hidden="true"><i></i></span>
+                    <span>Verbrenner</span>
+                </button>
+                <button type="button" data-vehicle-choice="electric">
+                    <span class="vehicle-choice-icon vehicle-choice-electric" aria-hidden="true"><i></i></span>
+                    <span>Elektrisch</span>
+                </button>
+            </div>
+        </div>
+    </section>
     <div class="app-shell view-list" id="appShell">
         <aside class="control-pane" aria-label="Suche und Ergebnisse">
             <header class="brand-bar">
-                <img class="brand-logo-mark" src="assets/img/tankprofi-home-icon.png?v=20260626-raiffeisen-logo" width="56" height="56" alt="">
+                <img class="brand-logo-mark" src="assets/img/tankprofi-home-icon.png?v=20260629-start-vehicle-choice-every-start" width="56" height="56" alt="">
                 <div class="brand-title">
                     <p class="eyebrow">Live Tankpreise</p>
                     <h1>Tankprofi</h1>
@@ -83,7 +99,8 @@
             <div class="app-content">
                 <section class="map-pane" aria-label="Karte">
                     <div id="map"></div>
-                    <button class="driving-map-back" id="drivingMapBackButton" type="button">Fahranzeige</button>
+                    <button class="driving-map-back" id="drivingMapBackButton" type="button">Liste</button>
+                    <div class="driving-map-speed" id="drivingMapSpeed" aria-label="Geschwindigkeit">0 km/h</div>
                     <div class="map-legend" aria-label="Marker Legende">
                         <span><i class="dot cheap"></i>günstig</span>
                         <span><i class="dot mid"></i>mittel</span>
@@ -179,6 +196,13 @@
                 <div class="settings-body" id="settingsBody">
                     <div class="filter-grid">
                         <div class="field-group">
+                            <label for="vehicleModeSelect">Antrieb</label>
+                            <select id="vehicleModeSelect">
+                                <option value="combustion">Verbrenner</option>
+                                <option value="electric">Elektrisch</option>
+                            </select>
+                        </div>
+                        <div class="field-group">
                             <label for="radiusSelect">Radius</label>
                             <select id="radiusSelect">
                                 <option value="2">2 km</option>
@@ -216,12 +240,20 @@
                                 <option value="total">TotalEnergies</option>
                                 <option value="jet">Jet</option>
                                 <option value="hem">HEM</option>
+                                <option value="oil">OIL!</option>
                                 <option value="avia">Avia</option>
                                 <option value="avex">AVEX</option>
                                 <option value="star">Star</option>
                                 <option value="bft">BFT</option>
                                 <option value="honsel">Honsel</option>
                                 <option value="raiffeisen">Raiffeisen</option>
+                                <option value="sb-tank">SB Tank</option>
+                                <option value="markant">Markant</option>
+                                <option value="access">Access</option>
+                                <option value="v-markt">V-Markt</option>
+                                <option value="elan">ELAN</option>
+                                <option value="bk">BK</option>
+                                <option value="allguth">Allguth</option>
                                 <option value="agip">Agip / Eni</option>
                             </select>
                         </div>
@@ -288,6 +320,19 @@
                                 <b id="tankprofiTruckCount">...</b>
                             </div>
                         </div>
+                        <div class="stats-log-panel" aria-label="Tankerkoenig Abfragen">
+                            <strong>Tankerkoenig-Log</strong>
+                            <div class="stat-item">
+                                <span>App-Abfragen</span>
+                                <b id="tankprofiKoenigSearchCount">...</b>
+                            </div>
+                            <div class="stat-item">
+                                <span>Berlin Koenig-IDs</span>
+                                <b id="tankprofiBerlinKoenigCount">...</b>
+                            </div>
+                            <div class="stats-device-list" id="tankprofiKoenigAuditStats">Audit wird geladen.</div>
+                            <div class="stats-device-list" id="tankprofiDeviceStats">Noch keine Geraetedaten.</div>
+                        </div>
                         <span id="tankprofiStatsStatus">Wird beim Öffnen aktualisiert.</span>
                         <div class="stats-update-panel" aria-label="Preis-Updates Städtepreise">
                             <strong>Preis-Updates Städtepreise</strong>
@@ -318,8 +363,8 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <script type="module" src="assets/js/firebase-app.js?v=20260626-raiffeisen-logo"></script>
-    <script src="assets/js/app.js?v=20260626-raiffeisen-logo" defer></script>
+    <script type="module" src="assets/js/firebase-app.js?v=20260629-start-vehicle-choice-every-start"></script>
+    <script src="assets/js/app.js?v=20260629-start-vehicle-choice-every-start" defer></script>
 </body>
 </html>
 
