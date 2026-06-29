@@ -1273,9 +1273,16 @@ select:focus {
 .directory-mode .sort-toggle,
 .directory-mode #refreshButton,
 .directory-mode .quick-actions,
+.charging-mode .sort-toggle,
+.charging-mode #refreshButton,
+.charging-mode .quick-actions,
 .driving-mode .sort-toggle,
 .driving-mode #refreshButton {
     display: none;
+}
+
+.charging-mode .result-summary {
+    grid-template-columns: minmax(0, 1fr);
 }
 
 .driving-mode .search-panel,
@@ -2054,10 +2061,10 @@ button.city-row:focus {
 .charging-row {
     width: 100%;
     display: grid;
-    grid-template-columns: 34px minmax(0, 1fr) 76px;
+    grid-template-columns: 52px minmax(0, 1fr) 76px;
     grid-template-areas:
-        "rank main distance"
-        "rank main power"
+        "logo main distance"
+        "logo main power"
         "connectors connectors status";
     gap: 6px 8px;
     align-items: center;
@@ -2074,10 +2081,30 @@ button.city-row:focus {
     background: var(--green-100);
 }
 
-.charging-rank {
-    grid-area: rank;
+.charging-logo {
+    grid-area: logo;
+    width: 46px;
+    height: 46px;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 1px;
+    border: 3px solid var(--ink);
+    border-radius: 10px;
     color: var(--white);
-    background: var(--green-500);
+    background: linear-gradient(180deg, #12864f 0%, #1557b8 100%);
+    box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.18);
+    line-height: 1;
+}
+
+.charging-logo b {
+    font-size: 0.86rem;
+    font-weight: 950;
+}
+
+.charging-logo small {
+    font-size: 0.55rem;
+    font-weight: 950;
 }
 
 .charging-main {

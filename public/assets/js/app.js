@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260629-charging-map-detail';
+const appVersion = '20260629-charging-layout-fix';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const DRIVE_HIGHWAY_PRICE_MAX_AGE_MS = 15 * 60 * 1000;
@@ -5780,7 +5780,10 @@ function chargingRowHtml(station, index) {
     const statusClass = /betrieb/i.test(station.status || '') ? 'live' : 'muted';
     return `
         <button class="charging-row" type="button" data-charging-id="${escapeHtml(station.stationId || station.id)}">
-            <span class="rank charging-rank">${index + 1}</span>
+            <span class="charging-logo" aria-hidden="true">
+                <b>EV</b>
+                <small>${escapeHtml(mode)}</small>
+            </span>
             <span class="charging-main">
                 <strong>${escapeHtml(station.name || station.operatorName || 'Ladepunkt')}</strong>
                 <small>${escapeHtml(station.operatorName || station.displayName || 'Betreiber unbekannt')}</small>
@@ -6578,6 +6581,7 @@ function updateBottomNav() {
     setDirectoryMode(state.listMode === 'autobahn');
     els.appShell.classList.toggle('driving-mode', state.listMode === 'driving');
     els.appShell.classList.toggle('favorites-mode', state.listMode === 'favorites');
+    els.appShell.classList.toggle('charging-mode', state.listMode === 'charging');
     updateSectionHeaderTone();
     els.driveMode?.classList.toggle('active', state.listMode === 'driving');
     if (els.driveMode) {
