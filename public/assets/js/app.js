@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260629-separated-vehicle-modes';
+const appVersion = '20260629-electric-route-chargers';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -107,6 +107,7 @@ const state = {
     drivingDestinationHighwayReevaluatedAt: null,
     drivingDestinationReevalInProgress: false,
     drivingRoutePreviewCache: null,
+    electricRoutePreviewCache: null,
     drivingRouteGeometry: [],
     drivingRouteLoadKey: null,
     drivingDetectedRouteId: null,
@@ -3810,6 +3811,7 @@ function drivingRouteInfoOverlayHtml() {
         ? `${Math.round(info.distanceKm).toLocaleString('de-DE')} km`
         : '-';
     const count = Number(info.tankpointCount || 0);
+    const pointLabel = state.drivingVehicleMode === 'electric' ? 'Ladepunkte an der Route' : 'Tankpunkte an der Route';
     return `
         <div class="driving-route-info-layer" data-driving-route-info-dismiss>
             <section class="driving-route-info-card" role="dialog" aria-modal="true" aria-label="Routenplanung">
@@ -3822,7 +3824,7 @@ function drivingRouteInfoOverlayHtml() {
                         <b>${escapeHtml(distance)}</b>
                     </div>
                     <div>
-                        <small>Tankpunkte an der Route</small>
+                        <small>${escapeHtml(pointLabel)}</small>
                         <b>${count.toLocaleString('de-DE')}</b>
                     </div>
                 </div>
@@ -3861,6 +3863,28 @@ async function applyDrivingDestination(query, options = {}) {
 
     state.drivingDestination = destination;
     state.drivingRouteGeometry = await loadDrivingRouteGeometry(start, destination);
+    resetElectricRoutePreviewCache();
+    if (state.drivingVehicleMode === 'electric' || state.vehicleMode === 'electric') {
+        state.drivingRouteSuggestion = {
+            id: 'electric-route',
+            label: 'Ladepunkte entlang der Route',
+            routeIds: [],
+            direction: null,
+        };
+        state.drivingRouteTemplateId = 'suggested';
+        state.drivingContext = 'charging';
+        state.drivingMessage = 'Ladepunkte entlang der Route werden gesucht';
+        const routeChargingStations = await electricRouteChargingStationsForDriving(start, Number(els.limit?.value || 50));
+        showDrivingRouteInfoOverlay(start, destination, routeChargingStations);
+        await updateDrivingMode({ force: true });
+        if (options.keepOpen === true) {
+            state.drivingDestinationOpen = true;
+            state.drivingDestinationEdited = false;
+            state.drivingDestinationConfirmedOpen = true;
+            renderDrivingModeList();
+        }
+        return;
+    }
     const previousTemplateId = state.drivingRouteTemplateId;
     const previousSuggestion = state.drivingRouteSuggestion;
     try {
@@ -4321,6 +4345,7 @@ function drivingRoutePreviewCacheKey() {
 
 function resetDrivingRoutePreviewCache() {
     state.drivingRoutePreviewCache = null;
+    resetElectricRoutePreviewCache();
 }
 
 function updateRoutePreviewDistancesFromPosition(stations, position) {
@@ -4975,6 +5000,7 @@ function drivingTankpointRowHtml(station, rank, thresholds) {
 function drivingTankpointCardHtml(station, rank, thresholds) {
     if (station.chargingMode) {
         const mode = station.acDc || (station.fastCharging ? 'DC' : 'AC');
+        const isRouteCharging = station.drivingContext === 'charging-route';
         const directionHtml = `<span class="driving-direction">${drivingTankpointDirectionHtml(station, rank)}</span>`;
         const statusClass = /betrieb/i.test(station.status || '') ? 'live' : 'missing';
         return `
@@ -4991,7 +5017,7 @@ function drivingTankpointCardHtml(station, rank, thresholds) {
                 ${directionHtml}
                 <span class="driving-distance">
                     <strong>${Number(station.distance || 0).toFixed(1).replace('.', ',')}</strong>
-                    <small>km entfernt</small>
+                    <small>${isRouteCharging ? 'km voraus' : 'km entfernt'}</small>
                 </span>
                 <span class="driving-selected-price price-rank-green-light">
                     <small>${escapeHtml(chargingConnectorText(station))}</small>
@@ -5448,12 +5474,19 @@ async function updateElectricDrivingMode(position) {
     state.drivingNearestRouteDistanceKm = null;
     state.drivingCurrentRoutePosition = null;
     state.drivingLivePriceMessage = '';
-    const stations = await loadElectricDriveStations(position, 20);
+    const hasRoute = Boolean(state.drivingDestination && Array.isArray(state.drivingRouteGeometry) && state.drivingRouteGeometry.length >= 2);
+    const stations = hasRoute
+        ? await electricRouteChargingStationsForDriving(position, Number(els.limit?.value || 50))
+        : await loadElectricDriveStations(position, 20);
     state.stations = stations;
     state.drivingStatus = stations.length ? 'ready' : 'empty';
     state.drivingMessage = stations.length
-        ? `${stations.length} Ladeorte bis ${ELECTRIC_DRIVE_RADIUS_KM} km${Number.isFinite(visualDrivingBearing()) ? ' in Fahrtrichtung' : ''}`
-        : `Keine Ladeorte bis ${ELECTRIC_DRIVE_RADIUS_KM} km gefunden`;
+        ? (hasRoute
+            ? `${stations.length} Ladepunkte entlang der Route`
+            : `${stations.length} Ladeorte bis ${ELECTRIC_DRIVE_RADIUS_KM} km${Number.isFinite(visualDrivingBearing()) ? ' in Fahrtrichtung' : ''}`)
+        : (hasRoute
+            ? 'Keine Ladepunkte entlang der Route gefunden'
+            : `Keine Ladeorte bis ${ELECTRIC_DRIVE_RADIUS_KM} km gefunden`);
     if (state.view === 'map') updateDrivingModeMapMarkers();
     if (!isDrivingDestinationInputActive()) renderDrivingModeList();
 }
@@ -5877,6 +5910,133 @@ function normalizeChargingStation(station) {
         price: null,
         is_open: /betrieb/i.test(station.status || ''),
     };
+}
+
+function electricRoutePreviewCacheKey() {
+    const destination = state.drivingDestination
+        ? `${Number(state.drivingDestination.lat).toFixed(4)}:${Number(state.drivingDestination.lng).toFixed(4)}`
+        : '';
+    const geometryKey = Array.isArray(state.drivingRouteGeometry)
+        ? `${state.drivingRouteGeometry.length}:${JSON.stringify(state.drivingRouteGeometry[0] || [])}:${JSON.stringify(state.drivingRouteGeometry.at(-1) || [])}`
+        : '';
+    return [destination, geometryKey, els.radius?.value || '25', els.limit?.value || '50'].join('|');
+}
+
+function resetElectricRoutePreviewCache() {
+    state.electricRoutePreviewCache = null;
+}
+
+function routeGeometrySamplePoints(stepKm = 25) {
+    const geometry = Array.isArray(state.drivingRouteGeometry) ? state.drivingRouteGeometry : [];
+    if (geometry.length < 2) return [];
+    const samples = [];
+    let nextAtKm = 0;
+    let routeKm = 0;
+    for (let index = 0; index < geometry.length; index += 1) {
+        const current = { lat: Number(geometry[index]?.[0]), lng: Number(geometry[index]?.[1]) };
+        if (!Number.isFinite(current.lat) || !Number.isFinite(current.lng)) continue;
+        if (index === 0) samples.push({ ...current, routeKm: 0 });
+        if (index === 0) continue;
+        const previous = { lat: Number(geometry[index - 1]?.[0]), lng: Number(geometry[index - 1]?.[1]) };
+        const segmentKm = routeDistanceKm(previous.lat, previous.lng, current.lat, current.lng);
+        if (!Number.isFinite(segmentKm) || segmentKm <= 0) continue;
+        while (nextAtKm + stepKm <= routeKm + segmentKm) {
+            nextAtKm += stepKm;
+            const t = Math.max(0, Math.min(1, (nextAtKm - routeKm) / segmentKm));
+            samples.push({
+                lat: previous.lat + (current.lat - previous.lat) * t,
+                lng: previous.lng + (current.lng - previous.lng) * t,
+                routeKm: nextAtKm,
+            });
+        }
+        routeKm += segmentKm;
+    }
+    const last = geometry.at(-1);
+    const lastPoint = { lat: Number(last?.[0]), lng: Number(last?.[1]) };
+    if (Number.isFinite(lastPoint.lat) && Number.isFinite(lastPoint.lng)) samples.push({ ...lastPoint, routeKm });
+    return samples.filter((sample, index, list) => (
+        index === 0 || routeDistanceKm(sample.lat, sample.lng, list[index - 1].lat, list[index - 1].lng) > 1
+    ));
+}
+
+async function buildElectricRouteChargingCache(position, limit = 100) {
+    const samples = routeGeometrySamplePoints(35);
+    const byId = new Map();
+    const querySamples = samples.slice(0, 24);
+    const fetchSample = async (sample) => {
+        const params = new URLSearchParams({
+            lat: String(sample.lat),
+            lng: String(sample.lng),
+            radius: '8',
+            limit: '80',
+        });
+        try {
+            const data = await fetchJson(`/api/charging/stations.php?${params.toString()}`, { timeoutMs: 22000, progress: false });
+            return data.stations || [];
+        } catch {
+            return [];
+        }
+    };
+    for (let index = 0; index < querySamples.length; index += 4) {
+        const batch = querySamples.slice(index, index + 4);
+        const results = await Promise.all(batch.map(fetchSample));
+        results.flat().map(normalizeChargingStation).forEach((station) => {
+                const id = station.stationId || station.id;
+                if (!id || byId.has(id)) return;
+                const projection = projectPointToRouteGeometry(station);
+                if (!projection || !Number.isFinite(projection.routeKm) || projection.distanceKm > 8) return;
+                byId.set(id, {
+                    ...station,
+                    drivingContext: 'charging-route',
+                    routePreviewKm: projection.routeKm,
+                    routeDistanceFromGeometryKm: projection.distanceKm,
+                });
+            });
+    }
+    const stations = updateElectricRouteChargingDistances([...byId.values()], position)
+        .slice(0, limit);
+    state.electricRoutePreviewCache = {
+        key: electricRoutePreviewCacheKey(),
+        createdAt: Date.now(),
+        stations,
+    };
+    return stations;
+}
+
+function updateElectricRouteChargingDistances(stations, position) {
+    if (!Array.isArray(stations)) return [];
+    const currentProjection = position ? projectPointToRouteGeometry(position) : null;
+    const currentRouteKm = Number.isFinite(currentProjection?.routeKm) ? currentProjection.routeKm : 0;
+    return stations
+        .map((station) => {
+            const routeKm = Number(station.routePreviewKm);
+            const distanceFromRoute = Math.max(0, Number(station.routeDistanceFromGeometryKm || 0));
+            return {
+                ...station,
+                distance: Number.isFinite(routeKm)
+                    ? Math.max(0, routeKm - currentRouteKm) + distanceFromRoute
+                    : Number(station.distance || 0),
+                drivingBearingDelta: 0,
+                drivingDirectionRelative: 0,
+            };
+        })
+        .filter((station) => Number(station.distance) >= -0.2)
+        .sort((a, b) => Number(a.routePreviewKm || a.distance || 0) - Number(b.routePreviewKm || b.distance || 0));
+}
+
+async function electricRouteChargingStationsForDriving(position, limit = 100) {
+    if (!Array.isArray(state.drivingRouteGeometry) || state.drivingRouteGeometry.length < 2) return [];
+    const key = electricRoutePreviewCacheKey();
+    if (!state.electricRoutePreviewCache || state.electricRoutePreviewCache.key !== key) {
+        return buildElectricRouteChargingCache(position, limit);
+    }
+    const stations = updateElectricRouteChargingDistances(state.electricRoutePreviewCache.stations, position)
+        .slice(0, limit);
+    state.electricRoutePreviewCache = {
+        ...state.electricRoutePreviewCache,
+        stations,
+    };
+    return stations;
 }
 
 async function loadElectricDriveStations(position, limit = 20) {
