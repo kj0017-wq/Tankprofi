@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260629-electric-distribution-switch';
+const appVersion = '20260629-ev-map-bottom-distribution';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -7421,6 +7421,10 @@ function bindEvents() {
             const navRequestId = beginNavigation();
             renderDetail(null);
             if (action === 'map') {
+                if (isElectricMode() && state.listMode !== 'driving' && state.listMode !== 'cities' && state.listMode !== 'autobahn') {
+                    openChargingDistributionMap(navRequestId);
+                    return;
+                }
                 if (state.listMode === 'cities') {
                     openCityOverviewMap();
                     return;
