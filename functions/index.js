@@ -5096,12 +5096,37 @@ function normalizeChargingForClient(doc, origin = null) {
   return station;
 }
 
+function normalizeChargingForDistribution(doc) {
+  const station = normalizeChargingForClient(doc);
+  return {
+    id: station.id,
+    stationId: station.stationId,
+    sourceId: station.sourceId,
+    name: station.name,
+    operatorName: station.operatorName,
+    displayName: station.displayName,
+    status: station.status,
+    chargingPointCount: station.chargingPointCount,
+    nominalPowerKw: station.nominalPowerKw,
+    maxConnectorPowerKw: station.maxConnectorPowerKw,
+    acDc: station.acDc,
+    fastCharging: station.fastCharging,
+    city: station.city,
+    postcode: station.postcode,
+    state: station.state,
+    lat: station.lat,
+    lng: station.lng,
+  };
+}
+
 async function handleChargingStations(req, res) {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
   const hasOrigin = Number.isFinite(lat) && Number.isFinite(lng);
+  const distributionMode = req.query.distribution === '1' || req.query.all === '1';
   const radiusKm = numberParam(req.query.radius, hasOrigin ? 25 : 0, 1, 100);
-  const limit = Math.round(numberParam(req.query.limit, 100, 1, 500));
+  const maxLimit = distributionMode && !hasOrigin ? 30000 : 500;
+  const limit = Math.round(numberParam(req.query.limit, distributionMode ? 30000 : 100, 1, maxLimit));
   let docs = [];
   if (hasOrigin) {
     const latDelta = radiusKm / 111;
@@ -5117,7 +5142,7 @@ async function handleChargingStations(req, res) {
   }
   const origin = hasOrigin ? { lat, lng } : null;
   const stations = docs
-    .map((doc) => normalizeChargingForClient(doc, origin))
+    .map((doc) => (distributionMode && !hasOrigin ? normalizeChargingForDistribution(doc) : normalizeChargingForClient(doc, origin)))
     .filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lng))
     .filter((station) => !hasOrigin || station.distance <= radiusKm)
     .sort((a, b) => (a.distance ?? 999999) - (b.distance ?? 999999))

@@ -455,7 +455,13 @@ button {
     border-radius: 12px;
     background: var(--cream-100);
     box-shadow: 4px 4px 0 var(--red-500);
+    cursor: pointer;
     object-fit: cover;
+}
+
+.brand-logo-mark:focus-visible {
+    outline: 4px solid var(--blue-600);
+    outline-offset: 3px;
 }
 
 .brand-title {
@@ -1250,7 +1256,7 @@ select:focus {
 .bottom-nav {
     flex: 0 0 auto;
     display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 4px;
     min-height: calc(54px + env(safe-area-inset-bottom));
     padding: 3px 10px 0;
@@ -1258,6 +1264,18 @@ select:focus {
     background: rgba(255, 255, 255, 0.97);
     backdrop-filter: blur(12px);
     box-shadow: 0 -8px 24px rgba(7, 23, 43, 0.08);
+}
+
+.bottom-nav [data-action="charging"] {
+    display: none;
+}
+
+.vehicle-electric .bottom-nav {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.vehicle-electric .bottom-nav [data-action="charging"] {
+    display: grid;
 }
 
 .city-mode .search-panel,
@@ -2040,12 +2058,20 @@ button.city-row:focus {
 
 .charging-source-note {
     display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
     gap: 3px;
     padding: 10px 12px;
     border: 3px solid var(--ink);
     border-radius: 8px;
     background: linear-gradient(90deg, var(--green-100) 0%, #eaf3ff 100%);
     box-shadow: 4px 4px 0 rgba(16, 20, 25, 0.14);
+}
+
+.charging-source-note > div {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
 }
 
 .charging-source-note strong {
@@ -2059,6 +2085,19 @@ button.city-row:focus {
     font-size: 0.76rem;
     font-weight: 850;
     line-height: 1.25;
+}
+
+.charging-distribution-button {
+    min-height: 36px;
+    padding: 7px 10px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    color: var(--ink);
+    background: var(--cream-100);
+    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.18);
+    font-size: 0.74rem;
+    font-weight: 950;
+    white-space: nowrap;
 }
 
 .charging-list {
@@ -2257,6 +2296,11 @@ button.city-row:focus {
     background: var(--green-500);
 }
 
+.charging-detail {
+    max-width: 100%;
+    overflow: hidden;
+}
+
 .charging-detail-power {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2272,21 +2316,26 @@ button.city-row:focus {
     border: 2px solid var(--ink);
     border-radius: 8px;
     background: var(--green-100);
+    overflow: hidden;
 }
 
 .charging-detail-power small {
+    min-width: 0;
     color: var(--gray-700);
     font-size: 0.66rem;
     font-weight: 950;
     text-transform: uppercase;
+    overflow-wrap: anywhere;
 }
 
 .charging-detail-power strong {
+    min-width: 0;
     color: var(--blue-600);
-    font-size: 1rem;
+    font-size: clamp(0.82rem, 3.5vw, 1rem);
     font-weight: 950;
     line-height: 1.05;
     overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .driving-dashboard {
@@ -3910,6 +3959,7 @@ button.city-row:focus {
 .brand-logo.baywa { background: #008b45; color: #ffffff; }
 .brand-logo.agip { background: #ffd200; color: #111111; }
 .brand-logo.ubitricity { background: #ffffff; color: #087246; }
+.brand-logo.berliner-stadtwerke { background: #00a4d8; color: #ffffff; }
 .brand-logo.score { background: #4c148c; }
 
 .brand-logo.image-logo {
@@ -4195,9 +4245,10 @@ button.city-row:focus {
 
 .detail-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
     margin-top: 10px;
+    min-width: 0;
 }
 
 .detail-cell-inline {
@@ -4219,11 +4270,13 @@ button.city-row:focus {
 }
 
 .detail-cell {
+    min-width: 0;
     min-height: 50px;
     padding: 8px;
     border-radius: 8px;
     background: #eef5ff;
     border: 1px solid #d9e7f7;
+    overflow: hidden;
 }
 
 .detail-label {
@@ -4235,16 +4288,18 @@ button.city-row:focus {
 }
 
 .detail-value {
+    min-width: 0;
     display: block;
     margin-top: 3px;
     color: var(--gray-950);
     font-weight: 900;
     overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .detail-cell-inline .detail-value {
     margin-top: 0;
-    white-space: nowrap;
+    white-space: normal;
 }
 
 .detail-address-cell .detail-value {

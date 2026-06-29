@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260629-ev-map-marker-logo';
+const appVersion = '20260629-electric-distribution-switch';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -89,6 +89,7 @@ const state = {
     autobahnLoadKey: null,
     chargingStations: [],
     chargingLoadKey: null,
+    chargingDistributionLoadKey: null,
     drivingActive: false,
     drivingWatchId: null,
     drivingUpdateTimer: null,
@@ -179,6 +180,7 @@ const els = {
     locationButton: document.querySelector('#locationButton'),
     driveMode: document.querySelector('#driveModeButton'),
     help: document.querySelector('#helpButton'),
+    brandLogo: document.querySelector('#brandLogoButton'),
     helpSheet: document.querySelector('#helpSheet'),
     helpClose: document.querySelector('#helpCloseButton'),
     vehicleChoice: document.querySelector('#vehicleChoice'),
@@ -755,6 +757,8 @@ function brandInfo(station) {
         ['agip', 'Agip', 'agip'],
         ['eni', 'Eni', 'agip'],
         ['ubitricity', 'ubitricity', 'ubitricity'],
+        ['berliner stadtwerke', 'Berliner Stadtwerke', 'berliner-stadtwerke'],
+        ['stadtwerke kommunalpartner', 'Berliner Stadtwerke', 'berliner-stadtwerke'],
         ['score', 'Score', 'score'],
     ];
     const match = brands.find(([needle]) => raw.includes(needle));
@@ -819,6 +823,7 @@ function brandLogoHtml(station) {
         reitmayr: 'reitmayr-logo.webp',
         baywa: 'baywa-logo.webp',
         ubitricity: 'ubitricity-logo.webp',
+        'berliner-stadtwerke': 'berliner-stadtwerke-logo.webp',
     };
     if (imageLogos[brand.className]) {
         return `<span class="brand-logo ${brand.className} image-logo"><img src="assets/img/${imageLogos[brand.className]}?v=${appVersion}" alt="${escapeHtml(brand.label)}"></span>`;
@@ -6141,14 +6146,20 @@ function renderChargingList() {
     els.results.innerHTML = `
         <section class="charging-dashboard">
             <div class="charging-source-note">
-                <strong>Elektro Laden</strong>
-                <span>Stammdaten: Bundesnetzagentur Ladesaeulenregister. Keine Live-Preise.</span>
+                <div>
+                    <strong>Elektro Laden</strong>
+                    <span>Stammdaten: Bundesnetzagentur Ladesaeulenregister. Keine Live-Preise.</span>
+                </div>
+                <button class="charging-distribution-button" type="button" data-charging-distribution>Deutschlandkarte</button>
             </div>
             <div class="charging-list">
                 ${state.chargingStations.map((station, index) => chargingRowHtml(station, index)).join('')}
             </div>
         </section>
     `;
+    els.results.querySelector('[data-charging-distribution]')?.addEventListener('click', () => {
+        openChargingDistributionMap(beginNavigation());
+    });
     els.results.querySelectorAll('[data-charging-id]').forEach((button) => {
         button.addEventListener('click', () => selectChargingStation(button.dataset.chargingId, true));
     });
@@ -6168,6 +6179,36 @@ function selectChargingStation(id, pan = false) {
     if (pan && marker && state.map?.type !== 'fallback') {
         state.map.setView([station.lat, station.lng], Math.max(state.map.getZoom(), 15), { animate: true });
         marker.openPopup();
+    }
+}
+
+async function openChargingDistributionMap(requestId = beginNavigation()) {
+    if (!isElectricMode()) setVehicleMode('electric');
+    state.listMode = 'charging';
+    state.cityMapMode = 'overview';
+    renderDetail(null);
+    updateBottomNav();
+    updateSectionHeaderTone();
+    const loadKey = 'distribution';
+    if (state.chargingDistributionLoadKey === loadKey) return;
+    state.chargingDistributionLoadKey = loadKey;
+    els.resultCount.textContent = 'Deutschlandkarte';
+    els.resultMeta.textContent = 'Ladepunkte werden deutschlandweit geladen ...';
+    try {
+        const data = await fetchJson('/api/charging/stations.php?distribution=1&limit=30000', { timeoutMs: 45000 });
+        if (!isCurrentNavigation(requestId, 'charging')) return;
+        state.chargingStations = (data.stations || []).map(normalizeChargingStation);
+        state.stations = state.chargingStations;
+        setView('map');
+        renderMarkers();
+        els.resultCount.textContent = `${state.chargingStations.length} Ladeorte`;
+        els.resultMeta.textContent = `${Number(data.chargingPointCount || 0).toLocaleString('de-DE')} Ladepunkte deutschlandweit`;
+    } catch (error) {
+        if (!isCurrentNavigation(requestId, 'charging')) return;
+        els.resultCount.textContent = 'Keine Deutschlandkarte';
+        els.resultMeta.textContent = error.message || 'Deutschlandweite Ladepunkte konnten nicht geladen werden.';
+    } finally {
+        if (state.chargingDistributionLoadKey === loadKey) state.chargingDistributionLoadKey = null;
     }
 }
 
@@ -6718,6 +6759,18 @@ function chooseVehicleMode(mode) {
         prepareNormalSearch(false);
         if (state.selectedLocation) loadStations({ force: true });
     }
+}
+
+function openVehicleChoice() {
+    if (!els.vehicleChoice) return;
+    setSettingsOpen(false);
+    setHelpOpen(false);
+    els.vehicleChoice.hidden = false;
+    window.setTimeout(() => {
+        const activeChoice = els.vehicleChoice.querySelector(`[data-vehicle-choice="${state.vehicleMode}"]`)
+            || els.vehicleChoice.querySelector('[data-vehicle-choice]');
+        activeChoice?.focus?.();
+    }, 0);
 }
 
 function showVehicleChoiceIfNeeded() {
@@ -7482,6 +7535,12 @@ function bindEvents() {
     els.help?.addEventListener('click', () => {
         setSettingsOpen(false);
         setHelpOpen(!els.helpSheet?.classList.contains('open'));
+    });
+    els.brandLogo?.addEventListener('click', openVehicleChoice);
+    els.brandLogo?.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        openVehicleChoice();
     });
     els.helpClose?.addEventListener('click', () => setHelpOpen(false));
     els.vehicleChoice?.querySelectorAll('[data-vehicle-choice]').forEach((button) => {
