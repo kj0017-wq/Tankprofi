@@ -3909,6 +3909,7 @@ button.city-row:focus {
 .brand-logo.reitmayr { background: #ffffff; color: #006eb7; }
 .brand-logo.baywa { background: #008b45; color: #ffffff; }
 .brand-logo.agip { background: #ffd200; color: #111111; }
+.brand-logo.ubitricity { background: #ffffff; color: #087246; }
 .brand-logo.score { background: #4c148c; }
 
 .brand-logo.image-logo {
@@ -4483,10 +4484,31 @@ button.city-row:focus {
     transform: scale(1.08);
 }
 
+.drive-map-price-marker.charging {
+    min-width: 118px;
+    height: 42px;
+    background: linear-gradient(180deg, #18a866 0%, #0b539d 100%);
+    color: var(--white);
+}
+
+.drive-map-price-marker.charging.fast {
+    background: linear-gradient(180deg, #256ee8 0%, #083a91 100%);
+}
+
+.drive-map-price-marker.charging.selected {
+    background: linear-gradient(180deg, #1fc979 0%, #125fca 100%);
+    transform: scale(1.08);
+}
+
 .drive-map-price-marker strong {
     display: block;
     min-width: 52px;
     text-align: right;
+}
+
+.drive-map-price-marker.charging strong {
+    min-width: 68px;
+    font-size: 0.82rem;
 }
 
 .drive-map-logo {

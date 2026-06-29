@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260629-electric-drive-card-layout';
+const appVersion = '20260629-ev-map-marker-logo';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -699,7 +699,13 @@ function brandInfo(station) {
     const brandRaw = (station.brand || '').toLowerCase().trim();
     if (/^a\s?1(?:\b|[\s-])/.test(brandRaw)) return { label: 'A1', className: 'a1' };
 
-    const raw = (station.brand || station.name || '').toLowerCase();
+    const raw = ([
+        station.brand,
+        station.operatorName,
+        station.operator,
+        station.displayName,
+        station.name,
+    ].filter(Boolean).join(' ')).toLowerCase();
     const brands = [
         ['aral', 'Aral', 'aral'],
         ['shell', 'Shell', 'shell'],
@@ -748,6 +754,7 @@ function brandInfo(station) {
         ['oil ', 'OIL!', 'oil'],
         ['agip', 'Agip', 'agip'],
         ['eni', 'Eni', 'agip'],
+        ['ubitricity', 'ubitricity', 'ubitricity'],
         ['score', 'Score', 'score'],
     ];
     const match = brands.find(([needle]) => raw.includes(needle));
@@ -811,6 +818,7 @@ function brandLogoHtml(station) {
         'sued-treibstoff': 'sued-treibstoff-logo.webp',
         reitmayr: 'reitmayr-logo.webp',
         baywa: 'baywa-logo.webp',
+        ubitricity: 'ubitricity-logo.webp',
     };
     if (imageLogos[brand.className]) {
         return `<span class="brand-logo ${brand.className} image-logo"><img src="assets/img/${imageLogos[brand.className]}?v=${appVersion}" alt="${escapeHtml(brand.label)}"></span>`;
@@ -951,6 +959,23 @@ function iconFor(station, thresholds, selected = false) {
 }
 
 function driveMapIconFor(station, thresholds, selected = false) {
+    if (station.chargingMode) {
+        const power = Number(station.maxConnectorPowerKw || station.nominalPowerKw || 0);
+        const powerText = power > 0 ? `${power.toLocaleString('de-DE')} kW` : (station.acDc || 'EV');
+        const mode = station.acDc || (station.fastCharging ? 'DC' : 'AC');
+        const cls = [
+            'charging',
+            station.fastCharging || mode === 'DC' ? 'fast' : 'normal',
+            selected ? 'selected' : '',
+        ].filter(Boolean).join(' ');
+        return L.divIcon({
+            className: '',
+            html: `<span class="drive-map-price-marker ${cls}"><span class="drive-map-logo">${brandLogoHtml(station)}</span><strong>${escapeHtml(powerText)}</strong></span>`,
+            iconSize: [118, 42],
+            iconAnchor: [59, 21],
+            popupAnchor: [0, -24],
+        });
+    }
     const selectedFuel = els.fuel.value;
     const price = fuelPriceValue(station, selectedFuel);
     const priceText = isValidPriceValue(price)
