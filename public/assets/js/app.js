@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260629-ev-city-charging-ranking';
+const appVersion = '20260629-ev-green-blue-operators';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -92,6 +92,8 @@ const state = {
     chargingStations: [],
     chargingLoadKey: null,
     chargingDistributionLoadKey: null,
+    chargingOperators: [],
+    chargingOperatorsLoadKey: null,
     drivingActive: false,
     drivingWatchId: null,
     drivingUpdateTimer: null,
@@ -6236,6 +6238,58 @@ function chargingRowHtml(station, index) {
     `;
 }
 
+function chargingOperatorHtml(operator, index) {
+    return `
+        <div class="charging-operator-row">
+            <span class="rank ${index < 3 ? 'cheap' : 'mid'}">${index + 1}</span>
+            <strong>${escapeHtml(operator.operatorName || 'Betreiber unbekannt')}</strong>
+            <span>${Number(operator.chargingPointCount || 0).toLocaleString('de-DE')} Ladepunkte</span>
+            <small>${Number(operator.stationCount || 0).toLocaleString('de-DE')} Orte · ${Number(operator.fastChargingCount || 0).toLocaleString('de-DE')} Schnell · ${Number(operator.cityCount || 0).toLocaleString('de-DE')} Städte</small>
+        </div>
+    `;
+}
+
+function chargingOperatorsPanelHtml() {
+    if (!state.chargingOperators.length) {
+        return `
+            <section class="charging-operators-panel">
+                <div class="charging-operators-head">
+                    <strong>Ladesaeulenbetreiber</strong>
+                    <button type="button" data-charging-operators>Laden</button>
+                </div>
+                <p>Betreiberliste nach Ladepunkten laden.</p>
+            </section>
+        `;
+    }
+    return `
+        <section class="charging-operators-panel">
+            <div class="charging-operators-head">
+                <strong>Ladesaeulenbetreiber</strong>
+                <button type="button" data-charging-operators>Aktualisieren</button>
+            </div>
+            <div class="charging-operator-list">
+                ${state.chargingOperators.slice(0, 12).map(chargingOperatorHtml).join('')}
+            </div>
+        </section>
+    `;
+}
+
+async function loadChargingOperators(force = false) {
+    const loadKey = 'operators:40';
+    if (!force && state.chargingOperators.length) return;
+    if (state.chargingOperatorsLoadKey === loadKey) return;
+    state.chargingOperatorsLoadKey = loadKey;
+    try {
+        const data = await fetchJson('/api/charging/operators.php?limit=40', { timeoutMs: 45000, progress: false });
+        state.chargingOperators = data.operators || [];
+        if (state.listMode === 'charging' && state.view === 'list') renderChargingList();
+    } catch (error) {
+        if (state.listMode === 'charging') els.resultMeta.textContent = error.message || 'Betreiber konnten nicht geladen werden.';
+    } finally {
+        if (state.chargingOperatorsLoadKey === loadKey) state.chargingOperatorsLoadKey = null;
+    }
+}
+
 function renderChargingList() {
     state.stations = state.chargingStations;
     updateSectionHeaderTone();
@@ -6258,6 +6312,7 @@ function renderChargingList() {
                 </div>
                 <button class="charging-distribution-button" type="button" data-charging-distribution>Deutschlandkarte</button>
             </div>
+            ${chargingOperatorsPanelHtml()}
             <div class="charging-list">
                 ${state.chargingStations.map((station, index) => chargingRowHtml(station, index)).join('')}
             </div>
@@ -6266,9 +6321,11 @@ function renderChargingList() {
     els.results.querySelector('[data-charging-distribution]')?.addEventListener('click', () => {
         openChargingDistributionMap(beginNavigation());
     });
+    els.results.querySelector('[data-charging-operators]')?.addEventListener('click', () => loadChargingOperators(true));
     els.results.querySelectorAll('[data-charging-id]').forEach((button) => {
         button.addEventListener('click', () => selectChargingStation(button.dataset.chargingId, true));
     });
+    loadChargingOperators(false);
 }
 
 function selectChargingStation(id, pan = false) {

@@ -220,6 +220,7 @@ function endpointFrom(req) {
   if (path.endsWith('/admin/charging/cleanup.php') || path.endsWith('/admin/charging/cleanup')) return 'chargingCleanup';
   if (path.endsWith('/charging/stations.php') || path.endsWith('/charging/stations')) return 'chargingStations';
   if (path.endsWith('/charging/cities.php') || path.endsWith('/charging/cities')) return 'chargingCities';
+  if (path.endsWith('/charging/operators.php') || path.endsWith('/charging/operators')) return 'chargingOperators';
   if (path.endsWith('/admin/autobahn/import.php') || path.endsWith('/admin/autobahn/import')) return 'autobahnImport';
   if (path.endsWith('/admin/autobahn/prices/refresh.php') || path.endsWith('/admin/autobahn/prices/refresh')) return 'autobahnPriceRefresh';
   if (path.endsWith('/autobahn/stations.php') || path.endsWith('/autobahn/stations')) return 'autobahnStations';
@@ -5212,6 +5213,50 @@ async function handleChargingCities(req, res) {
   });
 }
 
+async function handleChargingOperators(req, res) {
+  const limit = Math.round(numberParam(req.query.limit, 40, 1, 200));
+  const snapshot = await db.collection('charging_stations').orderBy('sourceId').limit(30000).get();
+  const operators = new Map();
+  snapshot.docs.forEach((doc) => {
+    const station = normalizeChargingForDistribution(doc);
+    if (!Number.isFinite(station.lat) || !Number.isFinite(station.lng)) return;
+    const label = String(station.operatorName || station.displayName || station.name || 'Betreiber unbekannt').trim() || 'Betreiber unbekannt';
+    const key = normalizeText(label) || 'unbekannt';
+    const current = operators.get(key) || {
+      operatorName: label,
+      stationCount: 0,
+      chargingPointCount: 0,
+      fastChargingCount: 0,
+      cities: new Set(),
+      maxPowerKw: 0,
+    };
+    current.stationCount += 1;
+    current.chargingPointCount += Number(station.chargingPointCount || 0);
+    if (station.fastCharging === true || Number(station.maxConnectorPowerKw || station.nominalPowerKw || 0) >= 50) current.fastChargingCount += 1;
+    if (station.city) current.cities.add(station.city);
+    current.maxPowerKw = Math.max(current.maxPowerKw, Number(station.maxConnectorPowerKw || station.nominalPowerKw || 0));
+    operators.set(key, current);
+  });
+
+  const operatorList = [...operators.values()]
+    .map((operator) => ({
+      ...operator,
+      cityCount: operator.cities.size,
+      cities: undefined,
+    }))
+    .sort((a, b) => b.chargingPointCount - a.chargingPointCount || b.stationCount - a.stationCount || a.operatorName.localeCompare(b.operatorName, 'de'))
+    .slice(0, limit);
+
+  sendJson(res, {
+    ok: true,
+    source: 'Bundesnetzagentur Ladesaeulenregister',
+    sourceUpdatedAt: bnetzaChargingSourceDate,
+    license: 'CC BY 4.0',
+    count: operatorList.length,
+    operators: operatorList,
+  });
+}
+
 function exportDateValue(value) {
   if (!value) return '';
   if (value.toDate) return value.toDate().toISOString();
@@ -5535,6 +5580,7 @@ export const api = onRequest({
     if (endpoint === 'chargingCleanup') return await handleChargingCleanup(req, res);
     if (endpoint === 'chargingStations') return await handleChargingStations(req, res);
     if (endpoint === 'chargingCities') return await handleChargingCities(req, res);
+    if (endpoint === 'chargingOperators') return await handleChargingOperators(req, res);
     if (endpoint === 'autobahnImport') return await handleAutobahnImport(req, res);
     if (endpoint === 'autobahnPriceRefresh') return await handleAutobahnPriceRefresh(req, res);
     if (endpoint === 'autobahnStations') return await handleAutobahnStations(req, res);

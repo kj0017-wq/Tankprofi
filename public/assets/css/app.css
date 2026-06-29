@@ -432,7 +432,7 @@ button {
 
 .section-tone-charging .brand-bar {
     color: var(--white);
-    background: linear-gradient(180deg, #118a52 0%, #0d5f95 100%);
+    background: linear-gradient(180deg, #07965c 0%, #0b66c3 100%);
 }
 
 .section-tone-charging .brand-bar .eyebrow,
@@ -444,6 +444,19 @@ button {
 .section-tone-charging .help-button,
 .section-tone-charging .drive-mode-button {
     box-shadow: 3px 3px 0 #0b5f3c;
+}
+
+.section-tone-charging .result-summary {
+    border-bottom-color: rgba(11, 102, 195, 0.22);
+    background: linear-gradient(90deg, #e1f8ea 0%, #e7f1ff 100%);
+}
+
+.section-tone-charging #resultCount {
+    color: #075f3a;
+}
+
+.section-tone-charging #resultMeta {
+    color: #0b4f90;
 }
 
 .brand-logo-mark {
@@ -2054,6 +2067,7 @@ button.city-row:focus {
     display: grid;
     gap: 10px;
     padding: 10px 12px 18px;
+    background: linear-gradient(180deg, #eefbf3 0%, #edf5ff 100%);
 }
 
 .charging-source-note {
@@ -2064,7 +2078,7 @@ button.city-row:focus {
     padding: 10px 12px;
     border: 3px solid var(--ink);
     border-radius: 8px;
-    background: linear-gradient(90deg, var(--green-100) 0%, #eaf3ff 100%);
+    background: linear-gradient(90deg, #d8f7e5 0%, #dfefff 100%);
     box-shadow: 4px 4px 0 rgba(16, 20, 25, 0.14);
 }
 
@@ -2093,10 +2107,106 @@ button.city-row:focus {
     border: 2px solid var(--ink);
     border-radius: 8px;
     color: var(--ink);
-    background: var(--cream-100);
+    background: linear-gradient(180deg, #ffffff 0%, #e5f4ff 100%);
     box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.18);
     font-size: 0.74rem;
     font-weight: 950;
+    white-space: nowrap;
+}
+
+.charging-operators-panel {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border: 3px solid var(--ink);
+    border-radius: 8px;
+    background: linear-gradient(135deg, #e1f8ea 0%, #e7f1ff 100%);
+    box-shadow: 4px 4px 0 rgba(16, 20, 25, 0.14);
+}
+
+.charging-operators-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.charging-operators-head strong {
+    min-width: 0;
+    color: #075f3a;
+    font-size: 0.98rem;
+    font-weight: 950;
+}
+
+.charging-operators-head button {
+    min-height: 30px;
+    padding: 5px 9px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    color: var(--ink);
+    background: #ffffff;
+    box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.18);
+    font-size: 0.68rem;
+    font-weight: 950;
+}
+
+.charging-operators-panel p {
+    margin: 0;
+    color: #0b4f90;
+    font-size: 0.76rem;
+    font-weight: 850;
+}
+
+.charging-operator-list {
+    display: grid;
+    gap: 6px;
+}
+
+.charging-operator-row {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    grid-template-areas:
+        "rank name points"
+        "rank meta meta";
+    align-items: center;
+    gap: 2px 8px;
+    padding: 7px 8px;
+    border: 2px solid rgba(11, 102, 195, 0.32);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.74);
+}
+
+.charging-operator-row .rank {
+    grid-area: rank;
+}
+
+.charging-operator-row strong {
+    grid-area: name;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ink);
+    font-size: 0.82rem;
+    font-weight: 950;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.charging-operator-row span:not(.rank) {
+    grid-area: points;
+    color: #0b66c3;
+    font-size: 0.78rem;
+    font-weight: 950;
+    white-space: nowrap;
+}
+
+.charging-operator-row small {
+    grid-area: meta;
+    min-width: 0;
+    overflow: hidden;
+    color: #4b647a;
+    font-size: 0.68rem;
+    font-weight: 850;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
@@ -2119,13 +2229,13 @@ button.city-row:focus {
     border: 3px solid var(--ink);
     border-radius: 8px;
     color: var(--ink);
-    background: #eef8ff;
+    background: linear-gradient(180deg, #eef8ff 0%, #e2f4ff 100%);
     box-shadow: 4px 4px 0 rgba(16, 20, 25, 0.16);
     text-align: left;
 }
 
 .charging-row:nth-child(even) {
-    background: var(--green-100);
+    background: linear-gradient(180deg, #e6f9ed 0%, #d9f3e5 100%);
 }
 
 .charging-logo {
@@ -2189,7 +2299,7 @@ button.city-row:focus {
 }
 
 .charging-power b {
-    color: var(--blue-600);
+    color: #0b66c3;
     font-size: 1rem;
     font-weight: 950;
     line-height: 1;
@@ -2207,7 +2317,7 @@ button.city-row:focus {
 .charging-distance {
     grid-area: distance;
     justify-self: end;
-    color: var(--blue-600);
+    color: #0b66c3;
     font-size: 0.84rem;
     font-weight: 950;
     white-space: nowrap;
@@ -2236,7 +2346,7 @@ button.city-row:focus {
 
 .charging-status.live {
     color: #0b6b38;
-    background: var(--green-100);
+    background: #d9f8e4;
 }
 
 .charging-row.selected {
