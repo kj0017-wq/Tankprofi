@@ -2,9 +2,13 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260629-electric-drive';
+const appVersion = '20260629-electric-search-options';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
+const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
+const ELECTRIC_RADIUS_OPTIONS = ['5', '10', '25'];
+const COMBUSTION_LIMIT_OPTIONS = ['10', '25', '50', '100'];
+const ELECTRIC_LIMIT_OPTIONS = ['20', '50', '100'];
 const ELECTRIC_DRIVE_RADIUS_KM = 25;
 const DRIVE_HIGHWAY_PRICE_MAX_AGE_MS = 15 * 60 * 1000;
 const USAGE_PRICE_MAX_AGE_MS = 30 * 60 * 1000;
@@ -5958,11 +5962,11 @@ function selectChargingStation(id, pan = false) {
 async function loadChargingStations(requestId = state.navRequestId) {
     if (!isCurrentNavigation(requestId, 'charging')) return;
     const location = state.selectedLocation;
-    const params = new URLSearchParams({ limit: '100' });
+    const params = new URLSearchParams({ limit: String(els.limit?.value || '50') });
     if (location && Number.isFinite(location.lat) && Number.isFinite(location.lng)) {
         params.set('lat', location.lat);
         params.set('lng', location.lng);
-        params.set('radius', '25');
+        params.set('radius', String(els.radius?.value || '25'));
     }
     const loadKey = params.toString();
     if (state.chargingLoadKey === loadKey) return;
@@ -6419,6 +6423,36 @@ function saveUserSettings() {
     localStorage.setItem('tankprofi_user_settings', JSON.stringify(settings));
 }
 
+function setSelectOptions(select, values, suffix = '') {
+    if (!select) return;
+    const current = String(select.value || '');
+    select.replaceChildren(...values.map((value) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = suffix ? `${value} ${suffix}` : value;
+        return option;
+    }));
+    select.value = values.includes(current) ? current : values[0];
+}
+
+function syncVehicleOptionSets({ preferredRadius = null, preferredLimit = null } = {}) {
+    const isElectric = state.vehicleMode === 'electric';
+    const radiusOptions = isElectric ? ELECTRIC_RADIUS_OPTIONS : COMBUSTION_RADIUS_OPTIONS;
+    const limitOptions = isElectric ? ELECTRIC_LIMIT_OPTIONS : COMBUSTION_LIMIT_OPTIONS;
+    setSelectOptions(els.radius, radiusOptions, 'km');
+    setSelectOptions(els.limit, limitOptions, isElectric ? 'Ladepunkte' : '');
+    if (preferredRadius && radiusOptions.includes(String(preferredRadius))) {
+        els.radius.value = String(preferredRadius);
+    } else if (isElectric && !radiusOptions.includes(String(els.radius.value))) {
+        els.radius.value = '25';
+    }
+    if (preferredLimit && limitOptions.includes(String(preferredLimit))) {
+        els.limit.value = String(preferredLimit);
+    } else if (isElectric && !limitOptions.includes(String(els.limit.value))) {
+        els.limit.value = '50';
+    }
+}
+
 function restoreUserSettings() {
     try {
         const settings = JSON.parse(localStorage.getItem('tankprofi_user_settings') || 'null');
@@ -6426,14 +6460,9 @@ function restoreUserSettings() {
         if (settings.vehicleMode) {
             setVehicleMode(settings.vehicleMode, { persist: false, silent: true });
         }
-        if (settings.radius && [...els.radius.options].some((option) => option.value === String(settings.radius))) {
-            els.radius.value = String(settings.radius);
-        }
+        syncVehicleOptionSets({ preferredRadius: settings.radius, preferredLimit: settings.limit });
         if (settings.fuel && [...els.fuel.options].some((option) => option.value === String(settings.fuel))) {
             els.fuel.value = String(settings.fuel);
-        }
-        if (settings.limit && [...els.limit.options].some((option) => option.value === String(settings.limit))) {
-            els.limit.value = String(settings.limit);
         }
         if (settings.brand && [...els.brand.options].some((option) => option.value === String(settings.brand))) {
             els.brand.value = String(settings.brand);
@@ -6449,6 +6478,7 @@ function setVehicleMode(mode, options = {}) {
     const nextMode = mode === 'electric' ? 'electric' : DEFAULT_VEHICLE_MODE;
     state.vehicleMode = nextMode;
     if (els.vehicleMode) els.vehicleMode.value = nextMode;
+    syncVehicleOptionSets();
     if (options.persist !== false) {
         saveUserSettings();
     }
@@ -7140,6 +7170,7 @@ function bindEvents() {
 
             if (action === 'charging') {
                 if (state.drivingActive) stopDrivingMode(false);
+                setVehicleMode('electric');
                 state.listMode = 'charging';
                 state.cityMapMode = 'overview';
                 renderDetail(null);
@@ -7262,6 +7293,11 @@ function bindEvents() {
             }
             if (state.listMode === 'driving') {
                 updateDrivingMode();
+                return;
+            }
+            if (state.listMode === 'charging') {
+                state.chargingLoadKey = null;
+                loadChargingStations(state.navRequestId);
                 return;
             }
             if (state.selectedLocation) loadStations();
