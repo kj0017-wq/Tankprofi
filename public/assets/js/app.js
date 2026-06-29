@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260629-ev-map-bottom-distribution';
+const appVersion = '20260629-ev-city-charging-ranking';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -75,6 +75,8 @@ const state = {
     citySnapshot: null,
     cityRankings: [],
     cityStations: [],
+    chargingCityRankings: [],
+    chargingCityLoadKey: null,
     selectedCityId: null,
     cityMapMode: 'overview',
     cityAutoUpdateRunning: false,
@@ -1747,6 +1749,10 @@ function renderFallbackMap(stations, thresholds) {
 function renderResults() {
     els.results.innerHTML = '';
     if (state.listMode === 'cities') {
+        if (isElectricMode()) {
+            renderChargingCityRankings();
+            return;
+        }
         if (state.cityMapMode === 'stationsList') renderCityStationList();
         else renderCityRankings();
         return;
@@ -2936,6 +2942,10 @@ async function startCityAutoUpdateIfNeeded(stale = false) {
 }
 
 async function loadCitySnapshot(requestId = state.navRequestId) {
+    if (isElectricMode()) {
+        await loadChargingCityRankings(requestId);
+        return;
+    }
     if (!isCurrentNavigation(requestId, 'cities')) return;
     setCityMode(true);
     setStatus('Snapshot');
@@ -2959,6 +2969,102 @@ async function loadCitySnapshot(requestId = state.navRequestId) {
         setStatus('Fehler');
         els.results.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
     }
+}
+
+async function loadChargingCityRankings(requestId = state.navRequestId) {
+    if (!isCurrentNavigation(requestId, 'cities')) return;
+    setCityMode(true);
+    setStatus('Laden');
+    const loadKey = 'charging-cities:20:25';
+    if (state.chargingCityLoadKey === loadKey) return;
+    state.chargingCityLoadKey = loadKey;
+    els.resultCount.textContent = 'Ladepunkte Städte';
+    els.resultMeta.textContent = 'Top-20-Städte werden geladen ...';
+    els.results.innerHTML = '<div class="empty-state">Ladepunkte der größten Städte werden gezählt.</div>';
+    try {
+        const data = await fetchJson('/api/charging/cities.php?limit=20&radius=25', { timeoutMs: 45000 });
+        if (!isCurrentNavigation(requestId, 'cities')) return;
+        state.chargingCityRankings = data.rankings || [];
+        setStatus('Elektro');
+        renderChargingCityRankings(data);
+    } catch (error) {
+        if (!isCurrentNavigation(requestId, 'cities')) return;
+        setStatus('Fehler');
+        els.resultCount.textContent = 'Keine Daten';
+        els.resultMeta.textContent = error.message || 'Ladepunkt-Städte konnten nicht geladen werden.';
+        els.results.innerHTML = '<div class="empty-state">Ladepunktliste der Städte konnte nicht geladen werden.</div>';
+    } finally {
+        if (state.chargingCityLoadKey === loadKey) state.chargingCityLoadKey = null;
+    }
+}
+
+function chargingCityRowHtml(city, rank) {
+    return `
+        <button class="city-row charging-city-row" type="button" data-charging-city-id="${escapeHtml(city.cityId)}" role="row">
+            <span class="rank ${rank <= 3 ? 'cheap' : 'mid'}">${rank}</span>
+            <strong>${escapeHtml(city.cityName)}</strong>
+            <span class="city-data" data-label="Ladeorte">${Number(city.stationCount || 0).toLocaleString('de-DE')}</span>
+            <span class="city-data city-price-cell price-rank-green-light" data-label="Ladepunkte">${Number(city.chargingPointCount || 0).toLocaleString('de-DE')}</span>
+            <span class="city-data" data-label="Schnell">${Number(city.fastChargingCount || 0).toLocaleString('de-DE')}</span>
+            <span class="city-data" data-label="Betreiber">${Number(city.operatorCount || 0).toLocaleString('de-DE')}</span>
+            <span class="city-data" data-label="Max">${Number(city.maxPowerKw || 0).toLocaleString('de-DE', { maximumFractionDigits: 0 })} kW</span>
+            <span class="city-data" data-label="Radius">${Number(city.radiusKm || 25)} km</span>
+            <span class="city-data" data-label="Land">${escapeHtml(city.state || '-')}</span>
+        </button>
+    `;
+}
+
+function renderChargingCityRankings(data = null) {
+    setCityMode(true);
+    updateSectionHeaderTone();
+    const rankings = [...state.chargingCityRankings]
+        .sort((a, b) => Number(b.chargingPointCount || 0) - Number(a.chargingPointCount || 0)
+            || Number(b.stationCount || 0) - Number(a.stationCount || 0)
+            || String(a.cityName).localeCompare(String(b.cityName), 'de'));
+    if (!rankings.length) {
+        els.resultCount.textContent = 'Ladepunkte Städte';
+        els.resultMeta.textContent = 'Noch keine Ladepunktdaten geladen.';
+        els.results.innerHTML = '<div class="empty-state">Die Ladepunktliste wird geladen, sobald du Städte im Elektro-Modus öffnest.</div>';
+        return;
+    }
+    const totals = rankings.reduce((acc, city) => {
+        acc.stationCount += Number(city.stationCount || 0);
+        acc.chargingPointCount += Number(city.chargingPointCount || 0);
+        return acc;
+    }, { stationCount: 0, chargingPointCount: 0 });
+    els.resultCount.textContent = `${rankings.length} Städte`;
+    els.resultMeta.textContent = `${totals.chargingPointCount.toLocaleString('de-DE')} Ladepunkte · ${totals.stationCount.toLocaleString('de-DE')} Ladeorte · Radius ${Number(data?.radiusKm || rankings[0]?.radiusKm || 25)} km`;
+    els.results.innerHTML = `
+        <section class="city-dashboard charging-city-dashboard">
+            <div class="city-toolbar">
+                <strong>Elektro-Ladepunkte Großstädte</strong>
+                <div class="city-view-tabs">
+                    <button type="button" class="active">Liste</button>
+                </div>
+            </div>
+            <div class="city-table charging-city-table" role="table" aria-label="Ladepunkte der größten Städte">
+                <div class="city-row city-head" role="row">
+                    <span>Rang</span><span>Stadt</span><span>Ladeorte</span><span>Ladepunkte</span><span>Schnell</span><span>Betreiber</span><span>Max</span><span>Radius</span><span>Land</span>
+                </div>
+                ${rankings.map((city, index) => chargingCityRowHtml(city, index + 1)).join('')}
+            </div>
+        </section>
+    `;
+    els.results.querySelectorAll('[data-charging-city-id]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const city = rankings.find((item) => item.cityId === button.dataset.chargingCityId);
+            if (!city) return;
+            state.selectedLocation = {
+                label: city.cityName,
+                lat: Number(city.centerLat),
+                lng: Number(city.centerLng),
+            };
+            els.searchInput.value = city.cityName;
+            state.listMode = 'charging';
+            state.cityMapMode = 'overview';
+            loadChargingStations(beginNavigation());
+        });
+    });
 }
 
 function renderCityRankings() {

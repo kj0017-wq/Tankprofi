@@ -159,6 +159,11 @@ const defaultCityConfig = [
   ['hannover', 'Hannover', 'Niedersachsen', 52.3759, 9.7320],
   ['nuernberg', 'Nürnberg', 'Bayern', 49.4521, 11.0767],
   ['duisburg', 'Duisburg', 'Nordrhein-Westfalen', 51.4344, 6.7623],
+  ['bochum', 'Bochum', 'Nordrhein-Westfalen', 51.4818, 7.2162],
+  ['wuppertal', 'Wuppertal', 'Nordrhein-Westfalen', 51.2562, 7.1508],
+  ['bielefeld', 'Bielefeld', 'Nordrhein-Westfalen', 52.0302, 8.5325],
+  ['bonn', 'Bonn', 'Nordrhein-Westfalen', 50.7374, 7.0982],
+  ['muenster', 'Muenster', 'Nordrhein-Westfalen', 51.9607, 7.6261],
 ].map(([cityId, cityName, state, centerLat, centerLng], index) => ({
   cityId,
   cityName,
@@ -214,6 +219,7 @@ function endpointFrom(req) {
   if (path.endsWith('/admin/charging/import.php') || path.endsWith('/admin/charging/import')) return 'chargingImport';
   if (path.endsWith('/admin/charging/cleanup.php') || path.endsWith('/admin/charging/cleanup')) return 'chargingCleanup';
   if (path.endsWith('/charging/stations.php') || path.endsWith('/charging/stations')) return 'chargingStations';
+  if (path.endsWith('/charging/cities.php') || path.endsWith('/charging/cities')) return 'chargingCities';
   if (path.endsWith('/admin/autobahn/import.php') || path.endsWith('/admin/autobahn/import')) return 'autobahnImport';
   if (path.endsWith('/admin/autobahn/prices/refresh.php') || path.endsWith('/admin/autobahn/prices/refresh')) return 'autobahnPriceRefresh';
   if (path.endsWith('/autobahn/stations.php') || path.endsWith('/autobahn/stations')) return 'autobahnStations';
@@ -5159,6 +5165,53 @@ async function handleChargingStations(req, res) {
   });
 }
 
+async function handleChargingCities(req, res) {
+  const radiusKm = numberParam(req.query.radius, 25, 5, 50);
+  const limit = Math.round(numberParam(req.query.limit, 20, 1, 20));
+  const cities = defaultCityConfig.slice(0, limit);
+  const snapshot = await db.collection('charging_stations').orderBy('sourceId').limit(30000).get();
+  const stations = snapshot.docs
+    .map((doc) => normalizeChargingForDistribution(doc))
+    .filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lng));
+
+  const rankings = cities.map((city) => {
+    const matches = stations.filter((station) => (
+      distanceKmBetween(city.centerLat, city.centerLng, station.lat, station.lng) <= radiusKm
+    ));
+    const chargingPointCount = matches.reduce((sum, station) => sum + Number(station.chargingPointCount || 0), 0);
+    const fastChargingCount = matches.filter((station) => station.fastCharging === true || Number(station.maxConnectorPowerKw || station.nominalPowerKw || 0) >= 50).length;
+    const maxPowerKw = matches.reduce((max, station) => Math.max(max, Number(station.maxConnectorPowerKw || station.nominalPowerKw || 0)), 0);
+    const operatorCount = new Set(matches
+      .map((station) => normalizeText(station.operatorName || station.displayName || station.name || ''))
+      .filter(Boolean)).size;
+    return {
+      cityId: city.cityId,
+      cityName: city.cityName,
+      state: city.state,
+      sortOrder: city.sortOrder,
+      centerLat: city.centerLat,
+      centerLng: city.centerLng,
+      radiusKm,
+      stationCount: matches.length,
+      chargingPointCount,
+      fastChargingCount,
+      operatorCount,
+      maxPowerKw,
+    };
+  });
+
+  sendJson(res, {
+    ok: true,
+    source: 'Bundesnetzagentur Ladesaeulenregister',
+    sourceUpdatedAt: bnetzaChargingSourceDate,
+    license: 'CC BY 4.0',
+    radiusKm,
+    cityCount: rankings.length,
+    stationTotal: stations.length,
+    rankings,
+  });
+}
+
 function exportDateValue(value) {
   if (!value) return '';
   if (value.toDate) return value.toDate().toISOString();
@@ -5481,6 +5534,7 @@ export const api = onRequest({
     if (endpoint === 'chargingImport') return await handleChargingImport(req, res);
     if (endpoint === 'chargingCleanup') return await handleChargingCleanup(req, res);
     if (endpoint === 'chargingStations') return await handleChargingStations(req, res);
+    if (endpoint === 'chargingCities') return await handleChargingCities(req, res);
     if (endpoint === 'autobahnImport') return await handleAutobahnImport(req, res);
     if (endpoint === 'autobahnPriceRefresh') return await handleAutobahnPriceRefresh(req, res);
     if (endpoint === 'autobahnStations') return await handleAutobahnStations(req, res);
