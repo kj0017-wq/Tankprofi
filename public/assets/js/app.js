@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260629-start-vehicle-choice-every-start';
+const appVersion = '20260629-charging-map-detail';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const DRIVE_HIGHWAY_PRICE_MAX_AGE_MS = 15 * 60 * 1000;
@@ -82,6 +82,8 @@ const state = {
     selectedHighway: 'all',
     autobahnPriceLoadingId: null,
     autobahnLoadKey: null,
+    chargingStations: [],
+    chargingLoadKey: null,
     drivingActive: false,
     drivingWatchId: null,
     drivingUpdateTimer: null,
@@ -961,6 +963,24 @@ function driveMapIconFor(station, thresholds, selected = false) {
     });
 }
 
+function chargingIconFor(station, selected = false) {
+    const mode = station.acDc || (station.fastCharging ? 'DC' : 'AC');
+    const power = Number(station.maxConnectorPowerKw || station.nominalPowerKw || 0);
+    const label = power > 0 ? Math.round(power) : mode || 'EV';
+    const cls = [
+        'charging-marker',
+        station.fastCharging || mode === 'DC' ? 'fast' : 'normal',
+        selected ? 'selected' : '',
+    ].filter(Boolean).join(' ');
+    return L.divIcon({
+        className: '',
+        html: `<span class="${cls}"><i aria-hidden="true"></i><b>${escapeHtml(label)}</b></span>`,
+        iconSize: [38, 38],
+        iconAnchor: [19, 19],
+        popupAnchor: [0, -20],
+    });
+}
+
 function driveMapThresholdsFor(stations) {
     const selectedFuel = els.fuel.value;
     return thresholdsFor(stations.map((station) => ({
@@ -1044,6 +1064,23 @@ function popupDetailHtml(station, options = {}) {
 function popupHtml(station) {
     const navUrl = `https://waze.com/ul?ll=${station.lat}%2C${station.lng}&navigate=yes`;
     const priceClass = visiblePriceClass(station);
+    if (station.chargingMode) {
+        const addressLine = chargingAddress(station) || '-';
+        const distanceLine = Number.isFinite(Number(station.distance))
+            ? `${Number(station.distance).toFixed(1).replace('.', ',')} km entfernt`
+            : '';
+        return `
+            <div class="popup-card">
+                <h3 class="popup-title">${escapeHtml(station.name || 'Ladepunkt')}</h3>
+                <p class="popup-meta strong">${escapeHtml(station.operatorName || 'Betreiber unbekannt')}</p>
+                <p class="popup-meta">${escapeHtml(addressLine)}</p>
+                <p class="popup-price charging-popup">${escapeHtml(chargingPowerText(station))} ${escapeHtml(station.acDc || '')}</p>
+                <p class="popup-meta">${escapeHtml(chargingConnectorText(station))}</p>
+                ${distanceLine ? `<p class="popup-meta">${escapeHtml(distanceLine)}</p>` : ''}
+                <a class="nav-link" href="${navUrl}" target="_blank" rel="noopener">Navigation</a>
+            </div>
+        `;
+    }
     if (!station.cityOverview && !station.cityMode && !station.autobahnMode) {
         if (station.drivingMode || station.drivingContext) {
             const typeLabel = routeTankpointTypeLabel(station.typ);
@@ -1260,8 +1297,11 @@ function renderMarkers() {
     state.layer.clearLayers();
 
     visibleStations.forEach((station) => {
+        const stationId = station.stationId || station.tankerkoenig_id || station.id;
         const marker = L.marker([station.lat, station.lng], {
-            icon: iconFor(station, thresholds, station.tankerkoenig_id === state.selectedId),
+            icon: station.chargingMode
+                ? chargingIconFor(station, stationId === state.selectedId)
+                : iconFor(station, thresholds, station.tankerkoenig_id === state.selectedId),
         }).bindPopup(popupHtml(station));
 
         if (window.matchMedia?.('(hover: hover)').matches) {
@@ -1272,6 +1312,13 @@ function renderMarkers() {
         }
 
         marker.on('click', () => {
+            if (station.chargingMode) {
+                state.selectedId = stationId;
+                renderDetail(station);
+                marker.openPopup();
+                setView('list');
+                return;
+            }
             if (station.cityOverview) {
                 state.selectedCityId = station.tankerkoenig_id;
                 marker.openPopup();
@@ -1287,7 +1334,7 @@ function renderMarkers() {
             selectStation(station.tankerkoenig_id, true, true);
         });
         marker.addTo(state.layer);
-        state.markers.set(station.tankerkoenig_id, marker);
+        state.markers.set(stationId, marker);
     });
 
     if (visibleStations.length === 1) {
@@ -2123,6 +2170,83 @@ function renderDetail(station) {
     const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lng}`;
     const appleUrl = `https://maps.apple.com/?daddr=${station.lat},${station.lng}`;
     const geoUrl = `geo:${station.lat},${station.lng}?q=${station.lat},${station.lng}`;
+    if (station.chargingMode) {
+        els.appShell.classList.add('detail-open');
+        els.detail.classList.add('visible');
+        updateBottomNav();
+        els.detail.innerHTML = `
+            <article class="detail-panel charging-detail">
+                <div class="detail-closebar">
+                    <button class="detail-back" type="button" id="detailBackButton">â† Zurueck zur Liste</button>
+                    <button class="detail-close" type="button" id="detailCloseButton" aria-label="Detailansicht schlieÃŸen">Ã—</button>
+                </div>
+                <div class="detail-header">
+                    <span class="brand-logo charging-detail-logo">EV</span>
+                    <div class="detail-titleblock">
+                        <h2>${escapeHtml(station.name || 'Ladepunkt')}</h2>
+                        <p class="detail-brand">${escapeHtml(station.operatorName || station.displayName || 'Betreiber unbekannt')}</p>
+                    </div>
+                    <span class="detail-highway">${escapeHtml(station.acDc || 'EV')}</span>
+                </div>
+                <div class="charging-detail-power">
+                    <span>
+                        <small>Leistung</small>
+                        <strong>${escapeHtml(chargingPowerText(station))}</strong>
+                    </span>
+                    <span>
+                        <small>Ladepunkte</small>
+                        <strong>${Number(station.chargingPointCount || 0).toLocaleString('de-DE')}</strong>
+                    </span>
+                    <span>
+                        <small>Typ</small>
+                        <strong>${escapeHtml(station.fastCharging ? 'Schnellladen' : station.facilityType || 'Laden')}</strong>
+                    </span>
+                </div>
+                <div class="detail-grid">
+                    <div class="detail-cell detail-cell-inline detail-distance-cell">
+                        <span class="detail-label">Entfernung</span>
+                        <span class="detail-value">${Number.isFinite(Number(station.distance)) ? `${Number(station.distance).toFixed(1).replace('.', ',')} km` : '-'}</span>
+                    </div>
+                    <div class="detail-cell detail-cell-inline detail-updated-cell">
+                        <span class="detail-label">Quelle</span>
+                        <span class="detail-value">BNetzA ${escapeHtml(station.sourceUpdatedAt || '')}</span>
+                    </div>
+                    <div class="detail-cell detail-address-cell">
+                        <span class="detail-label">Adresse</span>
+                        <span class="detail-value">${escapeHtml(chargingAddress(station) || '-')}</span>
+                    </div>
+                    <div class="detail-cell detail-status-cell">
+                        <span class="detail-label">Status</span>
+                        <span class="detail-value">${escapeHtml(station.status || 'unbekannt')}</span>
+                    </div>
+                    <div class="detail-cell detail-address-cell full">
+                        <span class="detail-label">Stecker</span>
+                        <span class="detail-value">${escapeHtml(chargingConnectorText(station))}</span>
+                    </div>
+                    <div class="detail-cell detail-address-cell full">
+                        <span class="detail-label">Bezahlung</span>
+                        <span class="detail-value">${escapeHtml((station.paymentSystems || []).join(', ') || '-')}</span>
+                    </div>
+                </div>
+                <nav class="detail-footer-nav" aria-label="Detailaktionen">
+                    <button type="button" id="showMapButton">Karte</button>
+                    <details class="navigation-picker">
+                        <summary>Navigation</summary>
+                        <div class="navigation-options">
+                            <a href="${googleUrl}" target="_blank" rel="noopener">Google Maps</a>
+                            <a href="${wazeUrl}" target="_blank" rel="noopener">Waze</a>
+                            <a href="${appleUrl}" target="_blank" rel="noopener">Apple Karten</a>
+                            <a href="${geoUrl}" target="_blank" rel="noopener">System-Karte</a>
+                        </div>
+                    </details>
+                </nav>
+            </article>
+        `;
+        document.querySelector('#detailBackButton')?.addEventListener('click', () => renderDetail(null));
+        document.querySelector('#detailCloseButton')?.addEventListener('click', () => renderDetail(null));
+        document.querySelector('#showMapButton')?.addEventListener('click', () => openDetailStationMap(station));
+        return;
+    }
     const detailPriceClass = visiblePriceClass(station);
     const distanceValue = Number(station.distance);
     const showDistance = !(station.autobahnMode && (!Number.isFinite(distanceValue) || distanceValue <= 0.05));
@@ -2601,9 +2725,11 @@ function updateSectionHeaderTone() {
     const isRural = isDriving && state.drivingContext === 'rural';
     const isAutobahn = state.listMode === 'autobahn' || (isDriving && state.drivingContext === 'highway');
     const isCity = state.listMode === 'cities' || (isDriving && state.drivingContext === 'city');
+    const isCharging = state.listMode === 'charging';
     els.appShell.classList.toggle('section-tone-autobahn', isAutobahn);
     els.appShell.classList.toggle('section-tone-city', isCity && !isAutobahn);
     els.appShell.classList.toggle('section-tone-rural', isRural);
+    els.appShell.classList.toggle('section-tone-charging', isCharging);
 }
 
 function citySnapshotAgeMs(snapshot = state.citySnapshot) {
@@ -5628,6 +5754,136 @@ function autobahnStationAddress(station) {
     return [station.postcode, station.city].filter(Boolean).join(' ');
 }
 
+function chargingAddress(station) {
+    return [
+        station.addressLine || [station.street, station.houseNumber].filter(Boolean).join(' '),
+        [station.postcode, station.city].filter(Boolean).join(' '),
+    ].filter(Boolean).join(' ');
+}
+
+function chargingConnectorText(station) {
+    const types = Array.isArray(station.connectorTypes) ? station.connectorTypes : [];
+    if (!types.length) return station.acDc || 'Stecker unbekannt';
+    return types.slice(0, 2).join(' / ');
+}
+
+function chargingPowerText(station) {
+    const power = Number(station.maxConnectorPowerKw || station.nominalPowerKw || 0);
+    return power > 0 ? `${power.toLocaleString('de-DE')} kW` : 'kW offen';
+}
+
+function chargingRowHtml(station, index) {
+    const distance = Number.isFinite(station.distance)
+        ? `${station.distance.toLocaleString('de-DE', { maximumFractionDigits: 1 })} km`
+        : station.city || '';
+    const mode = station.acDc || (station.fastCharging ? 'DC' : 'AC');
+    const statusClass = /betrieb/i.test(station.status || '') ? 'live' : 'muted';
+    return `
+        <button class="charging-row" type="button" data-charging-id="${escapeHtml(station.stationId || station.id)}">
+            <span class="rank charging-rank">${index + 1}</span>
+            <span class="charging-main">
+                <strong>${escapeHtml(station.name || station.operatorName || 'Ladepunkt')}</strong>
+                <small>${escapeHtml(station.operatorName || station.displayName || 'Betreiber unbekannt')}</small>
+                <small>${escapeHtml(chargingAddress(station) || 'Adresse offen')}</small>
+            </span>
+            <span class="charging-power">
+                <b>${escapeHtml(chargingPowerText(station))}</b>
+                <small>${escapeHtml(mode)}</small>
+            </span>
+            <span class="charging-distance">${escapeHtml(distance)}</span>
+            <span class="charging-connectors">${escapeHtml(chargingConnectorText(station))}</span>
+            <span class="charging-status ${statusClass}">${escapeHtml(station.status || 'Status offen')}</span>
+        </button>
+    `;
+}
+
+function renderChargingList() {
+    state.stations = state.chargingStations;
+    updateSectionHeaderTone();
+    updateBottomNav();
+    if (!state.chargingStations.length) {
+        els.resultCount.textContent = 'Laden';
+        els.resultMeta.textContent = 'Noch keine Ladepunkte geladen.';
+        els.results.innerHTML = '<div class="empty-state">Ladepunkte werden geladen oder sind noch nicht importiert.</div>';
+        return;
+    }
+    const pointCount = state.chargingStations.reduce((sum, station) => sum + Number(station.chargingPointCount || 0), 0);
+    els.resultCount.textContent = `${state.chargingStations.length} Ladeorte`;
+    els.resultMeta.textContent = `${pointCount} Ladepunkte - Quelle Bundesnetzagentur, CC BY 4.0`;
+    els.results.innerHTML = `
+        <section class="charging-dashboard">
+            <div class="charging-source-note">
+                <strong>Elektro Laden</strong>
+                <span>Stammdaten: Bundesnetzagentur Ladesaeulenregister. Keine Live-Preise.</span>
+            </div>
+            <div class="charging-list">
+                ${state.chargingStations.map((station, index) => chargingRowHtml(station, index)).join('')}
+            </div>
+        </section>
+    `;
+    els.results.querySelectorAll('[data-charging-id]').forEach((button) => {
+        button.addEventListener('click', () => selectChargingStation(button.dataset.chargingId, true));
+    });
+}
+
+function selectChargingStation(id, pan = false) {
+    const station = state.chargingStations.find((item) => (item.stationId || item.id) === id);
+    if (!station) return;
+    state.selectedId = id;
+    state.stations = state.chargingStations;
+    document.querySelectorAll('[data-charging-id]').forEach((item) => {
+        item.classList.toggle('selected', item.dataset.chargingId === id);
+    });
+    renderDetail(station);
+    renderMarkers();
+    const marker = state.markers.get(id);
+    if (pan && marker && state.map?.type !== 'fallback') {
+        state.map.setView([station.lat, station.lng], Math.max(state.map.getZoom(), 15), { animate: true });
+        marker.openPopup();
+    }
+}
+
+async function loadChargingStations(requestId = state.navRequestId) {
+    if (!isCurrentNavigation(requestId, 'charging')) return;
+    const location = state.selectedLocation;
+    const params = new URLSearchParams({ limit: '100' });
+    if (location && Number.isFinite(location.lat) && Number.isFinite(location.lng)) {
+        params.set('lat', location.lat);
+        params.set('lng', location.lng);
+        params.set('radius', '25');
+    }
+    const loadKey = params.toString();
+    if (state.chargingLoadKey === loadKey) return;
+    state.chargingLoadKey = loadKey;
+    state.listMode = 'charging';
+    setView('list');
+    updateBottomNav();
+    updateSectionHeaderTone();
+    els.resultCount.textContent = 'Laden';
+    els.resultMeta.textContent = 'Ladepunkte werden geladen ...';
+    els.results.innerHTML = '<div class="empty-state">Elektro-Ladepunkte werden geladen.</div>';
+    try {
+        const data = await fetchJson(`/api/charging/stations.php?${params.toString()}`, { timeoutMs: 30000 });
+        if (!isCurrentNavigation(requestId, 'charging')) return;
+        state.chargingStations = (data.stations || []).map((station) => ({
+            ...station,
+            chargingMode: true,
+            tankerkoenig_id: station.stationId || station.id,
+            price: null,
+            is_open: /betrieb/i.test(station.status || ''),
+        }));
+        renderChargingList();
+    } catch (error) {
+        if (!isCurrentNavigation(requestId, 'charging')) return;
+        state.chargingStations = [];
+        els.resultCount.textContent = 'Keine Ladepunkte';
+        els.resultMeta.textContent = error.message || 'Ladepunkte konnten nicht geladen werden.';
+        els.results.innerHTML = '<div class="empty-state">Ladepunkte konnten nicht geladen werden. Import eventuell noch nicht gestartet.</div>';
+    } finally {
+        if (state.chargingLoadKey === loadKey) state.chargingLoadKey = null;
+    }
+}
+
 function highwaySortValue(highway) {
     const value = String(highway || 'ZZZ');
     const number = Number(value.match(/\d+/)?.[0] || 9999);
@@ -6351,6 +6607,7 @@ function updateBottomNav() {
             || (action === 'favorites' && state.view === 'list' && state.listMode === 'favorites')
             || (action === 'cities' && state.listMode === 'cities')
             || (action === 'autobahn' && state.listMode === 'autobahn')
+            || (action === 'charging' && state.listMode === 'charging')
             || (action === 'settings' && els.settingsSheet?.classList.contains('open'))
             || (action === 'list' && state.view === 'list' && state.listMode === 'results' && !els.detail.classList.contains('visible'));
         button.classList.toggle('active', active);
@@ -6728,6 +6985,12 @@ function bindEvents() {
                     openAutobahnMap();
                     return;
                 }
+                if (state.listMode === 'charging') {
+                    state.stations = state.chargingStations;
+                    setView('map');
+                    renderMarkers();
+                    return;
+                }
                 if (state.listMode === 'driving') {
                     setView('map');
                     updateDrivingModeMapMarkers();
@@ -6765,6 +7028,21 @@ function bindEvents() {
                     return;
                 }
                 loadAutobahnStations('list', navRequestId);
+                return;
+            }
+
+            if (action === 'charging') {
+                if (state.drivingActive) stopDrivingMode(false);
+                state.listMode = 'charging';
+                state.cityMapMode = 'overview';
+                renderDetail(null);
+                setView('list');
+                updateBottomNav();
+                if (state.chargingStations.length) {
+                    renderChargingList();
+                    return;
+                }
+                loadChargingStations(navRequestId);
                 return;
             }
 

@@ -214,7 +214,10 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/route/tankpoints.php') return await handleRouteTankpoints(url, res);
     if (url.pathname === '/api/history.php') return sendJson(res, { items: [] });
     if (url.pathname.startsWith('/api/admin/')) return await proxyProductionApi(req, url, res);
-    if (url.pathname === '/api/city-snapshot.php' || url.pathname === '/api/city-stations.php' || url.pathname === '/api/autobahn/stations.php') {
+    if (url.pathname === '/api/city-snapshot.php'
+      || url.pathname === '/api/city-stations.php'
+      || url.pathname === '/api/autobahn/stations.php'
+      || url.pathname === '/api/charging/stations.php') {
       return await proxyProductionApi(req, url, res);
     }
     if (url.pathname.startsWith('/api/')) return sendJson(res, { error: `Lokaler API-Endpunkt fehlt: ${url.pathname}` }, 404);

@@ -44,6 +44,8 @@ const cityScanConfigs = {
 };
 const supportedScanCountries = new Set(['DE', 'AT', 'CH', 'PL']);
 const raststaettenDirectoryUrl = 'https://www.raststaetten.de/alle-standorte/';
+const bnetzaChargingCsvUrl = 'https://data.bundesnetzagentur.de/Bundesnetzagentur/DE/Fachthemen/ElektrizitaetundGas/E-Mobilitaet/Ladesaeulenregister_BNetzA_2026-04-22.csv';
+const bnetzaChargingSourceDate = '2026-04-22';
 const overpassApiUrl = 'https://overpass-api.de/api/interpreter';
 const autohofKeywords = /autohof|euro rastpark|svg autohof|24[- ]?autohof|truckstop|rasthof/i;
 const highwayCandidateHints = {
@@ -209,6 +211,9 @@ function endpointFrom(req) {
   if (path.endsWith('/admin/stats.php') || path.endsWith('/admin/stats')) return 'adminStats';
   if (path.endsWith('/admin/addresses/export.csv') || path.endsWith('/admin/addresses/export')) return 'addressExport';
   if (path.endsWith('/admin/addresses/consolidate.php') || path.endsWith('/admin/addresses/consolidate')) return 'addressConsolidate';
+  if (path.endsWith('/admin/charging/import.php') || path.endsWith('/admin/charging/import')) return 'chargingImport';
+  if (path.endsWith('/admin/charging/cleanup.php') || path.endsWith('/admin/charging/cleanup')) return 'chargingCleanup';
+  if (path.endsWith('/charging/stations.php') || path.endsWith('/charging/stations')) return 'chargingStations';
   if (path.endsWith('/admin/autobahn/import.php') || path.endsWith('/admin/autobahn/import')) return 'autobahnImport';
   if (path.endsWith('/admin/autobahn/prices/refresh.php') || path.endsWith('/admin/autobahn/prices/refresh')) return 'autobahnPriceRefresh';
   if (path.endsWith('/autobahn/stations.php') || path.endsWith('/autobahn/stations')) return 'autobahnStations';
@@ -913,14 +918,17 @@ function directionSideFromName(name) {
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
-async function fetchText(url, source = 'Tankprofi/1.0') {
+async function fetchText(url, source = 'Tankprofi/1.0', encoding = 'utf-8') {
   const response = await fetch(url, {
     headers: {
-      accept: 'text/html,application/xhtml+xml',
+      accept: 'text/html,application/xhtml+xml,text/csv,*/*',
       'user-agent': source,
     },
   });
   if (!response.ok) throw new Error(`${url} failed with HTTP ${response.status}`);
+  if (encoding && encoding !== 'utf-8') {
+    return new TextDecoder(encoding).decode(await response.arrayBuffer());
+  }
   return await response.text();
 }
 
@@ -4697,6 +4705,435 @@ function csvLine(values) {
   return values.map(csvValue).join(';');
 }
 
+function parseDelimitedLine(line, delimiter = ';') {
+  const values = [];
+  let value = '';
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '"') {
+      if (quoted && line[index + 1] === '"') {
+        value += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+      continue;
+    }
+    if (char === delimiter && !quoted) {
+      values.push(value);
+      value = '';
+      continue;
+    }
+    value += char;
+  }
+  values.push(value);
+  return values;
+}
+
+function parseDelimitedRecords(text, delimiter = ';') {
+  const records = [];
+  let record = [];
+  let value = '';
+  let quoted = false;
+  const source = String(text || '').replace(/^\uFEFF/, '');
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '"') {
+      if (quoted && source[index + 1] === '"') {
+        value += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+      continue;
+    }
+    if (char === delimiter && !quoted) {
+      record.push(value);
+      value = '';
+      continue;
+    }
+    if ((char === '\n' || char === '\r') && !quoted) {
+      if (char === '\r' && source[index + 1] === '\n') index += 1;
+      record.push(value);
+      if (record.some((item) => String(item).trim() !== '')) records.push(record);
+      record = [];
+      value = '';
+      continue;
+    }
+    value += char;
+  }
+  record.push(value);
+  if (record.some((item) => String(item).trim() !== '')) records.push(record);
+  return records;
+}
+
+function normalizeCsvText(value) {
+  return String(value || '').replace(/\u00a0/g, ' ').trim();
+}
+
+function numberFromGerman(value) {
+  const normalized = normalizeCsvText(value).replace(/\./g, '').replace(',', '.');
+  if (!normalized) return null;
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : null;
+}
+
+const chargingCsvColumnIndex = new Map(Object.entries({
+  'Ladeeinrichtungs-ID': 0,
+  Betreiber: 1,
+  'Anzeigename (Karte)': 2,
+  Status: 3,
+  'Art der Ladeeinrichtung': 4,
+  'Anzahl Ladepunkte': 5,
+  'Nennleistung Ladeeinrichtung [kW]': 6,
+  Inbetriebnahmedatum: 7,
+  'Straße': 8,
+  Hausnummer: 9,
+  Adresszusatz: 10,
+  Postleitzahl: 11,
+  Ort: 12,
+  'Kreis/kreisfreie Stadt': 13,
+  Bundesland: 14,
+  Breitengrad: 15,
+  'Längengrad': 16,
+  Standortbezeichnung: 17,
+  'Informationen zum Parkraum': 18,
+  Bezahlsysteme: 19,
+  'Öffnungszeiten': 20,
+  'Öffnungszeiten: Wochentage': 21,
+  'Öffnungszeiten: Tageszeiten': 22,
+}));
+
+for (let index = 1; index <= 6; index += 1) {
+  const base = 23 + ((index - 1) * 4);
+  chargingCsvColumnIndex.set(`Steckertypen${index}`, base);
+  chargingCsvColumnIndex.set(`Nennleistung Stecker${index}`, base + 1);
+  chargingCsvColumnIndex.set(`EVSE-ID${index}`, base + 2);
+  chargingCsvColumnIndex.set(`Public Key${index}`, base + 3);
+}
+
+function splitCsvList(value) {
+  return normalizeCsvText(value).split(';').map((item) => normalizeCsvText(item)).filter(Boolean);
+}
+
+function connectorMode(type) {
+  const text = String(type || '').toLowerCase();
+  if (text.includes('dc') || text.includes('combo') || text.includes('chademo')) return 'DC';
+  if (text.includes('ac') || text.includes('typ 2') || text.includes('schuko')) return 'AC';
+  return '';
+}
+
+function normalizeChargingRow(row, headers) {
+  const get = (name) => {
+    const headerIndex = headers.get(name);
+    const fallbackIndex = chargingCsvColumnIndex.get(name);
+    const index = Number.isInteger(headerIndex) ? headerIndex : fallbackIndex;
+    return normalizeCsvText(Number.isInteger(index) ? row[index] : '');
+  };
+  const sourceId = get('Ladeeinrichtungs-ID');
+  if (!/^\d+$/.test(sourceId)) return null;
+  const lat = numberFromGerman(get('Breitengrad'));
+  const lng = numberFromGerman(get('Längengrad'));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const connectors = [];
+  for (let index = 1; index <= 6; index += 1) {
+    const type = get(`Steckertypen${index}`);
+    const powerRaw = get(`Nennleistung Stecker${index}`);
+    const evseId = get(`EVSE-ID${index}`);
+    const publicKey = get(`Public Key${index}`);
+    if (!type && !powerRaw && !evseId && !publicKey) continue;
+    const powers = splitCsvList(powerRaw).map(numberFromGerman).filter((number) => Number.isFinite(number));
+    connectors.push({
+      index,
+      type,
+      mode: connectorMode(type),
+      powerKw: powers.length ? Math.max(...powers) : numberFromGerman(powerRaw),
+      powerRaw,
+      evseId,
+      publicKey,
+    });
+  }
+  const connectorModes = new Set(connectors.map((connector) => connector.mode).filter(Boolean));
+  const maxConnectorPowerKw = connectors
+    .map((connector) => Number(connector.powerKw))
+    .filter((number) => Number.isFinite(number))
+    .reduce((max, number) => Math.max(max, number), 0);
+  const operatorName = get('Betreiber');
+  const displayName = get('Anzeigename (Karte)');
+  const stationName = displayName || get('Standortbezeichnung') || operatorName || `Ladeeinrichtung ${sourceId}`;
+  const street = get('Straße');
+  const houseNumber = get('Hausnummer');
+  return {
+    source: 'bnetza',
+    sourceId,
+    stationId: `bnetza_${sourceId}`,
+    name: stationName,
+    operatorName,
+    displayName,
+    status: get('Status'),
+    facilityType: get('Art der Ladeeinrichtung'),
+    chargingPointCount: Math.max(Number(numberFromGerman(get('Anzahl Ladepunkte')) || 0), connectors.length),
+    nominalPowerKw: numberFromGerman(get('Nennleistung Ladeeinrichtung [kW]')),
+    maxConnectorPowerKw: maxConnectorPowerKw || null,
+    acDc: connectorModes.has('DC') ? 'DC' : connectorModes.has('AC') ? 'AC' : '',
+    fastCharging: connectorModes.has('DC') || maxConnectorPowerKw >= 50,
+    commissioningDateRaw: get('Inbetriebnahmedatum'),
+    street,
+    houseNumber,
+    addressLine: [street, houseNumber].filter(Boolean).join(' '),
+    postcode: get('Postleitzahl'),
+    city: get('Ort'),
+    district: get('Kreis/kreisfreie Stadt'),
+    state: get('Bundesland'),
+    lat,
+    lng,
+    siteName: get('Standortbezeichnung'),
+    parkingInfo: get('Informationen zum Parkraum'),
+    paymentSystems: splitCsvList(get('Bezahlsysteme')),
+    openingHours: get('Öffnungszeiten'),
+    openingWeekdays: splitCsvList(get('Öffnungszeiten: Wochentage')),
+    openingTimes: splitCsvList(get('Öffnungszeiten: Tageszeiten')),
+    connectors,
+    connectorTypes: [...new Set(connectors.map((connector) => connector.type).filter(Boolean))],
+    evseIds: connectors.map((connector) => connector.evseId).filter(Boolean),
+    publicKeys: connectors.map((connector) => connector.publicKey).filter(Boolean),
+    sourceUrl: bnetzaChargingCsvUrl,
+    sourceName: 'Bundesnetzagentur Ladesaeulenregister',
+    sourceLicense: 'CC BY 4.0',
+    sourceUpdatedAt: bnetzaChargingSourceDate,
+    updatedAt: FieldValue.serverTimestamp(),
+    importedAt: FieldValue.serverTimestamp(),
+  };
+}
+
+async function loadBnetzaChargingCsvRows() {
+  const text = await fetchText(bnetzaChargingCsvUrl, 'Tankprofi/1.0 (charging-import)', 'windows-1252');
+  const rows = [];
+  let headers = null;
+  let dataIndex = 0;
+  let totalRows = 0;
+  let record = [];
+  let value = '';
+  let quoted = false;
+  let completedCsvScan = true;
+  const source = String(text || '').replace(/^\uFEFF/, '');
+  const offset = Number(arguments[0] || 0);
+  const limit = Number(arguments[1] || 5000);
+  const pushRecord = () => {
+    record.push(value);
+    const current = record;
+    record = [];
+    value = '';
+    if (!current.some((item) => String(item).trim() !== '')) return;
+    if (!headers) {
+      if (current.includes('Ladeeinrichtungs-ID') && current.includes('Betreiber')) {
+        headers = new Map(current.map((name, index) => [normalizeCsvText(name), index]));
+      }
+      return;
+    }
+    if (dataIndex >= offset && rows.length < limit) rows.push(current);
+    dataIndex += 1;
+    totalRows += 1;
+  };
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '"') {
+      if (quoted && source[index + 1] === '"') {
+        value += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+      continue;
+    }
+    if (char === ';' && !quoted) {
+      record.push(value);
+      value = '';
+      continue;
+    }
+    if ((char === '\n' || char === '\r') && !quoted) {
+      if (char === '\r' && source[index + 1] === '\n') index += 1;
+      pushRecord();
+      if (headers && rows.length >= limit && dataIndex >= offset + limit) {
+        completedCsvScan = false;
+        break;
+      }
+      continue;
+    }
+    value += char;
+  }
+  if (record.length || value) pushRecord();
+  if (!headers) {
+    throw new Error(`BNetzA CSV-Header nicht gefunden: ${text.slice(0, 80).replace(/\s+/g, ' ')}`);
+  }
+  return { headers, dataRows: rows, totalRows: completedCsvScan ? totalRows : null, completedCsvScan };
+}
+
+async function handleChargingImport(req, res) {
+  const offset = Math.max(0, Math.round(numberParam(req.query.offset || req.body?.offset, 0, 0, 1000000)));
+  const limit = Math.round(numberParam(req.query.limit || req.body?.limit, 5000, 1, 20000));
+  const startedAt = Date.now();
+  const { headers, dataRows, totalRows, completedCsvScan } = await loadBnetzaChargingCsvRows(offset, limit);
+  const slice = dataRows;
+  const stats = {
+    offset,
+    limit,
+    totalRows,
+    processedRows: 0,
+    importedStations: 0,
+    importedChargingPoints: 0,
+    skippedRows: 0,
+    nextOffset: offset + slice.length,
+    done: completedCsvScan && slice.length < limit,
+    source: 'Bundesnetzagentur Ladesaeulenregister',
+    sourceUpdatedAt: bnetzaChargingSourceDate,
+  };
+  let batch = db.batch();
+  let batchSize = 0;
+  for (const row of slice) {
+    stats.processedRows += 1;
+    const station = normalizeChargingRow(row, headers);
+    if (!station) {
+      stats.skippedRows += 1;
+      continue;
+    }
+    batch.set(db.collection('charging_stations').doc(station.stationId), station, { merge: true });
+    batchSize += 1;
+    stats.importedStations += 1;
+    stats.importedChargingPoints += Number(station.chargingPointCount || station.connectors?.length || 0);
+    if (batchSize >= 450) {
+      await batch.commit();
+      batch = db.batch();
+      batchSize = 0;
+    }
+  }
+  if (batchSize) await batch.commit();
+  await db.collection('tankprofi_jobs').doc('charging-import').set({
+    jobId: 'charging-import',
+    ...stats,
+    lastRunAt: FieldValue.serverTimestamp(),
+    durationMs: Date.now() - startedAt,
+  }, { merge: true });
+  sendJson(res, { ok: true, ...stats, durationMs: Date.now() - startedAt });
+}
+
+function invalidChargingDocument(data) {
+  const sourceId = String(data?.sourceId || '').trim();
+  const stationId = String(data?.stationId || '').trim();
+  const lat = Number(data?.lat);
+  const lng = Number(data?.lng);
+  return !/^\d+$/.test(sourceId)
+    || !/^bnetza_\d+$/.test(stationId)
+    || !Number.isFinite(lat)
+    || !Number.isFinite(lng)
+    || lat < 47
+    || lat > 56
+    || lng < 5
+    || lng > 16;
+}
+
+async function handleChargingCleanup(req, res) {
+  const limit = Math.round(numberParam(req.query.limit || req.body?.limit, 500, 1, 500));
+  const snapshot = await db.collection('charging_stations').limit(2500).get();
+  const batch = db.batch();
+  let scanned = 0;
+  let deleted = 0;
+  for (const doc of snapshot.docs) {
+    scanned += 1;
+    if (!invalidChargingDocument({ ...doc.data(), stationId: doc.data().stationId || doc.id })) continue;
+    batch.delete(doc.ref);
+    deleted += 1;
+    if (deleted >= limit) break;
+  }
+  if (deleted) await batch.commit();
+  sendJson(res, {
+    ok: true,
+    scanned,
+    deleted,
+    limit,
+    done: deleted < limit,
+  });
+}
+
+function normalizeChargingForClient(doc, origin = null) {
+  const data = doc.data ? doc.data() : doc;
+  const station = {
+    id: doc.id || data.stationId || data.sourceId,
+    stationId: data.stationId || doc.id || data.sourceId,
+    sourceId: data.sourceId || '',
+    name: data.name || data.displayName || data.operatorName || 'Ladepunkt',
+    operatorName: data.operatorName || '',
+    displayName: data.displayName || '',
+    status: data.status || '',
+    facilityType: data.facilityType || '',
+    chargingPointCount: Number(data.chargingPointCount || 0),
+    nominalPowerKw: Number(data.nominalPowerKw || 0),
+    maxConnectorPowerKw: Number(data.maxConnectorPowerKw || 0),
+    acDc: data.acDc || '',
+    fastCharging: data.fastCharging === true,
+    street: data.street || '',
+    houseNumber: data.houseNumber || '',
+    addressLine: data.addressLine || [data.street, data.houseNumber].filter(Boolean).join(' '),
+    postcode: data.postcode || '',
+    city: data.city || '',
+    district: data.district || '',
+    state: data.state || '',
+    lat: Number(data.lat),
+    lng: Number(data.lng),
+    siteName: data.siteName || '',
+    paymentSystems: Array.isArray(data.paymentSystems) ? data.paymentSystems : [],
+    openingHours: data.openingHours || '',
+    connectorTypes: Array.isArray(data.connectorTypes) ? data.connectorTypes : [],
+    connectors: Array.isArray(data.connectors) ? data.connectors.slice(0, 6) : [],
+    sourceName: data.sourceName || 'Bundesnetzagentur Ladesaeulenregister',
+    sourceLicense: data.sourceLicense || 'CC BY 4.0',
+    sourceUpdatedAt: data.sourceUpdatedAt || bnetzaChargingSourceDate,
+  };
+  if (origin && Number.isFinite(station.lat) && Number.isFinite(station.lng)) {
+    station.distance = distanceKmBetween(origin.lat, origin.lng, station.lat, station.lng);
+  }
+  return station;
+}
+
+async function handleChargingStations(req, res) {
+  const lat = Number(req.query.lat);
+  const lng = Number(req.query.lng);
+  const hasOrigin = Number.isFinite(lat) && Number.isFinite(lng);
+  const radiusKm = numberParam(req.query.radius, hasOrigin ? 25 : 0, 1, 100);
+  const limit = Math.round(numberParam(req.query.limit, 100, 1, 500));
+  let docs = [];
+  if (hasOrigin) {
+    const latDelta = radiusKm / 111;
+    const snapshot = await db.collection('charging_stations')
+      .where('lat', '>=', lat - latDelta)
+      .where('lat', '<=', lat + latDelta)
+      .limit(1200)
+      .get();
+    docs = snapshot.docs;
+  } else {
+    const snapshot = await db.collection('charging_stations').orderBy('sourceId').limit(limit).get();
+    docs = snapshot.docs;
+  }
+  const origin = hasOrigin ? { lat, lng } : null;
+  const stations = docs
+    .map((doc) => normalizeChargingForClient(doc, origin))
+    .filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lng))
+    .filter((station) => !hasOrigin || station.distance <= radiusKm)
+    .sort((a, b) => (a.distance ?? 999999) - (b.distance ?? 999999))
+    .slice(0, limit);
+  const pointCount = stations.reduce((sum, station) => sum + Number(station.chargingPointCount || 0), 0);
+  sendJson(res, {
+    ok: true,
+    stations,
+    count: stations.length,
+    chargingPointCount: pointCount,
+    source: 'Bundesnetzagentur Ladesaeulenregister',
+    sourceUpdatedAt: bnetzaChargingSourceDate,
+    license: 'CC BY 4.0',
+  });
+}
+
 function exportDateValue(value) {
   if (!value) return '';
   if (value.toDate) return value.toDate().toISOString();
@@ -5000,7 +5437,7 @@ export const api = onRequest({
   invoker: 'public',
   cors: false,
   timeoutSeconds: 540,
-  memory: '512MiB',
+  memory: '1GiB',
 }, async (req, res) => {
   try {
     const endpoint = endpointFrom(req);
@@ -5016,6 +5453,9 @@ export const api = onRequest({
     if (endpoint === 'adminStats') return await handleAdminStats(req, res);
     if (endpoint === 'addressExport') return await handleAddressExport(req, res);
     if (endpoint === 'addressConsolidate') return await handleAddressConsolidate(req, res);
+    if (endpoint === 'chargingImport') return await handleChargingImport(req, res);
+    if (endpoint === 'chargingCleanup') return await handleChargingCleanup(req, res);
+    if (endpoint === 'chargingStations') return await handleChargingStations(req, res);
     if (endpoint === 'autobahnImport') return await handleAutobahnImport(req, res);
     if (endpoint === 'autobahnPriceRefresh') return await handleAutobahnPriceRefresh(req, res);
     if (endpoint === 'autobahnStations') return await handleAutobahnStations(req, res);

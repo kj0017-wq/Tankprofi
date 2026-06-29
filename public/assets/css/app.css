@@ -430,6 +430,22 @@ button {
     box-shadow: 3px 3px 0 #0b6b38;
 }
 
+.section-tone-charging .brand-bar {
+    color: var(--white);
+    background: linear-gradient(180deg, #118a52 0%, #0d5f95 100%);
+}
+
+.section-tone-charging .brand-bar .eyebrow,
+.section-tone-charging .brand-bar h1 {
+    color: var(--white);
+}
+
+.section-tone-charging .brand-logo-mark,
+.section-tone-charging .help-button,
+.section-tone-charging .drive-mode-button {
+    box-shadow: 3px 3px 0 #0b5f3c;
+}
+
 .brand-logo-mark {
     grid-area: logo;
     width: 50px;
@@ -1226,7 +1242,7 @@ select:focus {
 .bottom-nav {
     flex: 0 0 auto;
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 4px;
     min-height: calc(54px + env(safe-area-inset-bottom));
     padding: 3px 10px 0;
@@ -1999,6 +2015,243 @@ button.city-row:focus {
     font-size: 0.72rem;
     font-weight: 850;
     text-align: right;
+}
+
+.charging-dashboard {
+    display: grid;
+    gap: 10px;
+    padding: 10px 12px 18px;
+}
+
+.charging-source-note {
+    display: grid;
+    gap: 3px;
+    padding: 10px 12px;
+    border: 3px solid var(--ink);
+    border-radius: 8px;
+    background: linear-gradient(90deg, var(--green-100) 0%, #eaf3ff 100%);
+    box-shadow: 4px 4px 0 rgba(16, 20, 25, 0.14);
+}
+
+.charging-source-note strong {
+    color: var(--blue-600);
+    font-size: 1rem;
+    font-weight: 950;
+}
+
+.charging-source-note span {
+    color: var(--gray-700);
+    font-size: 0.76rem;
+    font-weight: 850;
+    line-height: 1.25;
+}
+
+.charging-list {
+    display: grid;
+    gap: 8px;
+}
+
+.charging-row {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) 76px;
+    grid-template-areas:
+        "rank main distance"
+        "rank main power"
+        "connectors connectors status";
+    gap: 6px 8px;
+    align-items: center;
+    padding: 10px;
+    border: 3px solid var(--ink);
+    border-radius: 8px;
+    color: var(--ink);
+    background: #eef8ff;
+    box-shadow: 4px 4px 0 rgba(16, 20, 25, 0.16);
+    text-align: left;
+}
+
+.charging-row:nth-child(even) {
+    background: var(--green-100);
+}
+
+.charging-rank {
+    grid-area: rank;
+    color: var(--white);
+    background: var(--green-500);
+}
+
+.charging-main {
+    grid-area: main;
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.charging-main strong,
+.charging-main small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.charging-main strong {
+    font-size: 0.96rem;
+    font-weight: 950;
+}
+
+.charging-main small {
+    color: var(--gray-700);
+    font-size: 0.74rem;
+    font-weight: 850;
+}
+
+.charging-power {
+    grid-area: power;
+    justify-self: end;
+    display: grid;
+    gap: 1px;
+    text-align: right;
+}
+
+.charging-power b {
+    color: var(--blue-600);
+    font-size: 1rem;
+    font-weight: 950;
+    line-height: 1;
+}
+
+.charging-power small,
+.charging-distance,
+.charging-connectors,
+.charging-status {
+    color: var(--gray-700);
+    font-size: 0.72rem;
+    font-weight: 900;
+}
+
+.charging-distance {
+    grid-area: distance;
+    justify-self: end;
+    color: var(--blue-600);
+    font-size: 0.84rem;
+    font-weight: 950;
+    white-space: nowrap;
+}
+
+.charging-connectors {
+    grid-area: connectors;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.charging-status {
+    grid-area: status;
+    justify-self: end;
+    max-width: 128px;
+    padding: 2px 7px;
+    border: 2px solid var(--ink);
+    border-radius: 999px;
+    background: var(--gray-100);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.charging-status.live {
+    color: #0b6b38;
+    background: var(--green-100);
+}
+
+.charging-row.selected {
+    outline: 4px solid var(--blue-600);
+    outline-offset: 2px;
+}
+
+.charging-marker {
+    position: relative;
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    border: 3px solid var(--ink);
+    border-radius: 50%;
+    color: var(--ink);
+    background: var(--green-100);
+    box-shadow: 3px 3px 0 var(--blue-600);
+    font-size: 0.68rem;
+    font-weight: 950;
+    line-height: 1;
+}
+
+.charging-marker.fast {
+    color: var(--white);
+    background: var(--blue-600);
+}
+
+.charging-marker.selected {
+    transform: scale(1.14);
+    box-shadow: 0 0 0 4px var(--yellow-300), 4px 4px 0 var(--ink);
+}
+
+.charging-marker i {
+    position: absolute;
+    top: 5px;
+    left: 8px;
+    width: 10px;
+    height: 18px;
+    background: currentColor;
+    clip-path: polygon(55% 0, 8% 52%, 42% 52%, 28% 100%, 92% 38%, 56% 38%);
+}
+
+.charging-marker b {
+    margin-left: 9px;
+}
+
+.charging-popup {
+    color: var(--blue-600);
+    background: var(--green-100);
+}
+
+.charging-detail-logo {
+    display: grid;
+    place-items: center;
+    color: var(--white);
+    background: var(--green-500);
+}
+
+.charging-detail-power {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 10px 0;
+}
+
+.charging-detail-power span {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+    padding: 9px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    background: var(--green-100);
+}
+
+.charging-detail-power small {
+    color: var(--gray-700);
+    font-size: 0.66rem;
+    font-weight: 950;
+    text-transform: uppercase;
+}
+
+.charging-detail-power strong {
+    color: var(--blue-600);
+    font-size: 1rem;
+    font-weight: 950;
+    line-height: 1.05;
+    overflow-wrap: anywhere;
 }
 
 .driving-dashboard {
