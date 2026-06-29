@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260629-electric-route-chargers';
+const appVersion = '20260629-electric-drive-card-layout';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -5011,8 +5011,8 @@ function drivingTankpointCardHtml(station, rank, thresholds) {
                         <span class="driving-route-badge">${escapeHtml(mode)}</span>
                     </span>
                     <span class="driving-data-status ${statusClass}">${escapeHtml(station.status || 'Status offen')}</span>
-                    <small>${escapeHtml(station.name || station.operatorName || 'Ladepunkt')}</small>
-                    <small>${escapeHtml(chargingAddress(station) || chargingConnectorText(station))}</small>
+                    <small class="driving-charging-name">${escapeHtml(station.name || station.operatorName || 'Ladepunkt')}</small>
+                    <small class="driving-charging-address">${escapeHtml(chargingAddress(station) || chargingConnectorText(station))}</small>
                 </span>
                 ${directionHtml}
                 <span class="driving-distance">

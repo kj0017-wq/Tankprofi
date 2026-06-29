@@ -3093,6 +3093,18 @@ button.city-row:focus {
         "prices prices";
 }
 
+.driving-card-charging {
+    min-height: 176px;
+    grid-template-columns: 86px minmax(64px, 1fr) 112px;
+    grid-template-areas:
+        "main direction distance"
+        "statusbadge direction distance"
+        "charge-name charge-name charge-name"
+        "charge-address charge-address charge-address"
+        "prices prices prices";
+    gap: 7px 10px;
+}
+
 .driving-dashboard > .city-station-list {
     min-height: 0;
     display: grid;
@@ -3421,6 +3433,35 @@ button.city-row:focus {
     white-space: normal;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 1;
+}
+
+.driving-card-charging .driving-charging-name,
+.driving-card-charging .driving-charging-address {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ink);
+    font-weight: 950;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    -webkit-line-clamp: unset;
+}
+
+.driving-card-charging .driving-charging-name {
+    grid-area: charge-name;
+    font-size: 0.98rem;
+}
+
+.driving-card-charging .driving-charging-address {
+    grid-area: charge-address;
+    color: var(--gray-700);
+    font-size: 0.82rem;
+    font-weight: 850;
+}
+
+.driving-card-charging .driving-data-status {
+    justify-self: start;
 }
 
 .driving-card .driving-distance {
