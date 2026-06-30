@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260630-drive-speed-collapse';
+const appVersion = '20260630-ev-city-header-tone';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -2822,9 +2822,10 @@ function updateSectionHeaderTone() {
     const isDriving = state.listMode === 'driving';
     const isRural = isDriving && state.drivingContext === 'rural';
     const isElectricDrive = isDriving && state.drivingVehicleMode === 'electric';
+    const isElectricCity = state.listMode === 'cities' && state.vehicleMode === 'electric';
     const isAutobahn = state.listMode === 'autobahn' || (isDriving && state.drivingContext === 'highway' && !isElectricDrive);
-    const isCity = state.listMode === 'cities' || (isDriving && state.drivingContext === 'city' && !isElectricDrive);
-    const isCharging = state.listMode === 'charging' || isElectricDrive;
+    const isCity = (state.listMode === 'cities' && !isElectricCity) || (isDriving && state.drivingContext === 'city' && !isElectricDrive);
+    const isCharging = state.listMode === 'charging' || isElectricDrive || isElectricCity;
     els.appShell.classList.toggle('section-tone-autobahn', isAutobahn);
     els.appShell.classList.toggle('section-tone-city', isCity && !isAutobahn);
     els.appShell.classList.toggle('section-tone-rural', isRural);
