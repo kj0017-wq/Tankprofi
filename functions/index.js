@@ -5269,20 +5269,39 @@ async function handleChargingStations(req, res) {
   });
 }
 
+function chargingCityKeys(city) {
+  const aliases = {
+    muenchen: ['muenchen', 'munchen', 'münchen'],
+    koeln: ['koeln', 'koln', 'köln'],
+    duesseldorf: ['duesseldorf', 'dusseldorf', 'düsseldorf'],
+    stuttgart: ['stuttgart'],
+    nuernberg: ['nuernberg', 'nurnberg', 'nürnberg'],
+    muenster: ['muenster', 'munster', 'münster'],
+    'frankfurt-am-main': ['frankfurt am main', 'frankfurt'],
+  };
+  const values = [
+    city.cityId,
+    city.cityName,
+    String(city.cityId || '').replace(/-/g, ' '),
+    ...(aliases[city.cityId] || []),
+  ];
+  return new Set(values.map((value) => normalizeText(value)).filter(Boolean));
+}
+
 async function handleChargingCities(req, res) {
-  const radiusKm = numberParam(req.query.radius, 25, 5, 50);
   const limit = Math.round(numberParam(req.query.limit, 20, 1, 20));
   const cities = defaultCityConfig.slice(0, limit);
   const snapshot = await db.collection('charging_stations').orderBy('sourceId').limit(30000).get();
-  const stations = snapshot.docs
-    .map((doc) => normalizeChargingForDistribution(doc))
+  const rawStations = snapshot.docs
+    .map((doc) => normalizeChargingForClient(doc))
     .filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lng));
+  const facilities = groupChargingFacilities(rawStations);
 
   const rankings = cities.map((city) => {
-    const matches = stations.filter((station) => (
-      distanceKmBetween(city.centerLat, city.centerLng, station.lat, station.lng) <= radiusKm
-    ));
+    const cityKeys = chargingCityKeys(city);
+    const matches = facilities.filter((station) => cityKeys.has(normalizeText(station.city)));
     const chargingPointCount = matches.reduce((sum, station) => sum + Number(station.chargingPointCount || 0), 0);
+    const chargingUnitCount = matches.reduce((sum, station) => sum + Number(station.chargingUnitCount || 1), 0);
     const fastChargingCount = matches.filter((station) => station.fastCharging === true || Number(station.maxConnectorPowerKw || station.nominalPowerKw || 0) >= 50).length;
     const maxPowerKw = matches.reduce((max, station) => Math.max(max, Number(station.maxConnectorPowerKw || station.nominalPowerKw || 0)), 0);
     const operatorCount = new Set(matches
@@ -5295,9 +5314,10 @@ async function handleChargingCities(req, res) {
       sortOrder: city.sortOrder,
       centerLat: city.centerLat,
       centerLng: city.centerLng,
-      radiusKm,
+      matchMode: 'city',
       stationCount: matches.length,
       chargingPointCount,
+      chargingUnitCount,
       fastChargingCount,
       operatorCount,
       maxPowerKw,
@@ -5309,9 +5329,9 @@ async function handleChargingCities(req, res) {
     source: 'Bundesnetzagentur Ladesaeulenregister',
     sourceUpdatedAt: bnetzaChargingSourceDate,
     license: 'CC BY 4.0',
-    radiusKm,
+    matchMode: 'city',
     cityCount: rankings.length,
-    stationTotal: stations.length,
+    stationTotal: facilities.length,
     rankings,
   });
 }
