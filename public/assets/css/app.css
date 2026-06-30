@@ -2110,6 +2110,43 @@ button.city-row:focus {
     line-height: 1.25;
 }
 
+.charging-filterbar {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding: 8px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    background: linear-gradient(90deg, #e1f8ea 0%, #e7f1ff 100%);
+    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.14);
+}
+
+.charging-filterbar label {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+}
+
+.charging-filterbar span {
+    color: var(--blue-700);
+    font-size: 0.68rem;
+    font-weight: 950;
+    text-transform: uppercase;
+}
+
+.charging-filterbar select {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+    border: 2px solid var(--ink);
+    border-radius: 7px;
+    padding: 0 6px;
+    color: var(--ink);
+    background: var(--cream);
+    font-size: 0.86rem;
+    font-weight: 900;
+}
+
 .charging-distribution-button {
     min-height: 36px;
     padding: 7px 10px;

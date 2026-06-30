@@ -5229,11 +5229,19 @@ async function handleChargingStations(req, res) {
   const lng = Number(req.query.lng);
   const hasOrigin = Number.isFinite(lat) && Number.isFinite(lng);
   const distributionMode = req.query.distribution === '1' || req.query.all === '1';
+  const requestedCityId = normalizeText(req.query.city || '');
+  const cityConfig = requestedCityId
+    ? defaultCityConfig.find((city) => chargingCityKeys(city).has(requestedCityId) || normalizeText(city.cityId) === requestedCityId)
+    : null;
+  const cityMode = Boolean(cityConfig);
   const radiusKm = numberParam(req.query.radius, hasOrigin ? 25 : 0, 1, 100);
-  const maxLimit = distributionMode && !hasOrigin ? 30000 : 500;
-  const limit = Math.round(numberParam(req.query.limit, distributionMode ? 30000 : 100, 1, maxLimit));
+  const maxLimit = (distributionMode && !hasOrigin) || cityMode ? 30000 : 500;
+  const limit = Math.round(numberParam(req.query.limit, distributionMode || cityMode ? 30000 : 100, 1, maxLimit));
   let docs = [];
-  if (hasOrigin) {
+  if (cityMode) {
+    const snapshot = await db.collection('charging_stations').orderBy('sourceId').limit(30000).get();
+    docs = snapshot.docs;
+  } else if (hasOrigin) {
     const latDelta = radiusKm / 111;
     const snapshot = await db.collection('charging_stations')
       .where('lat', '>=', lat - latDelta)
@@ -5245,10 +5253,16 @@ async function handleChargingStations(req, res) {
     const snapshot = await db.collection('charging_stations').orderBy('sourceId').limit(limit).get();
     docs = snapshot.docs;
   }
-  const origin = hasOrigin ? { lat, lng } : null;
+  const origin = hasOrigin
+    ? { lat, lng }
+    : cityMode
+      ? { lat: cityConfig.centerLat, lng: cityConfig.centerLng }
+      : null;
+  const cityKeys = cityMode ? chargingCityKeys(cityConfig) : null;
   const rawStations = docs
     .map((doc) => (distributionMode && !hasOrigin ? normalizeChargingForDistribution(doc) : normalizeChargingForClient(doc, origin)))
     .filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lng))
+    .filter((station) => !cityMode || cityKeys.has(normalizeText(station.city)))
     .filter((station) => !hasOrigin || distanceKmBetween(origin.lat, origin.lng, station.lat, station.lng) <= radiusKm);
   const facilities = groupChargingFacilities(rawStations, origin);
   const stations = facilities
@@ -5263,6 +5277,9 @@ async function handleChargingStations(req, res) {
     chargingPointCount: pointCount,
     chargingUnitCount: unitCount,
     groupedAs: 'charging_facility',
+    matchMode: cityMode ? 'city' : hasOrigin ? 'radius' : distributionMode ? 'distribution' : 'all',
+    cityId: cityConfig?.cityId || null,
+    cityName: cityConfig?.cityName || null,
     source: 'Bundesnetzagentur Ladesaeulenregister',
     sourceUpdatedAt: bnetzaChargingSourceDate,
     license: 'CC BY 4.0',

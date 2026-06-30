@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260630-ev-city-header-tone';
+const appVersion = '20260630-ev-city-filters';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -94,6 +94,12 @@ const state = {
     chargingDistributionLoadKey: null,
     chargingOperators: [],
     chargingOperatorsLoadKey: null,
+    chargingCityContext: null,
+    chargingFilters: {
+        operator: 'all',
+        connector: 'all',
+        minPower: 'all',
+    },
     drivingActive: false,
     drivingWatchId: null,
     drivingUpdateTimer: null,
@@ -2735,6 +2741,8 @@ function prepareChargingSearch(clearLocation = false) {
     state.cityMapMode = 'overview';
     state.selectedCityId = null;
     state.selectedHighway = 'all';
+    state.chargingCityContext = null;
+    state.chargingFilters = { operator: 'all', connector: 'all', minPower: 'all' };
     if (clearLocation) state.selectedLocation = null;
     setCityMode(false);
     setDirectoryMode(false);
@@ -3088,6 +3096,12 @@ function renderChargingCityRankings(data = null) {
                 lat: Number(city.centerLat),
                 lng: Number(city.centerLng),
             };
+            state.chargingCityContext = {
+                cityId: city.cityId,
+                cityName: city.cityName,
+            };
+            state.chargingFilters = { operator: 'all', connector: 'all', minPower: 'all' };
+            state.chargingLoadKey = null;
             els.searchInput.value = city.cityName;
             state.listMode = 'charging';
             state.cityMapMode = 'overview';
@@ -6070,6 +6084,66 @@ function chargingPowerText(station) {
     return power > 0 ? `${power.toLocaleString('de-DE')} kW` : 'kW offen';
 }
 
+function chargingPowerValue(station) {
+    return Number(station.maxConnectorPowerKw || station.nominalPowerKw || 0);
+}
+
+function chargingConnectorValues(station) {
+    const values = [
+        ...(Array.isArray(station.connectorTypes) ? station.connectorTypes : []),
+        ...(Array.isArray(station.connectors) ? station.connectors.map((connector) => connector?.type) : []),
+        station.acDc,
+    ].filter(Boolean);
+    return [...new Set(values.map((value) => String(value).trim()).filter(Boolean))];
+}
+
+function chargingFilteredStations() {
+    const filters = state.chargingFilters || {};
+    return state.chargingStations.filter((station) => {
+        if (filters.operator && filters.operator !== 'all') {
+            const operator = String(station.operatorName || station.displayName || station.name || 'Betreiber unbekannt');
+            if (operator !== filters.operator) return false;
+        }
+        if (filters.connector && filters.connector !== 'all' && !chargingConnectorValues(station).includes(filters.connector)) return false;
+        const minPower = Number(filters.minPower || 0);
+        if (Number.isFinite(minPower) && minPower > 0 && chargingPowerValue(station) < minPower) return false;
+        return true;
+    });
+}
+
+function chargingFilterOptionsHtml(stations) {
+    const filters = state.chargingFilters || {};
+    const operators = [...new Set(stations
+        .map((station) => String(station.operatorName || station.displayName || station.name || 'Betreiber unbekannt').trim())
+        .filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, 'de'));
+    const connectors = [...new Set(stations.flatMap(chargingConnectorValues))]
+        .sort((a, b) => a.localeCompare(b, 'de'));
+    const powerOptions = [
+        ['all', 'alle kW'],
+        ['11', 'ab 11 kW'],
+        ['22', 'ab 22 kW'],
+        ['50', 'ab 50 kW'],
+        ['150', 'ab 150 kW'],
+        ['300', 'ab 300 kW'],
+    ];
+    return `
+        <section class="charging-filterbar" aria-label="Ladeanlagen filtern">
+            <label><span>Betreiber</span><select data-charging-filter="operator">
+                <option value="all">alle Betreiber</option>
+                ${operators.map((operator) => `<option value="${escapeHtml(operator)}" ${filters.operator === operator ? 'selected' : ''}>${escapeHtml(operator)}</option>`).join('')}
+            </select></label>
+            <label><span>Stecker</span><select data-charging-filter="connector">
+                <option value="all">alle Stecker</option>
+                ${connectors.map((connector) => `<option value="${escapeHtml(connector)}" ${filters.connector === connector ? 'selected' : ''}>${escapeHtml(connector)}</option>`).join('')}
+            </select></label>
+            <label><span>Leistung</span><select data-charging-filter="minPower">
+                ${powerOptions.map(([value, label]) => `<option value="${value}" ${String(filters.minPower || 'all') === value ? 'selected' : ''}>${label}</option>`).join('')}
+            </select></label>
+        </section>
+    `;
+}
+
 function normalizeChargingStation(station) {
     const stationId = station.stationId || station.id;
     return {
@@ -6320,7 +6394,6 @@ async function loadChargingOperators(force = false) {
 }
 
 function renderChargingList() {
-    state.stations = state.chargingStations;
     updateSectionHeaderTone();
     updateBottomNav();
     if (!state.chargingStations.length) {
@@ -6329,9 +6402,12 @@ function renderChargingList() {
         els.results.innerHTML = '<div class="empty-state">Ladeanlagen werden geladen oder sind noch nicht importiert.</div>';
         return;
     }
-    const pointCount = state.chargingStations.reduce((sum, station) => sum + Number(station.chargingPointCount || 0), 0);
-    const unitCount = state.chargingStations.reduce((sum, station) => sum + Number(station.chargingUnitCount || 1), 0);
-    els.resultCount.textContent = `${state.chargingStations.length} Ladeanlagen`;
+    const visibleChargingStations = chargingFilteredStations();
+    state.stations = visibleChargingStations;
+    const pointCount = visibleChargingStations.reduce((sum, station) => sum + Number(station.chargingPointCount || 0), 0);
+    const unitCount = visibleChargingStations.reduce((sum, station) => sum + Number(station.chargingUnitCount || 1), 0);
+    const contextLabel = state.chargingCityContext?.cityName ? `${state.chargingCityContext.cityName} - ` : '';
+    els.resultCount.textContent = `${contextLabel}${visibleChargingStations.length}/${state.chargingStations.length} Ladeanlagen`;
     els.resultMeta.textContent = `${pointCount} Ladepunkte - ${unitCount} Ladeeinrichtungen - Quelle Bundesnetzagentur, CC BY 4.0`;
     els.results.innerHTML = `
         <section class="charging-dashboard">
@@ -6342,9 +6418,12 @@ function renderChargingList() {
                 </div>
                 <button class="charging-distribution-button" type="button" data-charging-distribution>Deutschlandkarte</button>
             </div>
+            ${state.chargingCityContext ? chargingFilterOptionsHtml(state.chargingStations) : ''}
             ${chargingOperatorsPanelHtml()}
             <div class="charging-list">
-                ${state.chargingStations.map((station, index) => chargingRowHtml(station, index)).join('')}
+                ${visibleChargingStations.length
+                    ? visibleChargingStations.map((station, index) => chargingRowHtml(station, index)).join('')
+                    : '<div class="empty-state">Keine Ladeanlage passt zu diesem Filter.</div>'}
             </div>
         </section>
     `;
@@ -6352,6 +6431,16 @@ function renderChargingList() {
         openChargingDistributionMap(beginNavigation());
     });
     els.results.querySelector('[data-charging-operators]')?.addEventListener('click', () => loadChargingOperators(true));
+    els.results.querySelectorAll('[data-charging-filter]').forEach((select) => {
+        select.addEventListener('change', () => {
+            state.chargingFilters = {
+                ...state.chargingFilters,
+                [select.dataset.chargingFilter]: select.value,
+            };
+            renderChargingList();
+            renderMarkers();
+        });
+    });
     els.results.querySelectorAll('[data-charging-id]').forEach((button) => {
         button.addEventListener('click', () => selectChargingStation(button.dataset.chargingId, true));
     });
@@ -6362,7 +6451,7 @@ function selectChargingStation(id, pan = false) {
     const station = state.chargingStations.find((item) => (item.stationId || item.id) === id);
     if (!station) return;
     state.selectedId = id;
-    state.stations = state.chargingStations;
+    state.stations = chargingFilteredStations();
     document.querySelectorAll('[data-charging-id]').forEach((item) => {
         item.classList.toggle('selected', item.dataset.chargingId === id);
     });
@@ -6379,6 +6468,8 @@ async function openChargingDistributionMap(requestId = beginNavigation()) {
     if (!isElectricMode()) setVehicleMode('electric');
     state.listMode = 'charging';
     state.cityMapMode = 'overview';
+    state.chargingCityContext = null;
+    state.chargingFilters = { operator: 'all', connector: 'all', minPower: 'all' };
     renderDetail(null);
     updateBottomNav();
     updateSectionHeaderTone();
@@ -6412,8 +6503,11 @@ async function loadChargingStations(requestId = state.navRequestId) {
         if (!isCurrentNavigation(requestId, 'charging')) return;
     }
     const location = state.selectedLocation;
-    const params = new URLSearchParams({ limit: String(els.limit?.value || '50') });
-    if (location && Number.isFinite(location.lat) && Number.isFinite(location.lng)) {
+    const cityContext = state.chargingCityContext;
+    const params = new URLSearchParams({ limit: cityContext?.cityId ? '30000' : String(els.limit?.value || '50') });
+    if (cityContext?.cityId) {
+        params.set('city', cityContext.cityId);
+    } else if (location && Number.isFinite(location.lat) && Number.isFinite(location.lng)) {
         params.set('lat', location.lat);
         params.set('lng', location.lng);
         params.set('radius', String(els.radius?.value || '25'));
@@ -7677,6 +7771,8 @@ function bindEvents() {
                 setVehicleMode('electric');
                 state.listMode = 'charging';
                 state.cityMapMode = 'overview';
+                state.chargingCityContext = null;
+                state.chargingFilters = { operator: 'all', connector: 'all', minPower: 'all' };
                 renderDetail(null);
                 setView('list');
                 updateBottomNav();
