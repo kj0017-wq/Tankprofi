@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260630-ev-city-counts';
+const appVersion = '20260630-drive-speed-collapse';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -3525,6 +3525,7 @@ function estimateDrivingSpeedKmh(samples = state.drivingSamples) {
     const distance = routeDistanceKm(first.lat, first.lng, last.lat, last.lng);
     const elapsedHours = Math.max(0, (last.timestamp - first.timestamp) / 3600000);
     if (!Number.isFinite(distance) || elapsedHours <= 0) return 0;
+    if (isDrivingRestMode(usable)) return 0;
     const speedKmh = distance / elapsedHours;
     if (distance < 0.015 || Number(last.accuracy) > 100) return 0;
     return Math.max(0, speedKmh);
@@ -3558,12 +3559,13 @@ function detectDrivingBearing(samples = state.drivingSamples) {
     const elapsedHours = Math.max(0, (last.timestamp - first.timestamp) / 3600000);
     const calculatedSpeed = elapsedHours > 0 ? distance / elapsedHours : 0;
     const speedKmh = Number.isFinite(last.speedKmh) && last.speedKmh > 0 ? last.speedKmh : calculatedSpeed;
-    state.drivingSpeedKmh = speedKmh;
     state.drivingAccuracy = last.accuracy;
     const hasRecentBearing = Date.now() - Number(state.drivingLastBearingAt || 0) <= DRIVE_BEARING_MEMORY_MS;
     if (speedKmh < 10 || Number(last.accuracy) > 100 || distance < 0.03) {
+        state.drivingSpeedKmh = 0;
         return hasRecentBearing ? state.drivingLastBearing : null;
     }
+    state.drivingSpeedKmh = speedKmh;
     const bearing = calculateBearing(first, last);
     if (Number.isFinite(bearing)) {
         state.drivingLastBearing = bearing;
@@ -3583,9 +3585,12 @@ function detectDrivingDirection(samples = state.drivingSamples) {
     const elapsedHours = Math.max(0, (last.timestamp - first.timestamp) / 3600000);
     const calculatedSpeed = elapsedHours > 0 ? distance / elapsedHours : 0;
     const speedKmh = Number.isFinite(last.speedKmh) && last.speedKmh > 0 ? last.speedKmh : calculatedSpeed;
-    state.drivingSpeedKmh = speedKmh;
     state.drivingAccuracy = last.accuracy;
-    if (speedKmh < 20 || Number(last.accuracy) > 100 || distance < 0.08) return null;
+    if (speedKmh < 20 || Number(last.accuracy) > 100 || distance < 0.08) {
+        state.drivingSpeedKmh = 0;
+        return null;
+    }
+    state.drivingSpeedKmh = speedKmh;
 
     const bearing = detectDrivingBearing(samples);
     if (!Number.isFinite(bearing)) return null;

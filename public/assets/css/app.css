@@ -1402,6 +1402,15 @@ select:focus {
     white-space: nowrap;
 }
 
+.driving-controls-collapsed .drive-speed-chip {
+    min-width: 126px;
+    min-height: 42px;
+    padding: 7px 14px;
+    font-size: 2rem;
+    border-width: 3px;
+    box-shadow: 4px 4px 0 rgba(16, 20, 25, 0.22);
+}
+
 .driving-mode #resultMeta {
     flex: 1 1 auto;
 }
