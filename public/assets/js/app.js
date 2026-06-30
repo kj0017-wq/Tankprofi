@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260630-ev-city-filters';
+const appVersion = '20260630-ev-filter-chain';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -6097,28 +6097,41 @@ function chargingConnectorValues(station) {
     return [...new Set(values.map((value) => String(value).trim()).filter(Boolean))];
 }
 
-function chargingFilteredStations() {
-    const filters = state.chargingFilters || {};
-    return state.chargingStations.filter((station) => {
-        if (filters.operator && filters.operator !== 'all') {
+function chargingMatchesFilters(station, filters = state.chargingFilters || {}, ignore = '') {
+    if (ignore !== 'operator' && filters.operator && filters.operator !== 'all') {
             const operator = String(station.operatorName || station.displayName || station.name || 'Betreiber unbekannt');
             if (operator !== filters.operator) return false;
         }
-        if (filters.connector && filters.connector !== 'all' && !chargingConnectorValues(station).includes(filters.connector)) return false;
-        const minPower = Number(filters.minPower || 0);
-        if (Number.isFinite(minPower) && minPower > 0 && chargingPowerValue(station) < minPower) return false;
-        return true;
-    });
+    if (ignore !== 'connector' && filters.connector && filters.connector !== 'all' && !chargingConnectorValues(station).includes(filters.connector)) return false;
+    const minPower = Number(filters.minPower || 0);
+    if (ignore !== 'minPower' && Number.isFinite(minPower) && minPower > 0 && chargingPowerValue(station) < minPower) return false;
+    return true;
+}
+
+function chargingFilteredStations() {
+    return state.chargingStations.filter((station) => chargingMatchesFilters(station));
+}
+
+function chargingFilterActiveText(filters = state.chargingFilters || {}) {
+    const parts = [];
+    if (filters.operator && filters.operator !== 'all') parts.push(filters.operator);
+    if (filters.connector && filters.connector !== 'all') parts.push(filters.connector);
+    if (filters.minPower && filters.minPower !== 'all') parts.push(`ab ${filters.minPower} kW`);
+    return parts.length ? parts.join(' + ') : 'alle Anlagen';
 }
 
 function chargingFilterOptionsHtml(stations) {
     const filters = state.chargingFilters || {};
-    const operators = [...new Set(stations
+    const operators = [...new Map(stations
         .map((station) => String(station.operatorName || station.displayName || station.name || 'Betreiber unbekannt').trim())
-        .filter(Boolean))]
-        .sort((a, b) => a.localeCompare(b, 'de'));
-    const connectors = [...new Set(stations.flatMap(chargingConnectorValues))]
-        .sort((a, b) => a.localeCompare(b, 'de'));
+        .filter(Boolean)
+        .map((operator) => [operator, stations.filter((station) => String(station.operatorName || station.displayName || station.name || 'Betreiber unbekannt') === operator).length]))]
+        .sort((a, b) => a[0].localeCompare(b[0], 'de'));
+    const connectorBase = stations.filter((station) => chargingMatchesFilters(station, filters, 'connector'));
+    const connectors = [...new Map(connectorBase
+        .flatMap((station) => chargingConnectorValues(station).map((connector) => [connector, connectorBase.filter((item) => chargingConnectorValues(item).includes(connector)).length])))]
+        .sort((a, b) => a[0].localeCompare(b[0], 'de'));
+    const powerBase = stations.filter((station) => chargingMatchesFilters(station, filters, 'minPower'));
     const powerOptions = [
         ['all', 'alle kW'],
         ['11', 'ab 11 kW'],
@@ -6126,19 +6139,25 @@ function chargingFilterOptionsHtml(stations) {
         ['50', 'ab 50 kW'],
         ['150', 'ab 150 kW'],
         ['300', 'ab 300 kW'],
-    ];
+    ].map(([value, label]) => [
+        value,
+        label,
+        value === 'all' ? powerBase.length : powerBase.filter((station) => chargingPowerValue(station) >= Number(value)).length,
+    ]);
+    const active = chargingFilterActiveText(filters);
     return `
-        <section class="charging-filterbar" aria-label="Ladeanlagen filtern">
+        <section class="charging-filterbar ${active === 'alle Anlagen' ? '' : 'is-active'}" aria-label="Ladeanlagen filtern">
+            <strong class="charging-filterbar-status">${escapeHtml(active)}</strong>
             <label><span>Betreiber</span><select data-charging-filter="operator">
                 <option value="all">alle Betreiber</option>
-                ${operators.map((operator) => `<option value="${escapeHtml(operator)}" ${filters.operator === operator ? 'selected' : ''}>${escapeHtml(operator)}</option>`).join('')}
+                ${operators.map(([operator, count]) => `<option value="${escapeHtml(operator)}" ${filters.operator === operator ? 'selected' : ''}>${escapeHtml(operator)} (${count})</option>`).join('')}
             </select></label>
             <label><span>Stecker</span><select data-charging-filter="connector">
                 <option value="all">alle Stecker</option>
-                ${connectors.map((connector) => `<option value="${escapeHtml(connector)}" ${filters.connector === connector ? 'selected' : ''}>${escapeHtml(connector)}</option>`).join('')}
+                ${connectors.map(([connector, count]) => `<option value="${escapeHtml(connector)}" ${filters.connector === connector ? 'selected' : ''}>${escapeHtml(connector)} (${count})</option>`).join('')}
             </select></label>
             <label><span>Leistung</span><select data-charging-filter="minPower">
-                ${powerOptions.map(([value, label]) => `<option value="${value}" ${String(filters.minPower || 'all') === value ? 'selected' : ''}>${label}</option>`).join('')}
+                ${powerOptions.map(([value, label, count]) => `<option value="${value}" ${String(filters.minPower || 'all') === value ? 'selected' : ''}>${label} (${count})</option>`).join('')}
             </select></label>
         </section>
     `;
@@ -6432,14 +6451,22 @@ function renderChargingList() {
     });
     els.results.querySelector('[data-charging-operators]')?.addEventListener('click', () => loadChargingOperators(true));
     els.results.querySelectorAll('[data-charging-filter]').forEach((select) => {
-        select.addEventListener('change', () => {
+        const applyFilter = () => {
+            const key = select.dataset.chargingFilter;
             state.chargingFilters = {
                 ...state.chargingFilters,
-                [select.dataset.chargingFilter]: select.value,
+                [key]: select.value,
             };
+            if (key === 'operator') {
+                state.chargingFilters.connector = 'all';
+                state.chargingFilters.minPower = 'all';
+            }
+            if (key === 'connector') state.chargingFilters.minPower = 'all';
             renderChargingList();
             renderMarkers();
-        });
+        };
+        select.addEventListener('input', applyFilter);
+        select.addEventListener('change', applyFilter);
     });
     els.results.querySelectorAll('[data-charging-id]').forEach((button) => {
         button.addEventListener('click', () => selectChargingStation(button.dataset.chargingId, true));

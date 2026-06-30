@@ -2121,6 +2121,22 @@ button.city-row:focus {
     box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.14);
 }
 
+.charging-filterbar.is-active {
+    border-color: #075f3a;
+    background: linear-gradient(90deg, #d6f7e2 0%, #d9ecff 100%);
+}
+
+.charging-filterbar-status {
+    grid-column: 1 / -1;
+    min-width: 0;
+    overflow: hidden;
+    color: #075f3a;
+    font-size: 0.82rem;
+    font-weight: 950;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .charging-filterbar label {
     min-width: 0;
     display: grid;
