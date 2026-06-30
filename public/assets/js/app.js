@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260630-ev-charging-facilities';
+const appVersion = '20260630-ev-brand-badges';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -760,6 +760,32 @@ function brandInfo(station) {
         ['oil ', 'OIL!', 'oil'],
         ['agip', 'Agip', 'agip'],
         ['eni', 'Eni', 'agip'],
+        ['enbw', 'EnBW', 'enbw'],
+        ['e.on drive', 'E.ON', 'eon'],
+        ['eon drive', 'E.ON', 'eon'],
+        ['e.on', 'E.ON', 'eon'],
+        ['ionity', 'IONITY', 'ionity'],
+        ['ewe go', 'EWE Go', 'ewe-go'],
+        ['allego', 'Allego', 'allego'],
+        ['mercedes-benz', 'Mercedes', 'mercedes'],
+        ['westenergie', 'Westenergie', 'westenergie'],
+        ['hamburger energiewerke', 'Hamburg Energie', 'hamburg-energie'],
+        ['aldi süd', 'ALDI', 'aldi'],
+        ['aldi sued', 'ALDI', 'aldi'],
+        ['aldi', 'ALDI', 'aldi'],
+        ['edeka', 'EDEKA', 'edeka'],
+        ['ikea', 'IKEA', 'ikea'],
+        ['netto marken-discount', 'Netto', 'netto'],
+        ['netto', 'Netto', 'netto'],
+        ['qwello', 'Qwello', 'qwello'],
+        ['citywatt', 'Citywatt', 'citywatt'],
+        ['comfortcharge', 'Comfortcharge', 'comfortcharge'],
+        ['comfort charge', 'Comfortcharge', 'comfortcharge'],
+        ['tesla', 'Tesla', 'tesla'],
+        ['fastned', 'Fastned', 'fastned'],
+        ['mer germany', 'Mer', 'mer'],
+        ['deer', 'deer', 'deer'],
+        ['totalenergies charging', 'TotalEnergies', 'total'],
         ['ubitricity', 'ubitricity', 'ubitricity'],
         ['berliner stadtwerke', 'Berliner Stadtwerke', 'berliner-stadtwerke'],
         ['stadtwerke kommunalpartner', 'Berliner Stadtwerke', 'berliner-stadtwerke'],
@@ -2226,7 +2252,7 @@ function renderDetail(station) {
                     <button class="detail-close" type="button" id="detailCloseButton" aria-label="Detailansicht schlieÃŸen">Ã—</button>
                 </div>
                 <div class="detail-header">
-                    <span class="brand-logo charging-detail-logo">EV</span>
+                    ${brandLogoHtml(station)}
                     <div class="detail-titleblock">
                         <h2>${escapeHtml(station.name || 'Ladeanlage')}</h2>
                         <p class="detail-brand">${escapeHtml(station.operatorName || station.displayName || 'Betreiber unbekannt')}</p>
@@ -5145,11 +5171,11 @@ function drivingTankpointCardHtml(station, rank, thresholds) {
             <article class="driving-row driving-card driving-card-charging" tabindex="0" data-driving-station-id="${escapeHtml(station.tankerkoenig_id || station.stationId || station.id)}">
                 <span class="driving-main">
                     <span class="driving-titleline">
-                        <span class="brand-logo charging-detail-logo">EV</span>
+                        ${brandLogoHtml(station)}
                         <span class="driving-route-badge">${escapeHtml(mode)}</span>
                     </span>
                     <span class="driving-data-status ${statusClass}">${escapeHtml(station.status || 'Status offen')}</span>
-                    <small class="driving-charging-name">${escapeHtml(station.name || station.operatorName || 'Ladepunkt')}</small>
+                    <small class="driving-charging-name">${escapeHtml(station.name || station.operatorName || 'Ladeanlage')}</small>
                     <small class="driving-charging-address">${escapeHtml(chargingAddress(station) || chargingConnectorText(station))}</small>
                 </span>
                 ${directionHtml}
@@ -6218,10 +6244,7 @@ function chargingRowHtml(station, index) {
     const statusClass = /betrieb/i.test(station.status || '') ? 'live' : 'muted';
     return `
         <button class="charging-row" type="button" data-charging-id="${escapeHtml(station.stationId || station.id)}">
-            <span class="charging-logo" aria-hidden="true">
-                <b>EV</b>
-                <small>${escapeHtml(mode)}</small>
-            </span>
+            <span class="charging-logo branded" aria-hidden="true">${brandLogoHtml(station)}</span>
             <span class="charging-main">
                 <strong>${escapeHtml(station.name || station.operatorName || 'Ladeanlage')}</strong>
                 <small>${escapeHtml(station.operatorName || station.displayName || 'Betreiber unbekannt')}</small>

@@ -2264,6 +2264,25 @@ button.city-row:focus {
     font-weight: 950;
 }
 
+.charging-logo.branded {
+    padding: 2px;
+    background: #ffffff;
+}
+
+.charging-logo.branded .brand-logo {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    font-size: 0.58rem;
+    box-shadow: none;
+}
+
+.charging-logo.branded .brand-logo.image-logo img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
 .charging-main {
     grid-area: main;
     min-width: 0;
@@ -4070,6 +4089,25 @@ button.city-row:focus {
 .brand-logo.agip { background: #ffd200; color: #111111; }
 .brand-logo.ubitricity { background: #ffffff; color: #087246; }
 .brand-logo.berliner-stadtwerke { background: #00a4d8; color: #ffffff; }
+.brand-logo.enbw { background: #ffd400; color: #111111; }
+.brand-logo.eon { background: #ea1d2c; color: #ffffff; }
+.brand-logo.ionity { background: #101820; color: #7ddcff; }
+.brand-logo.ewe-go { background: #00a4e4; color: #ffffff; }
+.brand-logo.allego { background: #6f2da8; color: #ffffff; }
+.brand-logo.mercedes { background: #111111; color: #ffffff; }
+.brand-logo.westenergie { background: #00a651; color: #ffffff; }
+.brand-logo.hamburg-energie { background: #005ca9; color: #ffffff; }
+.brand-logo.aldi { background: #004b93; color: #ffffff; }
+.brand-logo.edeka { background: #ffd400; color: #0050a4; }
+.brand-logo.ikea { background: #0058a3; color: #ffda1a; }
+.brand-logo.netto { background: #f5d130; color: #d71920; }
+.brand-logo.qwello { background: #0f3b6d; color: #ffffff; }
+.brand-logo.citywatt { background: #0057b8; color: #ffffff; }
+.brand-logo.comfortcharge { background: #f1f5f9; color: #1e4ea8; }
+.brand-logo.tesla { background: #cc0000; color: #ffffff; }
+.brand-logo.fastned { background: #ffd400; color: #111111; }
+.brand-logo.mer { background: #1a936f; color: #ffffff; }
+.brand-logo.deer { background: #79b82a; color: #ffffff; }
 .brand-logo.score { background: #4c148c; }
 
 .brand-logo.image-logo {
