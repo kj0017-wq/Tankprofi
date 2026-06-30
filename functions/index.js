@@ -5069,7 +5069,7 @@ function normalizeChargingForClient(doc, origin = null) {
     id: doc.id || data.stationId || data.sourceId,
     stationId: data.stationId || doc.id || data.sourceId,
     sourceId: data.sourceId || '',
-    name: data.name || data.displayName || data.operatorName || 'Ladepunkt',
+    name: data.name || data.displayName || data.operatorName || 'Ladeanlage',
     operatorName: data.operatorName || '',
     displayName: data.displayName || '',
     status: data.status || '',
@@ -5126,6 +5126,104 @@ function normalizeChargingForDistribution(doc) {
   };
 }
 
+function chargingFacilityKey(station) {
+  const operator = normalizeText(station.operatorName || station.displayName || station.name || 'betreiber');
+  const addressParts = [
+    station.postcode,
+    station.city,
+    station.street,
+    station.houseNumber,
+  ].map((part) => normalizeText(part)).filter(Boolean);
+  const addressKey = addressParts.length
+    ? addressParts.join('|')
+    : `${Math.round(Number(station.lat) * 1000) / 1000}:${Math.round(Number(station.lng) * 1000) / 1000}`;
+  return stableHash([operator, addressKey].join('|'), 'charging_facility');
+}
+
+function groupChargingFacilities(stations, origin = null) {
+  const groups = new Map();
+  stations.forEach((station) => {
+    if (!Number.isFinite(station.lat) || !Number.isFinite(station.lng)) return;
+    const key = chargingFacilityKey(station);
+    const group = groups.get(key) || {
+      id: key,
+      stationId: key,
+      sourceId: '',
+      sourceIds: [],
+      stationIds: [],
+      chargingMode: true,
+      facilityMode: true,
+      name: station.siteName || station.displayName || station.operatorName || station.name || 'Ladeanlage',
+      operatorName: station.operatorName || station.displayName || '',
+      displayName: station.displayName || '',
+      status: station.status || '',
+      facilityType: station.facilityType || '',
+      chargingPointCount: 0,
+      chargingUnitCount: 0,
+      nominalPowerKw: 0,
+      maxConnectorPowerKw: 0,
+      acDcModes: new Set(),
+      fastCharging: false,
+      street: station.street || '',
+      houseNumber: station.houseNumber || '',
+      addressLine: station.addressLine || [station.street, station.houseNumber].filter(Boolean).join(' '),
+      postcode: station.postcode || '',
+      city: station.city || '',
+      district: station.district || '',
+      state: station.state || '',
+      latSum: 0,
+      lngSum: 0,
+      lat: 0,
+      lng: 0,
+      paymentSystems: new Set(),
+      openingHours: station.openingHours || '',
+      connectorTypes: new Set(),
+      connectors: [],
+      sourceName: station.sourceName || 'Bundesnetzagentur Ladesaeulenregister',
+      sourceLicense: station.sourceLicense || 'CC BY 4.0',
+      sourceUpdatedAt: station.sourceUpdatedAt || bnetzaChargingSourceDate,
+    };
+    group.chargingUnitCount += 1;
+    group.sourceIds.push(station.sourceId);
+    group.stationIds.push(station.stationId || station.id);
+    if (!group.sourceId && station.sourceId) group.sourceId = station.sourceId;
+    group.chargingPointCount += Number(station.chargingPointCount || 0);
+    group.nominalPowerKw = Math.max(group.nominalPowerKw, Number(station.nominalPowerKw || 0));
+    group.maxConnectorPowerKw = Math.max(group.maxConnectorPowerKw, Number(station.maxConnectorPowerKw || 0));
+    group.fastCharging = group.fastCharging || station.fastCharging === true || Number(station.maxConnectorPowerKw || station.nominalPowerKw || 0) >= 50;
+    if (station.acDc) group.acDcModes.add(station.acDc);
+    (Array.isArray(station.paymentSystems) ? station.paymentSystems : []).forEach((item) => item && group.paymentSystems.add(item));
+    (Array.isArray(station.connectorTypes) ? station.connectorTypes : []).forEach((item) => item && group.connectorTypes.add(item));
+    (Array.isArray(station.connectors) ? station.connectors : []).forEach((connector) => {
+      if (group.connectors.length < 12) group.connectors.push(connector);
+    });
+    group.latSum += Number(station.lat);
+    group.lngSum += Number(station.lng);
+    if (/in betrieb/i.test(station.status || '') && !/außer|ausser|nicht/i.test(station.status || '')) group.status = 'In Betrieb';
+    groups.set(key, group);
+  });
+
+  return [...groups.values()].map((group) => {
+    const lat = group.latSum / group.chargingUnitCount;
+    const lng = group.lngSum / group.chargingUnitCount;
+    const facility = {
+      ...group,
+      lat,
+      lng,
+      acDc: [...group.acDcModes].filter(Boolean).join(' / ') || '',
+      paymentSystems: [...group.paymentSystems],
+      connectorTypes: [...group.connectorTypes],
+      sourceIds: [...new Set(group.sourceIds.filter(Boolean))],
+      stationIds: [...new Set(group.stationIds.filter(Boolean))],
+      latSum: undefined,
+      lngSum: undefined,
+      acDcModes: undefined,
+    };
+    if (origin) facility.distance = distanceKmBetween(origin.lat, origin.lng, lat, lng);
+    return facility;
+  });
+}
+
 async function handleChargingStations(req, res) {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
@@ -5148,18 +5246,23 @@ async function handleChargingStations(req, res) {
     docs = snapshot.docs;
   }
   const origin = hasOrigin ? { lat, lng } : null;
-  const stations = docs
+  const rawStations = docs
     .map((doc) => (distributionMode && !hasOrigin ? normalizeChargingForDistribution(doc) : normalizeChargingForClient(doc, origin)))
     .filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lng))
-    .filter((station) => !hasOrigin || station.distance <= radiusKm)
+    .filter((station) => !hasOrigin || distanceKmBetween(origin.lat, origin.lng, station.lat, station.lng) <= radiusKm);
+  const facilities = groupChargingFacilities(rawStations, origin);
+  const stations = facilities
     .sort((a, b) => (a.distance ?? 999999) - (b.distance ?? 999999))
     .slice(0, limit);
   const pointCount = stations.reduce((sum, station) => sum + Number(station.chargingPointCount || 0), 0);
+  const unitCount = stations.reduce((sum, station) => sum + Number(station.chargingUnitCount || 1), 0);
   sendJson(res, {
     ok: true,
     stations,
     count: stations.length,
     chargingPointCount: pointCount,
+    chargingUnitCount: unitCount,
+    groupedAs: 'charging_facility',
     source: 'Bundesnetzagentur Ladesaeulenregister',
     sourceUpdatedAt: bnetzaChargingSourceDate,
     license: 'CC BY 4.0',

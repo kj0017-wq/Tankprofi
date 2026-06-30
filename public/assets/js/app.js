@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260629-ev-green-blue-operators';
+const appVersion = '20260630-ev-charging-facilities';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -1112,7 +1112,7 @@ function popupHtml(station) {
             : '';
         return `
             <div class="popup-card">
-                <h3 class="popup-title">${escapeHtml(station.name || 'Ladepunkt')}</h3>
+                <h3 class="popup-title">${escapeHtml(station.name || 'Ladeanlage')}</h3>
                 <p class="popup-meta strong">${escapeHtml(station.operatorName || 'Betreiber unbekannt')}</p>
                 <p class="popup-meta">${escapeHtml(addressLine)}</p>
                 <p class="popup-price charging-popup">${escapeHtml(chargingPowerText(station))} ${escapeHtml(station.acDc || '')}</p>
@@ -2228,7 +2228,7 @@ function renderDetail(station) {
                 <div class="detail-header">
                     <span class="brand-logo charging-detail-logo">EV</span>
                     <div class="detail-titleblock">
-                        <h2>${escapeHtml(station.name || 'Ladepunkt')}</h2>
+                        <h2>${escapeHtml(station.name || 'Ladeanlage')}</h2>
                         <p class="detail-brand">${escapeHtml(station.operatorName || station.displayName || 'Betreiber unbekannt')}</p>
                     </div>
                     <span class="detail-highway">${escapeHtml(station.acDc || 'EV')}</span>
@@ -2980,9 +2980,9 @@ async function loadChargingCityRankings(requestId = state.navRequestId) {
     const loadKey = 'charging-cities:20:25';
     if (state.chargingCityLoadKey === loadKey) return;
     state.chargingCityLoadKey = loadKey;
-    els.resultCount.textContent = 'Ladepunkte Städte';
+    els.resultCount.textContent = 'Ladeanlagen Staedte';
     els.resultMeta.textContent = 'Top-20-Städte werden geladen ...';
-    els.results.innerHTML = '<div class="empty-state">Ladepunkte der größten Städte werden gezählt.</div>';
+    els.results.innerHTML = '<div class="empty-state">Ladeanlagen der groessten Staedte werden gezaehlt.</div>';
     try {
         const data = await fetchJson('/api/charging/cities.php?limit=20&radius=25', { timeoutMs: 45000 });
         if (!isCurrentNavigation(requestId, 'cities')) return;
@@ -2993,8 +2993,8 @@ async function loadChargingCityRankings(requestId = state.navRequestId) {
         if (!isCurrentNavigation(requestId, 'cities')) return;
         setStatus('Fehler');
         els.resultCount.textContent = 'Keine Daten';
-        els.resultMeta.textContent = error.message || 'Ladepunkt-Städte konnten nicht geladen werden.';
-        els.results.innerHTML = '<div class="empty-state">Ladepunktliste der Städte konnte nicht geladen werden.</div>';
+        els.resultMeta.textContent = error.message || 'Ladeanlagen-Staedte konnten nicht geladen werden.';
+        els.results.innerHTML = '<div class="empty-state">Ladeanlagenliste der Staedte konnte nicht geladen werden.</div>';
     } finally {
         if (state.chargingCityLoadKey === loadKey) state.chargingCityLoadKey = null;
     }
@@ -3005,7 +3005,7 @@ function chargingCityRowHtml(city, rank) {
         <button class="city-row charging-city-row" type="button" data-charging-city-id="${escapeHtml(city.cityId)}" role="row">
             <span class="rank ${rank <= 3 ? 'cheap' : 'mid'}">${rank}</span>
             <strong>${escapeHtml(city.cityName)}</strong>
-            <span class="city-data" data-label="Ladeorte">${Number(city.stationCount || 0).toLocaleString('de-DE')}</span>
+            <span class="city-data" data-label="Ladeanlagen">${Number(city.stationCount || 0).toLocaleString('de-DE')}</span>
             <span class="city-data city-price-cell price-rank-green-light" data-label="Ladepunkte">${Number(city.chargingPointCount || 0).toLocaleString('de-DE')}</span>
             <span class="city-data" data-label="Schnell">${Number(city.fastChargingCount || 0).toLocaleString('de-DE')}</span>
             <span class="city-data" data-label="Betreiber">${Number(city.operatorCount || 0).toLocaleString('de-DE')}</span>
@@ -3024,9 +3024,9 @@ function renderChargingCityRankings(data = null) {
             || Number(b.stationCount || 0) - Number(a.stationCount || 0)
             || String(a.cityName).localeCompare(String(b.cityName), 'de'));
     if (!rankings.length) {
-        els.resultCount.textContent = 'Ladepunkte Städte';
-        els.resultMeta.textContent = 'Noch keine Ladepunktdaten geladen.';
-        els.results.innerHTML = '<div class="empty-state">Die Ladepunktliste wird geladen, sobald du Städte im Elektro-Modus öffnest.</div>';
+        els.resultCount.textContent = 'Ladeanlagen Staedte';
+        els.resultMeta.textContent = 'Noch keine Ladeanlagendaten geladen.';
+        els.results.innerHTML = '<div class="empty-state">Die Ladeanlagenliste wird geladen, sobald du Staedte im Elektro-Modus oeffnest.</div>';
         return;
     }
     const totals = rankings.reduce((acc, city) => {
@@ -3035,18 +3035,18 @@ function renderChargingCityRankings(data = null) {
         return acc;
     }, { stationCount: 0, chargingPointCount: 0 });
     els.resultCount.textContent = `${rankings.length} Städte`;
-    els.resultMeta.textContent = `${totals.chargingPointCount.toLocaleString('de-DE')} Ladepunkte · ${totals.stationCount.toLocaleString('de-DE')} Ladeorte · Radius ${Number(data?.radiusKm || rankings[0]?.radiusKm || 25)} km`;
+    els.resultMeta.textContent = `${totals.chargingPointCount.toLocaleString('de-DE')} Ladepunkte - ${totals.stationCount.toLocaleString('de-DE')} Ladeanlagen - Radius ${Number(data?.radiusKm || rankings[0]?.radiusKm || 25)} km`;
     els.results.innerHTML = `
         <section class="city-dashboard charging-city-dashboard">
             <div class="city-toolbar">
-                <strong>Elektro-Ladepunkte Großstädte</strong>
+                <strong>Elektro-Ladeanlagen Grossstaedte</strong>
                 <div class="city-view-tabs">
                     <button type="button" class="active">Liste</button>
                 </div>
             </div>
-            <div class="city-table charging-city-table" role="table" aria-label="Ladepunkte der größten Städte">
+            <div class="city-table charging-city-table" role="table" aria-label="Ladeanlagen der groessten Staedte">
                 <div class="city-row city-head" role="row">
-                    <span>Rang</span><span>Stadt</span><span>Ladeorte</span><span>Ladepunkte</span><span>Schnell</span><span>Betreiber</span><span>Max</span><span>Radius</span><span>Land</span>
+                    <span>Rang</span><span>Stadt</span><span>Ladeanlagen</span><span>Ladepunkte</span><span>Schnell</span><span>Betreiber</span><span>Max</span><span>Radius</span><span>Land</span>
                 </div>
                 ${rankings.map((city, index) => chargingCityRowHtml(city, index + 1)).join('')}
             </div>
@@ -3949,7 +3949,7 @@ function drivingRouteInfoOverlayHtml() {
         ? `${Math.round(info.distanceKm).toLocaleString('de-DE')} km`
         : '-';
     const count = Number(info.tankpointCount || 0);
-    const pointLabel = state.drivingVehicleMode === 'electric' ? 'Ladepunkte an der Route' : 'Tankpunkte an der Route';
+    const pointLabel = state.drivingVehicleMode === 'electric' ? 'Ladeanlagen an der Route' : 'Tankpunkte an der Route';
     return `
         <div class="driving-route-info-layer" data-driving-route-info-dismiss>
             <section class="driving-route-info-card" role="dialog" aria-modal="true" aria-label="Routenplanung">
@@ -4005,13 +4005,13 @@ async function applyDrivingDestination(query, options = {}) {
     if (state.drivingVehicleMode === 'electric' || state.vehicleMode === 'electric') {
         state.drivingRouteSuggestion = {
             id: 'electric-route',
-            label: 'Ladepunkte entlang der Route',
+            label: 'Ladeanlagen entlang der Route',
             routeIds: [],
             direction: null,
         };
         state.drivingRouteTemplateId = 'suggested';
         state.drivingContext = 'charging';
-        state.drivingMessage = 'Ladepunkte entlang der Route werden gesucht';
+        state.drivingMessage = 'Ladeanlagen entlang der Route werden gesucht';
         const routeChargingStations = await electricRouteChargingStationsForDriving(start, Number(els.limit?.value || 50));
         showDrivingRouteInfoOverlay(start, destination, routeChargingStations);
         await updateDrivingMode({ force: true });
@@ -5380,7 +5380,7 @@ function renderDrivingModeList() {
     `;
     updateSectionHeaderTone();
     const priceMeta = state.drivingVehicleMode === 'electric'
-        ? `${visibleStations.length} Ladeorte`
+        ? `${visibleStations.length} Ladeanlagen`
         : isLocalDrivingContext()
         ? drivingModePriceStandText(state.stations)
         : `${currentPriceCount}/${visibleStations.length} aktuelle Preise`;
@@ -5620,11 +5620,11 @@ async function updateElectricDrivingMode(position) {
     state.drivingStatus = stations.length ? 'ready' : 'empty';
     state.drivingMessage = stations.length
         ? (hasRoute
-            ? `${stations.length} Ladepunkte entlang der Route`
-            : `${stations.length} Ladeorte bis ${ELECTRIC_DRIVE_RADIUS_KM} km${Number.isFinite(visualDrivingBearing()) ? ' in Fahrtrichtung' : ''}`)
+            ? `${stations.length} Ladeanlagen entlang der Route`
+            : `${stations.length} Ladeanlagen bis ${ELECTRIC_DRIVE_RADIUS_KM} km${Number.isFinite(visualDrivingBearing()) ? ' in Fahrtrichtung' : ''}`)
         : (hasRoute
-            ? 'Keine Ladepunkte entlang der Route gefunden'
-            : `Keine Ladeorte bis ${ELECTRIC_DRIVE_RADIUS_KM} km gefunden`);
+            ? 'Keine Ladeanlagen entlang der Route gefunden'
+            : `Keine Ladeanlagen bis ${ELECTRIC_DRIVE_RADIUS_KM} km gefunden`);
     if (state.view === 'map') updateDrivingModeMapMarkers();
     if (!isDrivingDestinationInputActive()) renderDrivingModeList();
 }
@@ -6223,7 +6223,7 @@ function chargingRowHtml(station, index) {
                 <small>${escapeHtml(mode)}</small>
             </span>
             <span class="charging-main">
-                <strong>${escapeHtml(station.name || station.operatorName || 'Ladepunkt')}</strong>
+                <strong>${escapeHtml(station.name || station.operatorName || 'Ladeanlage')}</strong>
                 <small>${escapeHtml(station.operatorName || station.displayName || 'Betreiber unbekannt')}</small>
                 <small>${escapeHtml(chargingAddress(station) || 'Adresse offen')}</small>
             </span>
@@ -6254,17 +6254,17 @@ function chargingOperatorsPanelHtml() {
         return `
             <section class="charging-operators-panel">
                 <div class="charging-operators-head">
-                    <strong>Ladesaeulenbetreiber</strong>
+                    <strong>Ladeanlagenbetreiber</strong>
                     <button type="button" data-charging-operators>Laden</button>
                 </div>
-                <p>Betreiberliste nach Ladepunkten laden.</p>
+                <p>Betreiberliste nach Ladeanlagen laden.</p>
             </section>
         `;
     }
     return `
         <section class="charging-operators-panel">
             <div class="charging-operators-head">
-                <strong>Ladesaeulenbetreiber</strong>
+                <strong>Ladeanlagenbetreiber</strong>
                 <button type="button" data-charging-operators>Aktualisieren</button>
             </div>
             <div class="charging-operator-list">
@@ -6296,13 +6296,14 @@ function renderChargingList() {
     updateBottomNav();
     if (!state.chargingStations.length) {
         els.resultCount.textContent = 'Laden';
-        els.resultMeta.textContent = 'Noch keine Ladepunkte geladen.';
-        els.results.innerHTML = '<div class="empty-state">Ladepunkte werden geladen oder sind noch nicht importiert.</div>';
+        els.resultMeta.textContent = 'Noch keine Ladeanlagen geladen.';
+        els.results.innerHTML = '<div class="empty-state">Ladeanlagen werden geladen oder sind noch nicht importiert.</div>';
         return;
     }
     const pointCount = state.chargingStations.reduce((sum, station) => sum + Number(station.chargingPointCount || 0), 0);
-    els.resultCount.textContent = `${state.chargingStations.length} Ladeorte`;
-    els.resultMeta.textContent = `${pointCount} Ladepunkte - Quelle Bundesnetzagentur, CC BY 4.0`;
+    const unitCount = state.chargingStations.reduce((sum, station) => sum + Number(station.chargingUnitCount || 1), 0);
+    els.resultCount.textContent = `${state.chargingStations.length} Ladeanlagen`;
+    els.resultMeta.textContent = `${pointCount} Ladepunkte - ${unitCount} Ladeeinrichtungen - Quelle Bundesnetzagentur, CC BY 4.0`;
     els.results.innerHTML = `
         <section class="charging-dashboard">
             <div class="charging-source-note">
@@ -6356,7 +6357,7 @@ async function openChargingDistributionMap(requestId = beginNavigation()) {
     if (state.chargingDistributionLoadKey === loadKey) return;
     state.chargingDistributionLoadKey = loadKey;
     els.resultCount.textContent = 'Deutschlandkarte';
-    els.resultMeta.textContent = 'Ladepunkte werden deutschlandweit geladen ...';
+    els.resultMeta.textContent = 'Ladeanlagen werden deutschlandweit geladen ...';
     try {
         const data = await fetchJson('/api/charging/stations.php?distribution=1&limit=30000', { timeoutMs: 45000 });
         if (!isCurrentNavigation(requestId, 'charging')) return;
@@ -6364,12 +6365,12 @@ async function openChargingDistributionMap(requestId = beginNavigation()) {
         state.stations = state.chargingStations;
         setView('map');
         renderMarkers();
-        els.resultCount.textContent = `${state.chargingStations.length} Ladeorte`;
-        els.resultMeta.textContent = `${Number(data.chargingPointCount || 0).toLocaleString('de-DE')} Ladepunkte deutschlandweit`;
+        els.resultCount.textContent = `${state.chargingStations.length} Ladeanlagen`;
+        els.resultMeta.textContent = `${Number(data.chargingPointCount || 0).toLocaleString('de-DE')} Ladepunkte - ${Number(data.chargingUnitCount || 0).toLocaleString('de-DE')} Ladeeinrichtungen deutschlandweit`;
     } catch (error) {
         if (!isCurrentNavigation(requestId, 'charging')) return;
         els.resultCount.textContent = 'Keine Deutschlandkarte';
-        els.resultMeta.textContent = error.message || 'Deutschlandweite Ladepunkte konnten nicht geladen werden.';
+        els.resultMeta.textContent = error.message || 'Deutschlandweite Ladeanlagen konnten nicht geladen werden.';
     } finally {
         if (state.chargingDistributionLoadKey === loadKey) state.chargingDistributionLoadKey = null;
     }
@@ -6396,8 +6397,8 @@ async function loadChargingStations(requestId = state.navRequestId) {
     updateBottomNav();
     updateSectionHeaderTone();
     els.resultCount.textContent = 'Laden';
-    els.resultMeta.textContent = 'Ladepunkte werden geladen ...';
-    els.results.innerHTML = '<div class="empty-state">Elektro-Ladepunkte werden geladen.</div>';
+    els.resultMeta.textContent = 'Ladeanlagen werden geladen ...';
+    els.results.innerHTML = '<div class="empty-state">Elektro-Ladeanlagen werden geladen.</div>';
     try {
         const data = await fetchJson(`/api/charging/stations.php?${params.toString()}`, { timeoutMs: 30000 });
         if (!isCurrentNavigation(requestId, 'charging')) return;
@@ -6406,9 +6407,9 @@ async function loadChargingStations(requestId = state.navRequestId) {
     } catch (error) {
         if (!isCurrentNavigation(requestId, 'charging')) return;
         state.chargingStations = [];
-        els.resultCount.textContent = 'Keine Ladepunkte';
-        els.resultMeta.textContent = error.message || 'Ladepunkte konnten nicht geladen werden.';
-        els.results.innerHTML = '<div class="empty-state">Ladepunkte konnten nicht geladen werden. Import eventuell noch nicht gestartet.</div>';
+        els.resultCount.textContent = 'Keine Ladeanlagen';
+        els.resultMeta.textContent = error.message || 'Ladeanlagen konnten nicht geladen werden.';
+        els.results.innerHTML = '<div class="empty-state">Ladeanlagen konnten nicht geladen werden. Import eventuell noch nicht gestartet.</div>';
     } finally {
         if (state.chargingLoadKey === loadKey) state.chargingLoadKey = null;
     }
@@ -6860,7 +6861,7 @@ function syncVehicleOptionSets({ preferredRadius = null, preferredLimit = null }
     const radiusOptions = isElectric ? ELECTRIC_RADIUS_OPTIONS : COMBUSTION_RADIUS_OPTIONS;
     const limitOptions = isElectric ? ELECTRIC_LIMIT_OPTIONS : COMBUSTION_LIMIT_OPTIONS;
     setSelectOptions(els.radius, radiusOptions, 'km');
-    setSelectOptions(els.limit, limitOptions, isElectric ? 'Ladepunkte' : '');
+    setSelectOptions(els.limit, limitOptions, isElectric ? 'Ladeanlagen' : '');
     if (preferredRadius && radiusOptions.includes(String(preferredRadius))) {
         els.radius.value = String(preferredRadius);
     } else if (isElectric && !radiusOptions.includes(String(els.radius.value))) {
