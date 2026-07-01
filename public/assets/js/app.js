@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-clear-startup-timer';
+const appVersion = '20260701-autobahn-route-map';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -105,6 +105,7 @@ const state = {
     selectedHighway: 'all',
     autobahnPriceLoadingId: null,
     autobahnLoadKey: null,
+    autobahnRouteTankpointLoadKey: null,
     chargingStations: [],
     chargingLoadKey: null,
     chargingDistributionLoadKey: null,
@@ -7409,6 +7410,84 @@ function normalizeAutobahnStation(station) {
     };
 }
 
+function normalizeRouteTankpointForAutobahn(point) {
+    const tankerkoenigId = String(point.priceStationId || point.tankerkoenig_id || '').replace(/^tankkoenig_/, '');
+    const stationId = point.stationId || point.id || tankerkoenigId;
+    const highway = String(point.routeId || point.autobahn || '').trim().toUpperCase().replace(/\s+/g, '');
+    return {
+        autobahnMode: true,
+        routeMode: true,
+        tankerkoenig_id: tankerkoenigId,
+        stationId,
+        priceStationId: tankerkoenigId,
+        type: point.typ || '',
+        directorySource: point.sourceCollection || point.source || '',
+        name: point.name || 'Autobahn-Tankpunkt',
+        brand: point.brand || 'Tankstelle',
+        operator: point.operator || '',
+        street: point.street || point.address || highway,
+        house_number: point.house_number || point.houseNumber || '',
+        postcode: point.postcode || point.postCode || '',
+        city: point.city || '',
+        lat: Number(point.lat),
+        lng: Number(point.lng),
+        distance: 0,
+        is_open: point.isOpen ?? point.is_open ?? true,
+        price: autobahnPriceValue(point, els.fuel.value),
+        last_update: point.lastUpdated,
+        importedAt: point.lastUpdated,
+        highway,
+        sideLabel: point.richtung || '',
+        directionText: point.richtung || '',
+        features: Array.isArray(point.features) ? point.features : [],
+        typ: point.typ || '',
+        direktAnAutobahn: point.direktAnAutobahn,
+        abfahrtName: point.abfahrtName || null,
+        abfahrtNummer: point.abfahrtNummer || null,
+        streckenIndex: point.streckenIndex,
+        kmPosition: point.kmPosition,
+        prices: point.prices || null,
+        priceMatch: point.priceMatch || null,
+        tankerkoenigId,
+    };
+}
+
+function mergeAutobahnStations(stations) {
+    const byId = new Map(state.autobahnStations.map((station) => [stationMapId(station), station]));
+    stations.forEach((station) => {
+        const key = stationMapId(station);
+        if (!key) return;
+        byId.set(key, { ...byId.get(key), ...station });
+    });
+    state.autobahnStations = [...byId.values()];
+    syncAutobahnVisibleStations();
+}
+
+async function loadSelectedAutobahnRouteTankpoints(target = 'map') {
+    if (state.selectedHighway === 'all') return false;
+    const loadKey = `route:${state.selectedHighway}:${target}`;
+    if (state.autobahnRouteTankpointLoadKey === loadKey) return false;
+    state.autobahnRouteTankpointLoadKey = loadKey;
+    setStatus('Route');
+    els.resultMeta.textContent = `${state.selectedHighway} Tankpunkte werden geladen ...`;
+    try {
+        const params = new URLSearchParams({ route: state.selectedHighway });
+        const data = await fetchJson(`/api/route/tankpoints.php?${params.toString()}`, { timeoutMs: 24000 });
+        const routeStations = (data.tankpoints || [])
+            .map(normalizeRouteTankpointForAutobahn)
+            .filter((station) => stationMapId(station) && Number.isFinite(station.lat) && Number.isFinite(station.lng));
+        mergeAutobahnStations(routeStations);
+        setStatus('Aktuell');
+        return routeStations.length > 0;
+    } catch (error) {
+        setStatus('Fehler');
+        els.resultMeta.textContent = error.message || `${state.selectedHighway} konnte nicht geladen werden.`;
+        return false;
+    } finally {
+        if (state.autobahnRouteTankpointLoadKey === loadKey) state.autobahnRouteTankpointLoadKey = null;
+    }
+}
+
 async function refreshSelectedAutobahnPrices(target = 'list') {
     if (state.selectedHighway === 'all') return;
     const loadKey = `prices:${state.selectedHighway}:${target}`;
@@ -7546,6 +7625,10 @@ function activateAutobahnHighway(highway, target = 'list') {
     state.selectedHighway = nextHighway;
     syncAutobahnVisibleStations();
     renderAutobahnList();
+    loadSelectedAutobahnRouteTankpoints(target).then((loaded) => {
+        if (target === 'map' && loaded) openAutobahnMap({ skipRouteLoad: true });
+        else if (target !== 'map' && loaded) renderAutobahnList();
+    }).catch(() => null);
     refreshSelectedAutobahnPrices(target).catch((error) => {
         els.resultMeta.textContent = error.message;
         setStatus('Fehler');
@@ -7664,6 +7747,10 @@ function renderAutobahnList() {
         state.selectedHighway = event.target.value;
         renderAutobahnList();
         if (state.selectedHighway !== 'all') {
+            loadSelectedAutobahnRouteTankpoints(state.view === 'map' ? 'map' : 'list').then((loaded) => {
+                if (state.view === 'map' && loaded) openAutobahnMap({ skipRouteLoad: true });
+                else if (state.view !== 'map' && loaded) renderAutobahnList();
+            }).catch(() => null);
             refreshSelectedAutobahnPrices(state.view === 'map' ? 'map' : 'list').catch((error) => {
                 els.resultMeta.textContent = error.message;
                 setStatus('Fehler');
@@ -7713,12 +7800,15 @@ async function loadAutobahnStations(target = 'list', requestId = state.navReques
     }
 }
 
-function openAutobahnMap() {
+async function openAutobahnMap(options = {}) {
     state.listMode = 'autobahn';
     setDirectoryMode(true);
     if (!state.autobahnStations.length) {
         loadAutobahnStations('map', beginNavigation());
         return;
+    }
+    if (state.selectedHighway !== 'all' && !options.skipRouteLoad) {
+        await loadSelectedAutobahnRouteTankpoints('map');
     }
     syncAutobahnVisibleStations();
     setView('map');
@@ -8932,13 +9022,6 @@ function bindEvents() {
 
             if (action === 'autobahn') {
                 if (state.drivingActive) stopDrivingMode(false);
-                if (isElectricMode()) {
-                    startDrivingMode('ALL', { vehicleMode: 'electric' }).catch((error) => {
-                        setStatus('Fehler');
-                        els.resultMeta.textContent = error.message || 'Elektro-Autobahnmodus konnte nicht gestartet werden.';
-                    });
-                    return;
-                }
                 captureNormalSearchBeforeSection();
                 state.listMode = 'autobahn';
                 state.cityMapMode = 'overview';
