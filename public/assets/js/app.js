@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-autobahn-map-nonblocking';
+const appVersion = '20260701-autobahn-list-map-repair3';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -563,6 +563,45 @@ function autobahnPriceValue(station, fuel = els.fuel.value) {
     return station.prices?.[fuel]?.price ?? null;
 }
 
+function fuelDisplayLabel(fuel) {
+    return ({ diesel: 'Diesel', e5: 'E5', e10: 'E10' })[fuel] || String(fuel || '').toUpperCase();
+}
+
+function autobahnHasAnyPrice(station) {
+    return ['diesel', 'e5', 'e10'].some((fuel) => isValidPriceValue(autobahnPriceValue(station, fuel)));
+}
+
+function autobahnTopPrice(station) {
+    const fuels = ['e10', 'diesel', 'e5'];
+    const fuel = fuels.find((candidate) => isValidPriceValue(autobahnPriceValue(station, candidate)));
+    if (!fuel) return { fuel: '', label: 'Preis', value: null };
+    return { fuel, label: fuelDisplayLabel(fuel), value: autobahnPriceValue(station, fuel) };
+}
+
+function autobahnTopPriceHtml(station) {
+    const topPrice = autobahnTopPrice(station);
+    if (!isValidPriceValue(topPrice.value)) {
+        return '<span class="autobahn-top-price empty"><strong>-</strong><small>Preis</small></span>';
+    }
+    return `<span class="autobahn-top-price"><strong>${escapeHtml(money(topPrice.value))}</strong><small>${escapeHtml(topPrice.label)}</small></span>`;
+}
+
+function autobahnPriceCellsHtml(station) {
+    return `
+        <span class="autobahn-price-grid">
+            ${['diesel', 'e5', 'e10'].map((fuel) => {
+                const value = autobahnPriceValue(station, fuel);
+                return `
+                    <span class="autobahn-price-cell${isValidPriceValue(value) ? '' : ' empty'}">
+                        <small>${escapeHtml(fuelDisplayLabel(fuel))}</small>
+                        <strong>${escapeHtml(money(value))}</strong>
+                    </span>
+                `;
+            }).join('')}
+        </span>
+    `;
+}
+
 function autobahnPriceStand(station) {
     const dates = ['diesel', 'e5', 'e10']
         .map((fuel) => station.prices?.[fuel]?.recordedAt)
@@ -932,6 +971,8 @@ function autobahnKindClass(station) {
 }
 
 function autobahnKindLabel(station) {
+    const operator = String(station?.operator || '').toLowerCase();
+    if (operator.includes('rast')) return 'Tank & Rast';
     return isAutohofStation(station) ? 'Autohof' : 'Raststätte';
 }
 
@@ -1220,6 +1261,9 @@ function popupDetailHtml(station, options = {}) {
 
 function popupHtml(station) {
     const priceClass = visiblePriceClass(station);
+    const navUrl = hasValidCoordinates(station)
+        ? `https://waze.com/ul?ll=${Number(station.lat)}%2C${Number(station.lng)}&navigate=yes`
+        : '#';
     if (station.chargingMode) {
         const addressLine = chargingAddress(station) || '-';
         const distanceLine = Number.isFinite(Number(station.distance))
@@ -1398,9 +1442,9 @@ function setView(view) {
             }
             refreshMapLayout();
             renderMarkers();
-        const station = getVisibleStations().find((item) => stationMapId(item) === state.selectedId)
+            const station = getVisibleStations().find((item) => stationMapId(item) === state.selectedId)
                 || state.stations.find((item) => stationMapId(item) === state.selectedId);
-            if (station && state.listMode !== 'driving' && state.map.type !== 'fallback') {
+            if (station && hasValidCoordinates(station) && state.listMode !== 'driving' && state.map.type !== 'fallback') {
                 state.map.setView([station.lat, station.lng], Math.max(state.map.getZoom(), 14), { animate: true });
             }
         }, 180);
@@ -1417,8 +1461,64 @@ function stationMapId(station) {
     return station?.tankerkoenig_id || station?.stationId || station?.id || '';
 }
 
+function hasValidCoordinates(station) {
+    return Number.isFinite(Number(station?.lat)) && Number.isFinite(Number(station?.lng));
+}
+
+function autobahnMapDebug(stations, markerCount = 0, activeTab = state.view) {
+    if (state.listMode !== 'autobahn') return;
+    const total = stations.length;
+    const withCoordinates = stations.filter(hasValidCoordinates).length;
+    const withoutCoordinates = total - withCoordinates;
+    console.info('[Tankprofi Autobahn]', {
+        total,
+        withCoordinates,
+        withoutCoordinates,
+        markerCount,
+        selectedHighway: state.selectedHighway,
+        activeTab,
+    });
+}
+
+function autobahnStationsWithCoordinates(stations) {
+    const valid = [];
+    stations.forEach((station) => {
+        if (hasValidCoordinates(station)) {
+            valid.push(station);
+            return;
+        }
+        if (state.listMode === 'autobahn') {
+            console.debug('[Tankprofi Autobahn] Standort ohne Koordinaten', {
+                name: station?.name || 'Autobahn-Tankstelle',
+                autobahn: station?.highway || state.selectedHighway,
+                reason: 'fehlende lat/lng',
+            });
+        }
+    });
+    return valid;
+}
+
+function markerCoordinateKey(station) {
+    return `${Number(station.lat).toFixed(5)},${Number(station.lng).toFixed(5)}`;
+}
+
+function markerDisplayLatLng(station, coordinateUse) {
+    if (state.listMode !== 'autobahn') return [station.lat, station.lng];
+    const key = markerCoordinateKey(station);
+    const total = coordinateUse.totals.get(key) || 0;
+    if (total <= 1) return [station.lat, station.lng];
+    const index = coordinateUse.seen.get(key) || 0;
+    coordinateUse.seen.set(key, index + 1);
+    const angle = (Math.PI * 2 * index) / total;
+    const radius = 0.00018 + (total > 4 ? 0.00004 : 0);
+    return [
+        Number(station.lat) + Math.sin(angle) * radius,
+        Number(station.lng) + Math.cos(angle) * radius,
+    ];
+}
+
 function openDetailStationMap(station) {
-    if (!station || !Number.isFinite(Number(station.lat)) || !Number.isFinite(Number(station.lng))) return;
+    if (!station || !hasValidCoordinates(station)) return;
     const stationId = stationMapId(station);
     if (stationId) state.selectedId = stationId;
     clearDetailMapZoomTimer();
@@ -1444,6 +1544,10 @@ function openDetailStationMap(station) {
 function renderMarkers() {
     if (!state.map) return;
 
+    if (state.listMode === 'autobahn') syncAutobahnVisibleStations();
+    state.markers.forEach((marker) => {
+        if (state.map?.hasLayer?.(marker)) state.map.removeLayer(marker);
+    });
     state.markers.clear();
     if (state.listMode === 'driving') {
         renderDrivingMap();
@@ -1451,19 +1555,32 @@ function renderMarkers() {
     }
     if (state.drivingMarkerLayer) state.drivingMarkerLayer.clearLayers();
     const visibleStations = getVisibleStations();
-    const thresholds = thresholdsFor(visibleStations);
+    const markerStations = autobahnStationsWithCoordinates(visibleStations);
+    const thresholds = thresholdsFor(markerStations);
 
     if (state.map.type === 'fallback') {
-        renderFallbackMap(visibleStations, thresholds);
+        renderFallbackMap(markerStations, thresholds);
+        autobahnMapDebug(visibleStations, markerStations.length, 'map-fallback');
         return;
     }
 
     if (!state.layer) return;
     state.layer.clearLayers();
+    refreshMapLayout();
 
-    visibleStations.forEach((station) => {
+    const coordinateUse = {
+        totals: new Map(),
+        seen: new Map(),
+    };
+    markerStations.forEach((station) => {
+        const key = markerCoordinateKey(station);
+        coordinateUse.totals.set(key, (coordinateUse.totals.get(key) || 0) + 1);
+    });
+
+    markerStations.forEach((station) => {
         const stationId = stationMapId(station);
-        const marker = L.marker([station.lat, station.lng], {
+        const markerLatLng = markerDisplayLatLng(station, coordinateUse);
+        const marker = L.marker(markerLatLng, {
             icon: station.chargingMode
                 ? chargingIconFor(station, stationId === state.selectedId)
                 : iconFor(station, thresholds, stationId === state.selectedId),
@@ -1498,19 +1615,21 @@ function renderMarkers() {
             }
             selectStation(stationId, true, true);
         });
-        marker.addTo(state.layer);
+        marker.addTo(state.listMode === 'autobahn' ? state.map : state.layer);
         state.markers.set(stationId, marker);
     });
 
-    if (visibleStations.length === 1) {
-        const [station] = visibleStations;
-        if (Number.isFinite(Number(station.lat)) && Number.isFinite(Number(station.lng))) {
-            state.map.setView([station.lat, station.lng], 15, { animate: true });
-        }
-    } else if (visibleStations.length) {
-        const bounds = L.latLngBounds(visibleStations.map((station) => [station.lat, station.lng]));
+    if (markerStations.length === 1) {
+        const marker = [...state.markers.values()][0];
+        state.map.setView(marker?.getLatLng?.() || [markerStations[0].lat, markerStations[0].lng], 15, { animate: true });
+    } else if (markerStations.length) {
+        const markerLatLngs = [...state.markers.values()]
+            .map((marker) => marker.getLatLng?.())
+            .filter(Boolean);
+        const bounds = L.latLngBounds(markerLatLngs.length ? markerLatLngs : markerStations.map((station) => [station.lat, station.lng]));
         state.map.fitBounds(bounds.pad(0.16), { maxZoom: 14 });
     }
+    autobahnMapDebug(visibleStations, state.markers.size, 'map');
     renderUserLocationMarker();
     renderDrivingRouteOverlay();
     renderAutobahnRouteOverlay();
@@ -7464,11 +7583,13 @@ function normalizeRouteTankpointForAutobahn(point) {
     };
 }
 
-function mergeAutobahnStations(stations) {
+function mergeAutobahnStations(stations, options = {}) {
+    const appendUnmatched = options.appendUnmatched === true;
     const byId = new Map(state.autobahnStations.map((station) => [stationMapId(station), station]));
     stations.forEach((station) => {
         const key = stationMapId(station);
         if (!key) return;
+        if (!appendUnmatched && !byId.has(key)) return;
         byId.set(key, { ...byId.get(key), ...station });
     });
     state.autobahnStations = [...byId.values()];
@@ -7669,7 +7790,7 @@ function autobahnDirectionLabel(station) {
         .replace(/^rg[:\s]*/i, '')
         .trim();
     if (!normalized || normalized === '-' || /^unbekannt$/i.test(normalized) || /^\.+$/.test(normalized)) return '';
-    return `RG: ${normalized}`;
+    return `Richtung ${normalized}`;
 }
 
 function autobahnDirectionMetaHtml(station, className = 'autobahn-meta') {
@@ -7699,26 +7820,27 @@ function autobahnRowHtml(station, priceThresholds = thresholdsFor(state.stations
 }
 
 function autobahnRowHtmlDetailed(station, priceThresholds = thresholdsFor(state.stations)) {
-    const features = station.features?.length ? station.features.slice(0, 3).join(', ') : 'Services nicht angegeben';
-    const priceStand = autobahnPriceStand(station);
     const directionLabel = autobahnDirectionLabel(station);
-    const serviceText = [directionLabel, priceStand ? `Stand ${formatDateTime(priceStand)}` : features].filter(Boolean).join(' - ');
     const highwayLabel = station.highway || 'A';
     const rankClass = `${markerClass(station, priceThresholds)} ${autobahnKindClass(station)}`;
     const kindLabel = autobahnKindLabel(station);
-    const stationAddress = address(station) || station.operator || (isAutohofStation(station) ? 'Autohof' : 'Tankstelle');
+    const operatorLabel = station.brand || station.operator || 'Betreiber offen';
+    const priceStatus = autobahnHasAnyPrice(station) ? '' : '<span class="autobahn-price-status">keine aktuellen Preise</span>';
     return `
-        <button class="autobahn-row" type="button" data-autobahn-station-id="${escapeHtml(stationMapId(station))}">
+        <button class="autobahn-row autobahn-card" type="button" data-autobahn-station-id="${escapeHtml(stationMapId(station))}">
             <span class="rank ${escapeHtml(rankClass)}">${escapeHtml(highwayLabel)}</span>
             ${brandLogoHtml(station)}
+            ${autobahnTopPriceHtml(station)}
             <span class="autobahn-main">
-                <strong>${escapeHtml(station.name || 'Autobahn-Tankstelle')}</strong>
-                <small>${escapeHtml(kindLabel)} - ${escapeHtml(station.brand || 'Tankstelle')} - ${escapeHtml(stationAddress)}</small>
-                ${tankRastBadgeHtml(station)}
-                <small>${escapeHtml(autobahnPriceSummary(station))}</small>
+                <strong class="autobahn-name">${escapeHtml(station.name || 'Autobahn-Tankstelle')}</strong>
+                <span class="autobahn-subline">
+                    <span>${escapeHtml(operatorLabel)}</span>
+                    <span>${escapeHtml(kindLabel)}</span>
+                </span>
+                ${directionLabel ? `<span class="autobahn-direction">${escapeHtml(directionLabel)}</span>` : ''}
+                ${priceStatus}
             </span>
-            ${selectedFuelPriceHtml(station, 'autobahn-meta')}
-            <span class="autobahn-services">${escapeHtml(serviceText)}</span>
+            ${autobahnPriceCellsHtml(station)}
         </button>
     `;
 }
@@ -7731,6 +7853,7 @@ function renderAutobahnList() {
     const dataStandText = autobahnDataStandText(state.stations);
     els.resultCount.textContent = 'Autobahn-Standorte';
     els.resultMeta.textContent = `${state.stations.length} Standorte - ${dataStandText}`;
+    autobahnMapDebug(state.stations, 0, 'list');
 
     if (!state.autobahnStations.length) {
         els.results.innerHTML = '<div class="empty-state">Autobahn-Tankstellen werden geladen.</div>';

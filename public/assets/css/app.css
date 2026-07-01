@@ -7482,3 +7482,195 @@ button.city-row:focus {
     flex: 1 1 auto !important;
     min-height: 0 !important;
 }
+
+/* Autobahn cards: readable mobile hierarchy with explicit fuel labels. */
+.autobahn-row.autobahn-card {
+    grid-template-columns: 42px 32px minmax(0, 1fr) minmax(66px, auto) !important;
+    grid-template-areas:
+        "rank logo main topprice"
+        "rank logo main topprice"
+        "prices prices prices prices" !important;
+    align-items: start !important;
+    min-height: 0 !important;
+    height: auto !important;
+    gap: 7px 8px !important;
+    padding: 10px !important;
+}
+
+.autobahn-row.autobahn-card .rank {
+    width: 40px !important;
+    min-width: 40px !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    align-self: start !important;
+    font-size: 0.9rem !important;
+}
+
+.autobahn-row.autobahn-card .brand-logo {
+    grid-area: logo !important;
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    min-height: 30px !important;
+    align-self: start !important;
+    justify-self: center !important;
+    font-size: 0.48rem !important;
+}
+
+.autobahn-row.autobahn-card .brand-logo img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+}
+
+.autobahn-row.autobahn-card .autobahn-main {
+    grid-area: main !important;
+    display: grid !important;
+    gap: 3px !important;
+    min-width: 0 !important;
+    text-align: left !important;
+}
+
+.autobahn-row.autobahn-card .autobahn-name {
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden !important;
+    white-space: normal !important;
+    text-overflow: clip !important;
+    line-height: 1.08 !important;
+    font-size: 0.98rem !important;
+}
+
+.autobahn-subline {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 3px 8px !important;
+    color: var(--gray-700) !important;
+    font-size: 0.7rem !important;
+    font-weight: 850 !important;
+    line-height: 1.12 !important;
+}
+
+.autobahn-direction,
+.autobahn-price-status {
+    display: block !important;
+    min-width: 0 !important;
+    color: var(--blue-600) !important;
+    font-size: 0.7rem !important;
+    font-weight: 900 !important;
+    line-height: 1.12 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+.autobahn-price-status {
+    color: var(--gray-700) !important;
+}
+
+.autobahn-top-price {
+    grid-area: topprice !important;
+    justify-self: end !important;
+    display: grid !important;
+    gap: 1px !important;
+    min-width: 62px !important;
+    padding: 5px 6px !important;
+    border: 2px solid var(--ink) !important;
+    border-radius: 8px !important;
+    background: var(--yellow-100) !important;
+    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.18) !important;
+    color: var(--green-700) !important;
+    text-align: center !important;
+    line-height: 1 !important;
+}
+
+.autobahn-top-price strong {
+    font-size: 0.88rem !important;
+    font-weight: 950 !important;
+    white-space: nowrap !important;
+}
+
+.autobahn-top-price small {
+    color: var(--gray-700) !important;
+    font-size: 0.58rem !important;
+    font-weight: 950 !important;
+    text-transform: uppercase !important;
+}
+
+.autobahn-top-price.empty {
+    color: var(--gray-700) !important;
+    background: var(--cream-100) !important;
+}
+
+.autobahn-price-grid {
+    grid-area: prices !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 5px !important;
+    min-width: 0 !important;
+    width: 100% !important;
+}
+
+.autobahn-price-cell {
+    display: grid !important;
+    gap: 1px !important;
+    min-width: 0 !important;
+    padding: 4px 5px !important;
+    border: 2px solid rgba(16, 20, 25, 0.22) !important;
+    border-radius: 7px !important;
+    background: rgba(255, 255, 255, 0.74) !important;
+    text-align: center !important;
+}
+
+.autobahn-price-cell small {
+    color: var(--gray-700) !important;
+    font-size: 0.58rem !important;
+    font-weight: 950 !important;
+    line-height: 1 !important;
+}
+
+.autobahn-price-cell strong {
+    color: var(--ink) !important;
+    font-size: 0.76rem !important;
+    font-weight: 950 !important;
+    line-height: 1.05 !important;
+    white-space: nowrap !important;
+}
+
+.autobahn-price-cell.empty strong {
+    color: var(--gray-700) !important;
+}
+
+@media (max-width: 420px) {
+    .autobahn-row.autobahn-card {
+        grid-template-columns: 40px 30px minmax(0, 1fr) minmax(58px, auto) !important;
+        gap: 6px !important;
+        padding: 9px !important;
+    }
+
+    .autobahn-row.autobahn-card .rank {
+        width: 38px !important;
+        min-width: 38px !important;
+        height: 38px !important;
+        min-height: 38px !important;
+        font-size: 0.82rem !important;
+    }
+
+    .autobahn-top-price {
+        min-width: 58px !important;
+        padding: 5px 4px !important;
+    }
+
+    .autobahn-top-price strong {
+        font-size: 0.78rem !important;
+    }
+
+    .autobahn-price-cell {
+        padding: 4px 3px !important;
+    }
+
+    .autobahn-price-cell strong {
+        font-size: 0.68rem !important;
+    }
+}
