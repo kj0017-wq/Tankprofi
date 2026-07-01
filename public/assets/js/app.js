@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-sticky-autobahn-toolbar';
+const appVersion = '20260701-preserve-autobahn-detail-badge';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -7644,6 +7644,24 @@ function normalizeRouteTankpointForAutobahn(point) {
     };
 }
 
+function mergeAutobahnRefreshStation(previous, updated) {
+    if (!previous) return updated;
+    return {
+        ...previous,
+        ...updated,
+        autobahnMode: true,
+        routeMode: previous.routeMode || updated.routeMode,
+        highway: updated.highway || previous.highway || previous.routeId || previous.autobahn || '',
+        routeId: updated.routeId || previous.routeId || previous.highway || previous.autobahn || '',
+        autobahn: updated.autobahn || previous.autobahn || previous.highway || previous.routeId || '',
+        sideLabel: updated.sideLabel || previous.sideLabel || '',
+        directionText: updated.directionText || previous.directionText || '',
+        typ: updated.typ || previous.typ || previous.type || '',
+        type: updated.type || previous.type || previous.typ || '',
+        directorySource: updated.directorySource || previous.directorySource || '',
+    };
+}
+
 function mergeAutobahnStations(stations, options = {}) {
     const appendUnmatched = options.appendUnmatched === true;
     const byId = new Map(state.autobahnStations.map((station) => [stationMapId(station), station]));
@@ -7787,6 +7805,7 @@ async function refreshAutobahnStationPrices(id) {
         if (!updated) throw new Error('Keine Preisdaten für diese Raststätte gefunden.');
 
         const byId = new Map(state.autobahnStations.map((station) => [stationMapId(station), station]));
+        updated = mergeAutobahnRefreshStation(byId.get(id) || current, updated);
         byId.set(id, updated);
         state.autobahnStations = [...byId.values()];
         syncAutobahnVisibleStations();
