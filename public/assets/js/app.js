@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-electric-header';
+const appVersion = '20260701-electric-list-nearest';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -7116,13 +7116,13 @@ async function loadChargingStations(requestId = state.navRequestId) {
     }
     const location = state.selectedLocation;
     const cityContext = state.chargingCityContext;
-    const params = new URLSearchParams({ limit: cityContext?.cityId ? '30000' : String(els.limit?.value || '50') });
+    const params = new URLSearchParams({ limit: cityContext?.cityId ? '30000' : '100' });
     if (cityContext?.cityId) {
         params.set('city', cityContext.cityId);
     } else if (location && Number.isFinite(location.lat) && Number.isFinite(location.lng)) {
         params.set('lat', location.lat);
         params.set('lng', location.lng);
-        params.set('radius', String(els.radius?.value || '25'));
+        params.set('radius', '100');
     }
     const loadKey = params.toString();
     if (state.chargingLoadKey === loadKey) return;
@@ -8224,6 +8224,28 @@ function clearDeliveredSearchText() {
     els.suggestions.innerHTML = '';
 }
 
+async function loadNearestChargingStationsFromCurrentLocation() {
+    setVehicleMode('electric', { persist: false, silent: true });
+    prepareChargingSearch(false);
+    state.chargingCityContext = null;
+    state.chargingFilters = { operator: 'all', connector: 'all', minPower: 'all' };
+    state.chargingStations = [];
+    renderDetail(null);
+    updateBottomNav();
+    updateSectionHeaderTone();
+    els.resultCount.textContent = 'Laden';
+    els.resultMeta.textContent = 'Aktueller Standort wird ermittelt ...';
+    els.results.innerHTML = '<div class="empty-state">Die 100 naechsten Ladepunkte werden geladen.</div>';
+    await useCurrentLocation({
+        timeoutMs: 12000,
+        onFail: () => {
+            els.resultCount.textContent = 'Standort offen';
+            els.resultMeta.textContent = 'Standort konnte nicht ermittelt werden.';
+            els.results.innerHTML = '<div class="empty-state">Bitte Standortfreigabe erlauben, damit die naechsten Ladepunkte geladen werden koennen.</div>';
+        },
+    });
+}
+
 function clearListSearchInputForManualEntry() {
     if (state.listMode !== 'results' || state.view !== 'list') return;
     if (!els.searchInput.value.trim()) return;
@@ -8625,22 +8647,7 @@ function bindEvents() {
                 }
                 if (fromCities) {
                     if (isElectricMode()) {
-                        prepareChargingSearch(false);
-                        updateBottomNav();
-                        if (state.chargingStations.length) {
-                            renderChargingList();
-                        } else if (state.selectedLocation) {
-                            els.resultCount.textContent = 'Ladeanlagen';
-                            els.resultMeta.textContent = 'Elektro-Liste wird geladen ...';
-                            els.results.innerHTML = '<div class="empty-state">Elektro-Liste wird geladen ...</div>';
-                            loadChargingStations(navRequestId);
-                        } else {
-                            state.stations = [];
-                            useCurrentLocation({
-                                timeoutMs: 12000,
-                                onFail: () => restoreStoredStartState(),
-                            });
-                        }
+                        loadNearestChargingStationsFromCurrentLocation().catch(() => null);
                         return;
                     }
                     prepareNormalSearch(false);
@@ -8659,12 +8666,7 @@ function bindEvents() {
                     return;
                 }
                 if (isElectricMode()) {
-                    prepareChargingSearch(false);
-                    if (state.chargingStations.length) {
-                        renderChargingList();
-                    } else {
-                        loadChargingStations(navRequestId);
-                    }
+                    loadNearestChargingStationsFromCurrentLocation().catch(() => null);
                     return;
                 }
                 state.listMode = 'results';
