@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-ev-list-active-fix';
+const appVersion = '20260701-ev-plz-search-fix';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -7241,9 +7241,20 @@ async function loadChargingStations(requestId = state.navRequestId) {
         params.set('radius', String(ELECTRIC_CITY_RADIUS_KM));
         state.chargingSearchContext = 'city';
         state.chargingSearchRadiusKm = ELECTRIC_CITY_RADIUS_KM;
+    } else if (!cityContext?.cityId) {
+        state.chargingLoadKey = null;
+        els.resultCount.textContent = 'Keine Adresse';
+        els.resultMeta.textContent = 'Bitte PLZ, Ort oder Adresse pruefen.';
+        els.results.innerHTML = '<div class="empty-state">Zur Eingabe wurde kein Standort gefunden.</div>';
+        setStatus('Bereit');
+        return;
     }
     const loadKey = params.toString();
-    if (state.chargingLoadKey === loadKey) return;
+    if (state.chargingLoadKey === loadKey) {
+        if (state.chargingStations.length) renderChargingList();
+        else els.resultMeta.textContent = 'Ladeanlagen werden noch geladen ...';
+        return;
+    }
     state.chargingLoadKey = loadKey;
     state.listMode = 'charging';
     setView('list');
