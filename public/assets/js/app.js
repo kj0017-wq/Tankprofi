@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-drive-mode-label-gap';
+const appVersion = '20260701-autobahn-single-toolbar';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -7908,7 +7908,6 @@ function renderAutobahnList() {
     setCityMode(false);
     setDirectoryMode(true);
     syncAutobahnVisibleStations();
-    const selectedLabel = state.selectedHighway === 'all' ? 'alle Autobahnen' : state.selectedHighway;
     const dataStandText = autobahnDataStandText(state.stations);
     els.resultCount.textContent = 'Autobahn-Standorte';
     els.resultMeta.textContent = `${state.stations.length} Standorte - ${dataStandText}`;
@@ -7931,14 +7930,17 @@ function renderAutobahnList() {
                         ${highways.map((highway) => `<option value="${escapeHtml(highway)}"${state.selectedHighway === highway ? ' selected' : ''}>${escapeHtml(highway)}</option>`).join('')}
                     </select>
                 </label>
+                <span class="autobahn-toolbar-count">${state.stations.length} Standorte</span>
             </div>
             <div class="autobahn-list">
                 ${groups.map(([highway, stations]) => `
                     <section class="autobahn-group">
-                        <button class="autobahn-group-title" type="button" data-autobahn-highway="${escapeHtml(highway)}">
-                            <strong>${escapeHtml(highway)}</strong>
-                            <span>${stations.length} Standorte</span>
-                        </button>
+                        ${state.selectedHighway === 'all' ? `
+                            <button class="autobahn-group-title" type="button" data-autobahn-highway="${escapeHtml(highway)}">
+                                <strong>${escapeHtml(highway)}</strong>
+                                <span>${stations.length} Standorte</span>
+                            </button>
+                        ` : ''}
                         <div class="city-station-list">
                             ${stations.map((station) => autobahnRowHtmlDetailed(station, priceThresholds)).join('')}
                         </div>
