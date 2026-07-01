@@ -2498,6 +2498,39 @@ button.city-row:focus {
     outline-offset: 2px;
 }
 
+.charging-active-operator {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 9px;
+    border: 3px solid var(--ink);
+    border-radius: 8px;
+    background: linear-gradient(180deg, #e6f9ed 0%, #e8f3ff 100%);
+    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.15);
+}
+
+.charging-active-operator strong {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ink);
+    font-size: 0.9rem;
+    font-weight: 950;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.charging-active-operator button {
+    min-height: 34px;
+    padding: 0 12px;
+    border: 3px solid var(--ink);
+    border-radius: 8px;
+    color: var(--ink);
+    background: var(--yellow-500);
+    box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.18);
+    font-weight: 950;
+}
+
 .charging-operator-row .rank {
     grid-area: rank;
 }

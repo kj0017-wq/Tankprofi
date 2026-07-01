@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-electric-list-nearest';
+const appVersion = '20260701-autobahn-route-geometry';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -10,7 +10,10 @@ const ELECTRIC_RADIUS_OPTIONS = ['5', '10', '25'];
 const COMBUSTION_LIMIT_OPTIONS = ['10', '25', '50', '100'];
 const ELECTRIC_LIMIT_OPTIONS = ['20', '50', '100'];
 const COMBUSTION_NORMAL_SEARCH_LIMIT = '100';
-const ELECTRIC_DRIVE_RADIUS_KM = 25;
+const ELECTRIC_CITY_RADIUS_KM = 20;
+const ELECTRIC_RURAL_RADIUS_KM = 50;
+const ELECTRIC_NEAREST_LIMIT = 100;
+const ELECTRIC_ROUTE_CORRIDOR_KM = 8;
 const DRIVE_HIGHWAY_PRICE_MAX_AGE_MS = 15 * 60 * 1000;
 const USAGE_PRICE_MAX_AGE_MS = 30 * 60 * 1000;
 const DRIVE_UPDATE_INTERVAL_MS = 5000;
@@ -109,6 +112,8 @@ const state = {
     chargingOperatorsLimit: 40,
     chargingOperatorsLoadKey: null,
     chargingCityContext: null,
+    chargingSearchContext: 'city',
+    chargingSearchRadiusKm: ELECTRIC_CITY_RADIUS_KM,
     chargingFilters: {
         operator: 'all',
         connector: 'all',
@@ -134,6 +139,8 @@ const state = {
     drivingRoutePreviewCache: null,
     electricRoutePreviewCache: null,
     drivingRouteGeometry: [],
+    autobahnRouteGeometryCache: new Map(),
+    autobahnRouteGeometryLoadKey: null,
     drivingRouteLoadKey: null,
     drivingDetectedRouteId: null,
     drivingSamples: [],
@@ -1965,6 +1972,49 @@ async function loadDrivingRouteGeometry(start, destination) {
     }
 }
 
+function sampledAutobahnRouteWaypoints(points, maxPoints = 20) {
+    const valid = points
+        .map(([lat, lng]) => [Number(lat), Number(lng)])
+        .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+    if (valid.length <= maxPoints) return valid;
+    const sampled = [];
+    for (let index = 0; index < maxPoints; index += 1) {
+        const sourceIndex = Math.round((index * (valid.length - 1)) / (maxPoints - 1));
+        sampled.push(valid[sourceIndex]);
+    }
+    return sampled.filter((point, index, list) => (
+        index === 0 || point[0] !== list[index - 1][0] || point[1] !== list[index - 1][1]
+    ));
+}
+
+function autobahnRouteGeometryCacheKey(highway, points) {
+    const coordKey = sampledAutobahnRouteWaypoints(points)
+        .map(([lat, lng]) => `${lat.toFixed(4)},${lng.toFixed(4)}`)
+        .join(';');
+    return `${highway}:${coordKey}`;
+}
+
+async function loadAutobahnRouteGeometry(points) {
+    const waypoints = sampledAutobahnRouteWaypoints(points);
+    if (waypoints.length < 2) return [];
+    const coords = waypoints.map(([lat, lng]) => `${lng},${lat}`).join(';');
+    const params = new URLSearchParams({
+        overview: 'full',
+        geometries: 'geojson',
+        alternatives: 'false',
+        steps: 'false',
+    });
+    try {
+        const data = await fetchJson(`https://router.project-osrm.org/route/v1/driving/${coords}?${params.toString()}`, { progress: false, timeoutMs: 16000 });
+        const routeCoords = data.routes?.[0]?.geometry?.coordinates || [];
+        return routeCoords
+            .map(([lng, lat]) => [Number(lat), Number(lng)])
+            .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+    } catch {
+        return [];
+    }
+}
+
 function renderDrivingRouteOverlay() {
     if (!state.map || state.map.type === 'fallback') return;
     clearDrivingRouteOverlay();
@@ -2023,8 +2073,11 @@ function renderAutobahnRouteOverlay() {
         .sort(sortAutobahnStationsByGps)
         .map((station) => [Number(station.lat), Number(station.lng)]);
     if (routePoints.length < 2) return;
+    const cacheKey = autobahnRouteGeometryCacheKey(state.selectedHighway, routePoints);
+    const cachedGeometry = state.autobahnRouteGeometryCache.get(cacheKey);
+    const linePoints = cachedGeometry?.length >= 2 ? cachedGeometry : routePoints;
 
-    state.autobahnRouteLayer = L.polyline(routePoints, {
+    state.autobahnRouteLayer = L.polyline(linePoints, {
         color: '#ffd230',
         weight: 7,
         opacity: 0.72,
@@ -2033,9 +2086,27 @@ function renderAutobahnRouteOverlay() {
     }).addTo(state.map);
     state.autobahnRouteLayer.bringToBack();
 
-    const bounds = L.latLngBounds(routePoints);
+    const bounds = L.latLngBounds([...linePoints, ...routePoints]);
     if (bounds.isValid()) {
         state.map.fitBounds(bounds.pad(0.2), { maxZoom: 12, animate: true });
+    }
+
+    if (!cachedGeometry && state.autobahnRouteGeometryLoadKey !== cacheKey) {
+        state.autobahnRouteGeometryLoadKey = cacheKey;
+        loadAutobahnRouteGeometry(routePoints).then((geometry) => {
+            if (geometry.length < 2) return;
+            state.autobahnRouteGeometryCache.set(cacheKey, geometry);
+            if (
+                state.view === 'map'
+                && state.listMode === 'autobahn'
+                && state.selectedHighway !== 'all'
+                && autobahnRouteGeometryCacheKey(state.selectedHighway, routePoints) === cacheKey
+            ) {
+                renderAutobahnRouteOverlay();
+            }
+        }).finally(() => {
+            if (state.autobahnRouteGeometryLoadKey === cacheKey) state.autobahnRouteGeometryLoadKey = null;
+        });
     }
 }
 
@@ -6187,17 +6258,19 @@ async function updateElectricDrivingMode(position) {
     state.drivingLivePriceMessage = '';
     const hasRoute = Boolean(state.drivingDestination && Array.isArray(state.drivingRouteGeometry) && state.drivingRouteGeometry.length >= 2);
     const stations = hasRoute
-        ? await electricRouteChargingStationsForDriving(position, Number(els.limit?.value || 50))
-        : await loadElectricDriveStations(position, 20);
+        ? await electricRouteChargingStationsForDriving(position, ELECTRIC_NEAREST_LIMIT)
+        : await loadElectricDriveStations(position, ELECTRIC_NEAREST_LIMIT);
+    const localRadius = state.drivingContext === 'rural' ? ELECTRIC_RURAL_RADIUS_KM : ELECTRIC_CITY_RADIUS_KM;
+    const localContextLabel = state.drivingContext === 'rural' ? 'Landmodus' : 'Stadtmodus';
     state.stations = stations;
     state.drivingStatus = stations.length ? 'ready' : 'empty';
     state.drivingMessage = stations.length
         ? (hasRoute
-            ? `${stations.length} Ladeanlagen entlang der Route`
-            : `${stations.length} Ladeanlagen bis ${ELECTRIC_DRIVE_RADIUS_KM} km${Number.isFinite(visualDrivingBearing()) ? ' in Fahrtrichtung' : ''}`)
+            ? `${stations.length} Ladeanlagen entlang des Korridors`
+            : `${stations.length} Ladeanlagen im ${localContextLabel} bis ${localRadius} km${Number.isFinite(visualDrivingBearing()) ? ' in Fahrtrichtung' : ''}`)
         : (hasRoute
-            ? 'Keine Ladeanlagen entlang der Route gefunden'
-            : `Keine Ladeanlagen bis ${ELECTRIC_DRIVE_RADIUS_KM} km gefunden`);
+            ? 'Keine Ladeanlagen entlang des Korridors gefunden'
+            : `Keine Ladeanlagen im ${localContextLabel} bis ${localRadius} km gefunden`);
     if (state.view === 'map') updateDrivingModeMapMarkers();
     if (!isDrivingDestinationInputActive()) renderDrivingModeList();
 }
@@ -6767,7 +6840,7 @@ async function buildElectricRouteChargingCache(position, limit = 100) {
         const params = new URLSearchParams({
             lat: String(sample.lat),
             lng: String(sample.lng),
-            radius: '8',
+            radius: String(ELECTRIC_ROUTE_CORRIDOR_KM),
             limit: '80',
         });
         try {
@@ -6784,7 +6857,7 @@ async function buildElectricRouteChargingCache(position, limit = 100) {
                 const id = station.stationId || station.id;
                 if (!id || byId.has(id)) return;
                 const projection = projectPointToRouteGeometry(station);
-                if (!projection || !Number.isFinite(projection.routeKm) || projection.distanceKm > 8) return;
+                if (!projection || !Number.isFinite(projection.routeKm) || projection.distanceKm > ELECTRIC_ROUTE_CORRIDOR_KM) return;
                 byId.set(id, {
                     ...station,
                     drivingContext: 'charging-route',
@@ -6839,13 +6912,13 @@ async function electricRouteChargingStationsForDriving(position, limit = 100) {
     return stations;
 }
 
-async function loadElectricDriveStations(position, limit = 20) {
+async function fetchElectricDriveStations(position, radiusKm, limit = ELECTRIC_NEAREST_LIMIT) {
     if (!position || !Number.isFinite(Number(position.lat)) || !Number.isFinite(Number(position.lng))) return [];
     const params = new URLSearchParams({
         lat: String(position.lat),
         lng: String(position.lng),
-        radius: String(ELECTRIC_DRIVE_RADIUS_KM),
-        limit: String(Math.max(limit * 3, 40)),
+        radius: String(radiusKm),
+        limit: String(Math.max(limit, ELECTRIC_NEAREST_LIMIT)),
     });
     const data = await fetchJson(`/api/charging/stations.php?${params.toString()}`, { timeoutMs: 30000 });
     const bearing = visualDrivingBearing();
@@ -6870,6 +6943,17 @@ async function loadElectricDriveStations(position, limit = 20) {
         })
         .sort((a, b) => Number(a.distance || 0) - Number(b.distance || 0))
         .slice(0, limit);
+}
+
+async function loadElectricDriveStations(position, limit = ELECTRIC_NEAREST_LIMIT) {
+    const cityStations = await fetchElectricDriveStations(position, ELECTRIC_CITY_RADIUS_KM, limit);
+    if (localDriveContextFor(cityStations) !== 'rural') {
+        state.drivingContext = 'city';
+        return cityStations.map((station) => ({ ...station, drivingContext: 'city' }));
+    }
+    const ruralStations = await fetchElectricDriveStations(position, ELECTRIC_RURAL_RADIUS_KM, limit);
+    state.drivingContext = 'rural';
+    return ruralStations.map((station) => ({ ...station, drivingContext: 'rural' }));
 }
 
 function chargingRowHtml(station, index) {
@@ -6910,6 +6994,7 @@ function chargingOperatorHtml(operator, index) {
 }
 
 function chargingOperatorsPanelHtml() {
+    if (state.chargingFilters?.operator && state.chargingFilters.operator !== 'all') return '';
     if (!state.chargingOperators.length) {
         return `
             <section class="charging-operators-panel">
@@ -6963,6 +7048,8 @@ async function loadChargingDistributionStations(requestId = beginNavigation()) {
     const data = await fetchJson('/api/charging/stations.php?distribution=1&limit=30000', { timeoutMs: 45000 });
     if (!isCurrentNavigation(requestId, 'charging')) return null;
     state.chargingStations = (data.stations || []).map(normalizeChargingStation);
+    state.chargingSearchContext = 'distribution';
+    state.chargingSearchRadiusKm = null;
     state.stations = chargingFilteredStations();
     return data;
 }
@@ -6994,6 +7081,12 @@ async function applyChargingOperatorFilter(operatorName) {
     }
 }
 
+function resetChargingOperatorFilter() {
+    state.chargingFilters = { operator: 'all', connector: 'all', minPower: 'all' };
+    renderChargingList();
+    renderMarkers();
+}
+
 function renderChargingList() {
     updateSectionHeaderTone();
     updateBottomNav();
@@ -7008,8 +7101,14 @@ function renderChargingList() {
     const pointCount = visibleChargingStations.reduce((sum, station) => sum + Number(station.chargingPointCount || 0), 0);
     const unitCount = visibleChargingStations.reduce((sum, station) => sum + Number(station.chargingUnitCount || 1), 0);
     const contextLabel = state.chargingCityContext?.cityName ? `${state.chargingCityContext.cityName} - ` : '';
+    const activeOperator = state.chargingFilters?.operator && state.chargingFilters.operator !== 'all'
+        ? state.chargingFilters.operator
+        : '';
+    const chargingRangeLabel = !state.chargingCityContext && Number.isFinite(Number(state.chargingSearchRadiusKm))
+        ? `${state.chargingSearchContext === 'rural' ? 'Landmodus' : 'Stadtmodus'} - ${state.chargingSearchRadiusKm} km - `
+        : '';
     els.resultCount.textContent = `${contextLabel}${visibleChargingStations.length}/${state.chargingStations.length} Ladeanlagen`;
-    els.resultMeta.textContent = `${pointCount} Ladepunkte - ${unitCount} Ladeeinrichtungen - Quelle Bundesnetzagentur, CC BY 4.0`;
+    els.resultMeta.textContent = `${chargingRangeLabel}${pointCount} Ladepunkte - ${unitCount} Ladeeinrichtungen - Quelle Bundesnetzagentur, CC BY 4.0`;
     els.results.innerHTML = `
         <section class="charging-dashboard">
             <div class="charging-source-note">
@@ -7021,6 +7120,12 @@ function renderChargingList() {
             </div>
             ${state.chargingCityContext ? chargingFilterOptionsHtml(state.chargingStations) : ''}
             ${chargingOperatorsPanelHtml()}
+            ${activeOperator ? `
+                <div class="charging-active-operator">
+                    <strong>${escapeHtml(activeOperator)}</strong>
+                    <button type="button" data-charging-operators-reset>Alle Betreiber</button>
+                </div>
+            ` : ''}
             <div class="charging-list">
                 ${visibleChargingStations.length
                     ? visibleChargingStations.map((station, index) => chargingRowHtml(station, index)).join('')
@@ -7033,6 +7138,7 @@ function renderChargingList() {
     });
     els.results.querySelector('[data-charging-operators]')?.addEventListener('click', () => loadChargingOperators(true));
     els.results.querySelector('[data-charging-operators-more]')?.addEventListener('click', () => loadMoreChargingOperators());
+    els.results.querySelector('[data-charging-operators-reset]')?.addEventListener('click', resetChargingOperatorFilter);
     els.results.querySelectorAll('[data-charging-operator]').forEach((button) => {
         button.addEventListener('click', () => applyChargingOperatorFilter(button.dataset.chargingOperator));
     });
@@ -7116,13 +7222,21 @@ async function loadChargingStations(requestId = state.navRequestId) {
     }
     const location = state.selectedLocation;
     const cityContext = state.chargingCityContext;
-    const params = new URLSearchParams({ limit: cityContext?.cityId ? '30000' : '100' });
+    const hasLocalLocation = !cityContext?.cityId
+        && location
+        && Number.isFinite(Number(location.lat))
+        && Number.isFinite(Number(location.lng));
+    const params = new URLSearchParams({ limit: cityContext?.cityId ? '30000' : String(ELECTRIC_NEAREST_LIMIT) });
     if (cityContext?.cityId) {
         params.set('city', cityContext.cityId);
-    } else if (location && Number.isFinite(location.lat) && Number.isFinite(location.lng)) {
+        state.chargingSearchContext = 'city';
+        state.chargingSearchRadiusKm = null;
+    } else if (hasLocalLocation) {
         params.set('lat', location.lat);
         params.set('lng', location.lng);
-        params.set('radius', '100');
+        params.set('radius', String(ELECTRIC_CITY_RADIUS_KM));
+        state.chargingSearchContext = 'city';
+        state.chargingSearchRadiusKm = ELECTRIC_CITY_RADIUS_KM;
     }
     const loadKey = params.toString();
     if (state.chargingLoadKey === loadKey) return;
@@ -7135,9 +7249,18 @@ async function loadChargingStations(requestId = state.navRequestId) {
     els.resultMeta.textContent = 'Ladeanlagen werden geladen ...';
     els.results.innerHTML = '<div class="empty-state">Elektro-Ladeanlagen werden geladen.</div>';
     try {
-        const data = await fetchJson(`/api/charging/stations.php?${params.toString()}`, { timeoutMs: 30000 });
+        let data = await fetchJson(`/api/charging/stations.php?${params.toString()}`, { timeoutMs: 30000 });
         if (!isCurrentNavigation(requestId, 'charging')) return;
-        state.chargingStations = (data.stations || []).map(normalizeChargingStation);
+        let stations = (data.stations || []).map(normalizeChargingStation);
+        if (hasLocalLocation && localDriveContextFor(stations) === 'rural') {
+            params.set('radius', String(ELECTRIC_RURAL_RADIUS_KM));
+            state.chargingSearchContext = 'rural';
+            state.chargingSearchRadiusKm = ELECTRIC_RURAL_RADIUS_KM;
+            data = await fetchJson(`/api/charging/stations.php?${params.toString()}`, { timeoutMs: 30000 });
+            if (!isCurrentNavigation(requestId, 'charging')) return;
+            stations = (data.stations || []).map(normalizeChargingStation);
+        }
+        state.chargingStations = stations;
         renderChargingList();
     } catch (error) {
         if (!isCurrentNavigation(requestId, 'charging')) return;
