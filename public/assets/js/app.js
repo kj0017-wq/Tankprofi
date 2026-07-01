@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-location-timeout-fix';
+const appVersion = '20260701-ev-mode-sync-map';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -3282,7 +3282,15 @@ function prepareNormalSearch(clearLocation = false) {
 }
 
 function isElectricMode() {
-    return state.vehicleMode === 'electric';
+    return state.vehicleMode === 'electric'
+        || els.vehicleMode?.value === 'electric'
+        || els.appShell?.classList.contains('vehicle-electric');
+}
+
+function syncEffectiveVehicleMode() {
+    if (isElectricMode() && state.vehicleMode !== 'electric') {
+        setVehicleMode('electric', { persist: false, silent: true });
+    }
 }
 
 function prepareChargingSearch(clearLocation = false) {
@@ -3307,6 +3315,7 @@ async function runManualSearch() {
     const startedAt = Date.now();
     beginDataRequest();
     try {
+        syncEffectiveVehicleMode();
         const hasSearchText = Boolean(els.searchInput?.value?.trim());
         if (isElectricMode()) {
             prepareChargingSearch(hasSearchText);
@@ -6711,13 +6720,28 @@ function chargingConnectorValues(station) {
 
 function chargingMatchesFilters(station, filters = state.chargingFilters || {}, ignore = '') {
     if (ignore !== 'operator' && filters.operator && filters.operator !== 'all') {
-            const operator = String(station.operatorName || station.displayName || station.name || 'Betreiber unbekannt');
-            if (operator !== filters.operator) return false;
-        }
+        const filterOperator = normalizeText(filters.operator);
+        const operatorText = normalizeText([
+            station.operatorName,
+            station.displayName,
+            station.name,
+            station.brand,
+        ].filter(Boolean).join(' '));
+        if (!operatorText || !operatorText.includes(filterOperator)) return false;
+    }
     if (ignore !== 'connector' && filters.connector && filters.connector !== 'all' && !chargingConnectorValues(station).includes(filters.connector)) return false;
     const minPower = Number(filters.minPower || 0);
     if (ignore !== 'minPower' && Number.isFinite(minPower) && minPower > 0 && chargingPowerValue(station) < minPower) return false;
     return true;
+}
+
+function chargingSearchTextOperatorFilter() {
+    const query = String(els.searchInput?.value || '').trim();
+    if (query.length < 3) return '';
+    if (!/[a-zäöüß]/i.test(query)) return '';
+    const selectedLabel = String(state.selectedLocation?.label || '').trim();
+    if (selectedLabel && query === selectedLabel) return '';
+    return query;
 }
 
 function chargingFilteredStations() {
@@ -8693,9 +8717,15 @@ function bindEvents() {
             if (isInteractionLocked()) return;
             const action = button.dataset.action;
             const navRequestId = beginNavigation();
+            syncEffectiveVehicleMode();
             renderDetail(null);
             if (action === 'map') {
                 if (isElectricMode() && state.listMode !== 'driving' && state.listMode !== 'cities' && state.listMode !== 'autobahn') {
+                    const operatorSearch = chargingSearchTextOperatorFilter();
+                    if (operatorSearch) {
+                        state.chargingFilters = { operator: operatorSearch, connector: 'all', minPower: 'all' };
+                        state.chargingShowOperators = false;
+                    }
                     openChargingDistributionMap(navRequestId);
                     return;
                 }
