@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-ev-plz-search-fix';
+const appVersion = '20260701-location-timeout-fix';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -8397,11 +8397,28 @@ function clearListSearchInputForManualEntry() {
 
 function currentPosition(options = {}) {
     return new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: options.enableHighAccuracy !== false,
-            timeout: Number(options.timeoutMs || 9000),
-            maximumAge: Number(options.maximumAgeMs ?? 60000),
-        });
+        let settled = false;
+        const timeoutMs = Number(options.timeoutMs || 9000);
+        const safetyTimer = window.setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            reject(new Error('Standortabfrage dauert zu lange.'));
+        }, timeoutMs + 1800);
+        const finish = (callback, value) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(safetyTimer);
+            callback(value);
+        };
+        navigator.geolocation.getCurrentPosition(
+            (position) => finish(resolve, position),
+            (error) => finish(reject, error),
+            {
+                enableHighAccuracy: options.enableHighAccuracy !== false,
+                timeout: timeoutMs,
+                maximumAge: Number(options.maximumAgeMs ?? 60000),
+            },
+        );
     });
 }
 
@@ -8440,7 +8457,9 @@ async function useCurrentLocation(options = {}) {
             }
         }
         setStatus('Bereit');
+        els.resultCount.textContent = 'Standort offen';
         els.resultMeta.textContent = 'Standort konnte nicht ermittelt werden.';
+        els.results.innerHTML = '<div class="empty-state">Standort konnte nicht ermittelt werden. Bitte erneut versuchen oder eine PLZ eingeben.</div>';
         if (typeof options.onFail === 'function') options.onFail();
     } finally {
         if (options.startup) state.startupLocationPending = false;
