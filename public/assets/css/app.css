@@ -4966,6 +4966,23 @@ button.city-row:focus {
     gap: 8px;
 }
 
+.detail-meta-line {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    min-width: 0;
+}
+
+.detail-meta-line .detail-cell {
+    min-height: 46px;
+}
+
+.detail-meta-line .detail-updated-cell,
+.detail-meta-line .detail-status-cell {
+    grid-column: auto;
+}
+
 .detail-updated-cell.full,
 .detail-address-cell,
 .detail-status-cell {

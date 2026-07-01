@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-autobahn-single-toolbar';
+const appVersion = '20260701-detail-meta-line';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -2898,17 +2898,19 @@ function renderDetail(station) {
                         <span class="detail-value">${distanceText(station)}</span>
                     </div>
                 ` : ''}
-                <div class="detail-cell detail-cell-inline detail-updated-cell${showDistance ? '' : ' full'}">
-                    <span class="detail-label">Aktualisiert</span>
-                    <span class="detail-value">${formatTime(station.last_update)}</span>
+                <div class="detail-meta-line">
+                    <div class="detail-cell detail-cell-inline detail-updated-cell">
+                        <span class="detail-label">Aktualisiert</span>
+                        <span class="detail-value">${formatTime(station.last_update)}</span>
+                    </div>
+                    <div class="detail-cell detail-cell-inline detail-status-cell">
+                        <span class="detail-label">Status</span>
+                        <span class="detail-value">${station.is_open === false ? 'Geschlossen' : station.is_open === true ? 'Geöffnet' : 'unbekannt'}</span>
+                    </div>
                 </div>
                 <div class="detail-cell detail-address-cell">
                     <span class="detail-label">Adresse</span>
                     <span class="detail-value">${escapeHtml(address(station) || '-')}</span>
-                </div>
-                <div class="detail-cell detail-status-cell">
-                    <span class="detail-label">Status</span>
-                    <span class="detail-value">${station.is_open === false ? 'Geschlossen' : station.is_open === true ? 'Geöffnet' : 'unbekannt'}</span>
                 </div>
             </div>
             <nav class="detail-footer-nav" aria-label="Detailaktionen">
