@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-ev-list-nearby-only';
+const appVersion = '20260701-ev-list-active-fix';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -8153,9 +8153,12 @@ function updateBottomNav() {
             || (action === 'favorites' && state.view === 'list' && state.listMode === 'favorites')
             || (action === 'cities' && state.listMode === 'cities')
             || (action === 'autobahn' && state.listMode === 'autobahn')
-            || (action === 'charging' && state.listMode === 'charging')
+            || (action === 'charging' && state.listMode === 'charging' && state.chargingShowOperators)
             || (action === 'settings' && els.settingsSheet?.classList.contains('open'))
-            || (action === 'list' && state.view === 'list' && state.listMode === 'results' && !els.detail.classList.contains('visible'));
+            || (action === 'list' && state.view === 'list' && !els.detail.classList.contains('visible') && (
+                state.listMode === 'results'
+                || (state.listMode === 'charging' && !state.chargingShowOperators)
+            ));
         button.classList.toggle('active', active);
     });
 }
