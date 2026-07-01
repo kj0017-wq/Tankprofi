@@ -2222,6 +2222,37 @@ button.city-row:focus {
     min-width: 0;
 }
 
+.autobahn-group-title {
+    min-height: 42px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    color: var(--ink);
+    background: var(--yellow-300);
+    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.16);
+    font: inherit;
+    text-align: left;
+}
+
+.autobahn-group-title strong {
+    font-size: 1rem;
+    font-weight: 950;
+}
+
+.autobahn-group-title span {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--gray-700);
+    font-size: 0.78rem;
+    font-weight: 900;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .autobahn-row {
     min-height: 66px;
     display: grid;

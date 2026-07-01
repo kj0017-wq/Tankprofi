@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-autobahn-route-map';
+const appVersion = '20260701-autobahn-a6-map-context';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -7347,6 +7347,18 @@ function autobahnHighways() {
         .sort((a, b) => highwaySortValue(a).localeCompare(highwaySortValue(b), 'de'));
 }
 
+function highwayFromText(value) {
+    const match = String(value || '').trim().toUpperCase().replace(/\s+/g, '').match(/^A\d+$/);
+    return match ? match[0] : '';
+}
+
+function inferSelectedAutobahnFromSearch() {
+    const highway = highwayFromText(els.searchInput?.value);
+    if (!highway) return false;
+    state.selectedHighway = highway;
+    return true;
+}
+
 function highwayGpsSortValue(station) {
     const highwayNumber = Number(String(station.highway || '').match(/\d+/)?.[0] || 0);
     const lat = Number(station.lat);
@@ -7734,6 +7746,10 @@ function renderAutobahnList() {
             <div class="autobahn-list">
                 ${groups.map(([highway, stations]) => `
                     <section class="autobahn-group">
+                        <button class="autobahn-group-title" type="button" data-autobahn-highway="${escapeHtml(highway)}">
+                            <strong>${escapeHtml(highway)}</strong>
+                            <span>${stations.length} Standorte</span>
+                        </button>
                         <div class="city-station-list">
                             ${stations.map((station) => autobahnRowHtmlDetailed(station, priceThresholds)).join('')}
                         </div>
@@ -7758,6 +7774,11 @@ function renderAutobahnList() {
             return;
         }
         if (state.view === 'map') openAutobahnMap();
+    });
+    els.results.querySelectorAll('[data-autobahn-highway]').forEach((button) => {
+        button.addEventListener('click', () => {
+            activateAutobahnHighway(button.dataset.autobahnHighway, state.view === 'map' ? 'map' : 'list');
+        });
     });
     els.results.querySelectorAll('[data-autobahn-station-id]').forEach((button) => {
         button.addEventListener('click', () => {
@@ -7803,6 +7824,7 @@ async function loadAutobahnStations(target = 'list', requestId = state.navReques
 async function openAutobahnMap(options = {}) {
     state.listMode = 'autobahn';
     setDirectoryMode(true);
+    if (state.selectedHighway === 'all') inferSelectedAutobahnFromSearch();
     if (!state.autobahnStations.length) {
         loadAutobahnStations('map', beginNavigation());
         return;
@@ -9023,6 +9045,7 @@ function bindEvents() {
             if (action === 'autobahn') {
                 if (state.drivingActive) stopDrivingMode(false);
                 captureNormalSearchBeforeSection();
+                inferSelectedAutobahnFromSearch();
                 state.listMode = 'autobahn';
                 state.cityMapMode = 'overview';
                 renderDetail(null);
