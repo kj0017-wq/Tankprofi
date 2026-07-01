@@ -7495,6 +7495,9 @@ button.city-row:focus {
     height: auto !important;
     gap: 7px 8px !important;
     padding: 10px !important;
+    border-color: #0d47a1 !important;
+    background: linear-gradient(180deg, #eaf3ff 0%, #d7e9ff 100%) !important;
+    box-shadow: 5px 5px 0 rgba(13, 71, 161, 0.22) !important;
 }
 
 .autobahn-row.autobahn-card .rank {
@@ -7619,7 +7622,7 @@ button.city-row:focus {
     padding: 4px 5px !important;
     border: 2px solid rgba(16, 20, 25, 0.22) !important;
     border-radius: 7px !important;
-    background: rgba(255, 255, 255, 0.74) !important;
+    background: rgba(255, 255, 255, 0.82) !important;
     text-align: center !important;
 }
 
