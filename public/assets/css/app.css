@@ -1217,6 +1217,12 @@ select:focus {
     gap: 5px;
 }
 
+.tank-id-review-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 6px;
+}
+
 .tank-id-ai-button {
     min-height: 34px;
     padding: 5px 8px;
@@ -1227,6 +1233,22 @@ select:focus {
     font: inherit;
     font-size: 0.78rem;
     font-weight: 950;
+    box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.14);
+}
+
+.tank-id-google-button {
+    min-height: 34px;
+    padding: 5px 8px;
+    display: grid;
+    place-items: center;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    color: var(--ink);
+    background: var(--blue-100);
+    font-size: 0.74rem;
+    font-weight: 950;
+    text-align: center;
+    text-decoration: none;
     box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.14);
 }
 

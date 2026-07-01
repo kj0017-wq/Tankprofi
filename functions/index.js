@@ -3665,6 +3665,7 @@ function serviceStationMatchCandidateFromDoc(doc) {
     doc,
     stationId: data.stationId || doc.id,
     name: data.name || '',
+    stationTypes,
     primaryFuelBrand: data.primaryFuelBrand || data.brand || fuelBrandsFromText(data.name, data.operator)[0] || null,
     fuelBrands: uniq([
       ...(Array.isArray(data.fuelBrands) ? data.fuelBrands : []),
@@ -3674,6 +3675,14 @@ function serviceStationMatchCandidateFromDoc(doc) {
     lat,
     lng,
   };
+}
+
+function isAutohofLikeTankIdCandidate(candidate) {
+  const text = [
+    candidate?.name,
+    ...(Array.isArray(candidate?.stationTypes) ? candidate.stationTypes : []),
+  ].filter(Boolean).join(' ').toLowerCase();
+  return /\b(autohof|rastpark|ah|truck stop)\b/.test(text);
 }
 
 async function collectTankIdMatchCandidates(limit) {
@@ -3913,19 +3922,24 @@ async function reportTankIdCandidates({ limit = 200, radiusKm = 0.8 } = {}) {
     collectTankIdMatchCandidates(safeLimit),
   ]);
   const items = candidates.map((candidate) => {
-    const matches = tankIdCandidateScores(candidate, storedStations, safeRadiusKm);
+    const autohofLike = isAutohofLikeTankIdCandidate(candidate);
+    const matchRadiusKm = autohofLike ? Math.max(safeRadiusKm, 2) : safeRadiusKm;
+    const matches = tankIdCandidateScores(candidate, storedStations, matchRadiusKm);
     const best = matches[0] || null;
     let category = 'no_nearby_candidate';
     if (best) {
       if (best.distanceKm <= 0.25 && (best.brandHit || best.nameHit)) category = 'strong_auto_candidate';
       else if (best.distanceKm <= 0.5 && (best.brandHit || best.nameHit)) category = 'review_good_candidate';
       else if (best.distanceKm <= 0.8) category = 'review_distance_candidate';
+      else if (autohofLike && best.distanceKm <= 2) category = 'autohof_review_candidate';
     }
     return {
       stationId: candidate.stationId,
       name: candidate.name,
       lat: candidate.lat,
       lng: candidate.lng,
+      stationTypes: candidate.stationTypes || [],
+      matchRadiusKm,
       category,
       candidates: matches,
     };

@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-tank-id-ai';
+const appVersion = '20260701-tank-id-autohof-google';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -8790,8 +8790,30 @@ function tankIdCandidateCategoryLabel(category) {
         strong_auto_candidate: 'starker Kandidat',
         review_good_candidate: 'pruefen',
         review_distance_candidate: 'Entfernung pruefen',
+        autohof_review_candidate: 'Autohof pruefen',
         no_nearby_candidate: 'kein Kandidat',
     })[category] || category || 'offen';
+}
+
+function tankIdCandidateMeta(item) {
+    const parts = [item.stationId || ''];
+    if (Array.isArray(item.stationTypes) && item.stationTypes.length) {
+        parts.push(item.stationTypes.slice(0, 2).join(', '));
+    }
+    parts.push(tankIdCandidateCategoryLabel(item.category));
+    if (Number(item.matchRadiusKm) > 0) {
+        parts.push(`Radius ${Number(item.matchRadiusKm).toFixed(1).replace('.', ',')} km`);
+    }
+    return parts.filter(Boolean).join(' - ');
+}
+
+function tankIdGoogleMapsUrl(item) {
+    const lat = Number(item.lat);
+    const lng = Number(item.lng);
+    const query = [item.name, Number.isFinite(lat) && Number.isFinite(lng) ? `${lat},${lng}` : '']
+        .filter(Boolean)
+        .join(' ');
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query || item.stationId || 'Tankstelle')}`;
 }
 
 function renderTankIdCandidates(data = {}) {
@@ -8810,8 +8832,11 @@ function renderTankIdCandidates(data = {}) {
         return `
             <article class="tank-id-card">
                 <strong>${escapeHtml(item.name || item.stationId || 'Standort')}</strong>
-                <small>${escapeHtml(item.stationId || '')} · ${escapeHtml(tankIdCandidateCategoryLabel(item.category))}</small>
-                <button class="tank-id-ai-button" type="button" data-tank-id-ai="${escapeHtml(item.stationId)}"${candidates.length ? '' : ' disabled'}>KI pruefen</button>
+                <small>${escapeHtml(tankIdCandidateMeta(item))}</small>
+                <div class="tank-id-review-actions">
+                    <button class="tank-id-ai-button" type="button" data-tank-id-ai="${escapeHtml(item.stationId)}"${candidates.length ? '' : ' disabled'}>KI pruefen</button>
+                    <a class="tank-id-google-button" href="${escapeHtml(tankIdGoogleMapsUrl(item))}" target="_blank" rel="noopener">Google Maps</a>
+                </div>
                 ${review ? `
                     <div class="tank-id-ai-result ${escapeHtml(review.verdict || 'review')}">
                         <b>KI: ${escapeHtml(review.verdict || 'review')} · ${Math.round(Number(review.confidence || 0) * 100)}%</b>
