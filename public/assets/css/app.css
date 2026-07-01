@@ -1480,6 +1480,10 @@ select:focus {
     transform: translateY(-50%);
     display: inline-flex;
     align-items: center;
+    min-height: 30px;
+    padding: 4px 9px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
     max-width: calc(50% - 88px);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1488,6 +1492,23 @@ select:focus {
     font-size: 0.95rem;
     font-weight: 950;
     letter-spacing: 0;
+    box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.18);
+}
+
+.drive-title-text.drive-context-city {
+    color: var(--ink);
+    background: var(--yellow-300);
+}
+
+.drive-title-text.drive-context-rural {
+    color: var(--white);
+    background: linear-gradient(180deg, var(--green-500) 0%, #078050 100%);
+}
+
+.drive-title-text.drive-context-highway,
+.drive-title-text.drive-context-charging {
+    color: var(--white);
+    background: linear-gradient(180deg, #1f69d6 0%, #0d47a1 100%);
 }
 
 .driving-mode.view-map .drive-speed-chip {

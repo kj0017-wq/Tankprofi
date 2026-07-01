@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
-    <link rel="stylesheet" href="assets/css/app.css?v=20260701-drive-mode-context-prefix">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260701-help-texts-expanded">
 </head>
 <body>
     <section class="splash-screen" id="splashScreen" aria-label="Tankprofi wird geladen">
@@ -157,43 +157,59 @@
                 <div class="help-body">
                     <article>
                         <h2>Liste</h2>
-                        <p>Zeigt Tankstellen im gewaehlten Umkreis fuer den eingestellten Kraftstoff. Preis und Entfernung sortieren die vorhandenen Treffer nur neu. Ein neuer Abruf erfolgt erst nach kurzer Wartezeit, bei neuer Suche, neuem Standort oder ueber Neu laden.</p>
+                        <p>Die Liste zeigt die naechsten Treffer fuer Adresse, Ort, PLZ oder aktuellen Standort. Der eingestellte Kraftstoff bestimmt den Hauptpreis. Ohne Eingabe im Suchfeld startet OK eine Aktualisierung am aktuellen Standort. Preis und Entfernung sortieren die geladenen Treffer, ohne die Auswahl zu verlieren.</p>
                     </article>
                     <article>
                         <h2>Standort</h2>
-                        <p>Ermittelt deine aktuelle Position einmalig und laedt passende Tankstellen in der Naehe. Die Standortfreigabe wird nur fuer die jeweilige Aktion genutzt; im normalen Listenmodus wird keine dauerhafte Fahrt verfolgt.</p>
+                        <p>Aktuellen Standort verwenden fragt einmalig die Position ab und laedt passende Treffer. Im normalen Listenmodus wird keine Fahrt verfolgt. Wenn eine Adresse eingegeben wurde, hat diese Adresse Vorrang vor dem aktuellen Standort.</p>
                     </article>
                     <article>
                         <h2>Karte</h2>
-                        <p>Zeigt die aktuellen Treffer als Marker. Gruen bedeutet guenstiger, Gelb mittlerer Bereich, Rot teurer und Grau geschlossen oder ohne verwertbaren Preis. Tippe einen Marker an, um die Tankstelle in der Liste oder im Detail weiter zu oeffnen.</p>
+                        <p>Die Karte zeigt die aktuellen Treffer als Marker und zoomt auf den sichtbaren Bereich. Gruen steht fuer guenstig, Gelb fuer mittleren Preis, Rot fuer teuer und Grau fuer geschlossen oder ohne aktuelle Preise. Ein Tipp auf einen Marker oeffnet Kurzinfos und Navigation.</p>
                     </article>
                     <article>
                         <h2>Details</h2>
-                        <p>Ein Tipp auf eine Tankstelle oeffnet Adresse, Status und die Preise fuer Diesel, E5 und E10. Ueber Navigation kannst du Google Maps, Waze, Apple Karten oder die System-Karte starten. Favoriten werden lokal auf diesem Geraet gespeichert.</p>
+                        <p>Ein Tipp auf eine Tankstelle zeigt Adresse, Marke, Oeffnungsstatus und die Preise fuer Diesel, E5 und E10. Ueber Navigation kannst du Google Maps, Waze, Apple Karten oder die System-Karte starten. Favoriten werden lokal auf diesem Geraet gespeichert.</p>
                     </article>
                     <article>
                         <h2>Drive</h2>
-                        <p>Startet den aktiven Fahrmodus. In der Stadt werden nahe Tankstellen nach Entfernung und Fahrtrichtung bewertet; im Ruhemodus bleibt die Liste stabil, der Pfeil kann den Geraetekompass nutzen und wird hoechstens alle 30 Sekunden neu ausgerichtet. Tankstellen hinter dir werden nach mehr als 200 m ausgeblendet, sobald eine Richtung erkannt wurde. Auf Autobahnen nutzt Tankprofi vorbereitete Tankpunkte voraus und aktualisiert Preise gedrosselt.</p>
+                        <p>Drive ist der aktive Fahrmodus. Links steht der aktuelle Kontext: Drive Mode: Stadt, Land, Autobahn oder Laden. Stadt ist gelb, Land gruen und Autobahn blau markiert. Die Karte zeigt deinen Fahrpfeil hoeher im Bild, damit mehr Strecke voraus sichtbar bleibt.</p>
+                    </article>
+                    <article>
+                        <h2>Drive Stadt und Land</h2>
+                        <p>Im Stadtmodus werden nahe Tankstellen nach Entfernung, Fahrtrichtung und Preis bewertet. Tankstellen deutlich hinter dir werden ausgeblendet, sobald eine Richtung erkannt wurde. Wenn nur wenige sinnvolle Treffer im groesseren Umkreis liegen, wechselt Drive in den Landmodus.</p>
+                    </article>
+                    <article>
+                        <h2>Drive Autobahn</h2>
+                        <p>Im Autobahnmodus nutzt Tankprofi vorbereitete Tankpunkte entlang der Strecke statt einer blinden Radius-Suche. Es werden vorausliegende Tankstellen bevorzugt. Preise werden gedrosselt aktualisiert, damit die Ansicht waehrend der Fahrt stabil bleibt.</p>
                     </article>
                     <article>
                         <h2>Ziel im Drive</h2>
-                        <p>Mit Ziel eingeben kannst du eine Adresse oder einen Ort setzen. Danach schlaegt Tankprofi eine passende Autobahnstrecke vor und zeigt die Karte als zusaetzlichen Button. Ohne Ziel bleibt Drive im Stadtmodus oder Autobahnmodus ohne Ziel.</p>
+                        <p>Mit Ziel eingeben kannst du eine Adresse oder einen Ort setzen. Tankprofi prueft dann, ob eine passende Route oder Autobahnstrecke erkannt wird. Bis zur Autobahn kann Drive im Stadt- oder Landmodus bleiben; auf der Strecke werden passende Tankpunkte entlang des Korridors angezeigt.</p>
                     </article>
                     <article>
                         <h2>Städte</h2>
-                        <p>Vergleicht Durchschnittspreise grosser Staedte nach Diesel, E5 oder E10. Die Staedteansicht nutzt gespeicherte Snapshots, damit der Vergleich nicht bei jedem Oeffnen neu aufgebaut werden muss.</p>
+                        <p>Staedte vergleicht Durchschnittspreise grosser Orte nach Diesel, E5 oder E10. Die Ansicht nutzt gespeicherte Snapshots, damit der Vergleich schnell oeffnet. Ein Tipp auf eine Stadt zeigt passende Tankstellen oder Ladeanlagen in diesem Bereich.</p>
                     </article>
                     <article>
                         <h2>Autobahn</h2>
-                        <p>Zeigt vorbereitete Autobahn-Standorte wie Raststaetten, Autohoefe und Tankstellen nahe Abfahrten. Die Stammdaten kommen aus Firebase, Preise werden nachgeladen und mit gespeicherten Daten kombiniert, wenn Live-Daten gerade nicht erreichbar sind.</p>
+                        <p>Autobahn zeigt vorbereitete Standorte wie Raststaetten, Tank & Rast, Autohoefe und Tankstellen nahe Abfahrten. Die Liste zeigt Autobahnnummer, Richtung, Betreiber, Typ und Diesel/E5/E10. Die Karte blendet alle Standorte mit Koordinaten ein und zoomt auf die gewaehlte Autobahn.</p>
                     </article>
                     <article>
                         <h2>Laden</h2>
-                        <p>Zeigt oeffentliche Ladeeinrichtungen aus dem Ladesaeulenregister der Bundesnetzagentur. Der Bereich ist eigenstaendig: Betreiber, Netzwerkname, Ladeleistung, AC/DC und Steckertypen stehen im Vordergrund. Einheitliche Live-Preise sind dort noch nicht enthalten.</p>
+                        <p>Laden zeigt oeffentliche Ladeeinrichtungen aus dem Ladesaeulenregister und weiteren gespeicherten Ladepunktdaten. Betreiber, Netzwerk, Ladeleistung, AC/DC und Steckertypen stehen im Vordergrund. In der Liste werden die naechsten Ladepunkte rund um den aktuellen Standort oder die eingegebene Adresse angezeigt.</p>
                     </article>
                     <article>
                         <h2>Favoriten</h2>
-                        <p>Speichert wichtige Tankstellen lokal auf deinem Geraet, damit du sie schnell wiederfindest. Beim Oeffnen werden Preise nach Moeglichkeit aktualisiert; wenn Live-Daten fehlen, bleibt der letzte bekannte Stand sichtbar.</p>
+                        <p>Favoriten speichern wichtige Tankstellen oder Ladeanlagen lokal auf diesem Geraet. Beim Oeffnen werden Daten nach Moeglichkeit aktualisiert. Wenn Live-Daten fehlen, bleibt der letzte bekannte Stand sichtbar und wird nicht als frischer Preis dargestellt.</p>
+                    </article>
+                    <article>
+                        <h2>Einstellungen</h2>
+                        <p>In den Einstellungen waehlst du Antrieb, Radius, Kraftstoff, Trefferzahl und Marke. Bei Elektro stehen eigene Ladefilter im Vordergrund. Die App merkt deine wichtigsten Einstellungen lokal, damit du beim naechsten Start schneller weiterarbeiten kannst.</p>
+                    </article>
+                    <article>
+                        <h2>Datenstand</h2>
+                        <p>Preise koennen live, gespeichert oder voruebergehend nicht verfuegbar sein. Aktuelle Preise werden bevorzugt. Wenn nur gespeicherte Daten vorhanden sind, zeigt Tankprofi den Stand sichtbar an und laesst fehlende Werte als Strich stehen.</p>
                     </article>
                 </div>
             </section>
@@ -399,7 +415,7 @@
     <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script type="module" src="assets/js/firebase-app.js?v=20260701-city-speed-display-plus3"></script>
-    <script src="assets/js/app.js?v=20260701-drive-mode-context-prefix" defer></script>
+    <script src="assets/js/app.js?v=20260701-help-texts-expanded" defer></script>
 </body>
 </html>
 

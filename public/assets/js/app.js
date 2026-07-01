@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-drive-mode-context-prefix';
+const appVersion = '20260701-help-texts-expanded';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -6196,13 +6196,20 @@ function renderDrivingModeList() {
             : state.drivingContext === 'city'
                 ? 'Stadt'
                 : 'Autobahn';
+    const driveContextClass = state.drivingVehicleMode === 'electric'
+        ? 'drive-context-charging'
+        : state.drivingContext === 'rural'
+            ? 'drive-context-rural'
+            : state.drivingContext === 'city'
+                ? 'drive-context-city'
+                : 'drive-context-highway';
     const driveTitle = `Drive Mode: ${driveContextText}`;
     const isDriveMapView = state.view === 'map' || els.appShell.classList.contains('view-map');
     const mapListButton = isDriveMapView
         ? '<button class="drive-header-list-button" type="button" data-driving-header-view="list">Liste</button>'
         : '<button class="drive-header-list-button" type="button" data-driving-header-view="map">Karte</button>';
     els.resultCount.innerHTML = `
-        <span class="drive-title-text">${escapeHtml(driveTitle)}</span>
+        <span class="drive-title-text ${driveContextClass}">${escapeHtml(driveTitle)}</span>
         <span class="drive-speed-chip" aria-label="Geschwindigkeit">${escapeHtml(speed)}</span>
         ${mapListButton}
     `;
