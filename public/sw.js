@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tankprofi-shell-v484';
+const CACHE_NAME = 'tankprofi-shell-v485';
 const CORE_ASSETS = [
   '/',
   '/index.html',
