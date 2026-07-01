@@ -1,0 +1,75 @@
+{
+  "sourceFile": "D:\\Dropbox\\Dropbox\\Codex\\Tankprofi\\VBA\\tankprofi-addressdaten-2026-06-29.csv",
+  "createdAt": "2026-06-30T08:51:27.506Z",
+  "inputRows": 15164,
+  "outputRows": 15154,
+  "skippedRows": 10,
+  "coordinatesNormalized": 15131,
+  "coordinatesRecoveredFromFallback": 14,
+  "invalidCoordinates": [],
+  "rowsWithoutKoenigIds": [
+    {
+      "line": 8368,
+      "addressId": "",
+      "city": "",
+      "street": ""
+    },
+    {
+      "line": 9174,
+      "addressId": "",
+      "city": "",
+      "street": ""
+    },
+    {
+      "line": 9811,
+      "addressId": "",
+      "city": "",
+      "street": ""
+    },
+    {
+      "line": 10839,
+      "addressId": "",
+      "city": "",
+      "street": ""
+    },
+    {
+      "line": 10906,
+      "addressId": "",
+      "city": "",
+      "street": ""
+    },
+    {
+      "line": 10978,
+      "addressId": "",
+      "city": "",
+      "street": ""
+    },
+    {
+      "line": 12625,
+      "addressId": "",
+      "city": "",
+      "street": ""
+    },
+    {
+      "line": 12830,
+      "addressId": "",
+      "city": "",
+      "street": ""
+    },
+    {
+      "line": 13348,
+      "addressId": "",
+      "city": "",
+      "street": ""
+    },
+    {
+      "line": 14612,
+      "addressId": "",
+      "city": "",
+      "street": ""
+    }
+  ],
+  "addressIdRegenerated": 0,
+  "duplicateAddressIds": [],
+  "koenigIdsOnMultipleAddresses": []
+}

@@ -619,8 +619,8 @@ label {
 
 .search-row {
     display: grid;
-    grid-template-columns: 1fr 58px;
-    gap: 8px;
+    grid-template-columns: 1fr 70px;
+    gap: 10px;
 }
 
 input,
@@ -646,14 +646,22 @@ select:focus {
 .text-button {
     border: 0;
     border-radius: 8px;
-    min-height: 42px;
+    min-height: 46px;
     font-weight: 800;
 }
 
 .icon-button.primary {
     color: var(--ink);
     background: var(--blue-600);
-    font-size: 1.3rem;
+    font-size: 1.95rem;
+    line-height: 1;
+}
+
+.search-submit-button {
+    color: var(--white) !important;
+    font-size: 1.05rem !important;
+    font-weight: 950 !important;
+    letter-spacing: 0 !important;
 }
 
 .location-button {
@@ -943,10 +951,77 @@ select:focus {
     line-height: 1.1;
 }
 
+.settings-data-section {
+    margin-top: 8px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.74);
+    overflow: hidden;
+}
+
+.settings-data-section summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 42px;
+    padding: 9px 11px;
+    color: var(--blue-600);
+    font-size: 0.95rem;
+    font-weight: 950;
+    cursor: pointer;
+    list-style: none;
+}
+
+.settings-data-section summary::-webkit-details-marker {
+    display: none;
+}
+
+.settings-data-section summary::after {
+    content: "+";
+    display: inline-grid;
+    width: 26px;
+    height: 26px;
+    place-items: center;
+    border: 2px solid var(--ink);
+    border-radius: 999px;
+    color: var(--ink);
+    background: var(--cream);
+    font-weight: 950;
+    line-height: 1;
+}
+
+.settings-data-section[open] summary {
+    border-bottom: 2px solid rgba(16, 20, 25, 0.14);
+}
+
+.settings-data-section[open] summary::after {
+    content: "-";
+}
+
+.settings-data-note {
+    display: block;
+    padding: 0 10px 10px;
+    color: var(--gray-700);
+    font-size: 0.76rem;
+    font-weight: 800;
+    line-height: 1.25;
+}
+
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 7px;
+}
+
+.settings-data-section .stats-grid,
+.settings-data-section .stats-log-panel,
+.settings-data-section .stats-update-panel {
+    margin: 8px 8px 0;
+}
+
+.settings-data-section .stats-update-panel {
+    margin-bottom: 8px;
 }
 
 .stat-item {
@@ -1097,7 +1172,7 @@ select:focus {
     position: relative;
     overflow: hidden;
     display: grid;
-    grid-template-columns: minmax(76px, auto) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
     align-items: center;
     flex: 0 0 auto;
     gap: 6px;
@@ -1167,8 +1242,10 @@ select:focus {
 
 .quick-actions {
     display: grid;
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.35fr);
-    gap: 6px;
+    grid-template-columns: minmax(64px, 1fr) minmax(126px, 2fr);
+    gap: 5px;
+    min-width: 0;
+    align-items: stretch;
 }
 
 .detail-open .result-summary {
@@ -1183,27 +1260,36 @@ select:focus {
 .quick-actions .text-button,
 .quick-actions .sort-toggle-button {
     min-width: 0;
-    min-height: 34px;
-    padding: 5px 4px;
+    min-height: 30px;
+    padding: 4px 5px;
     border: 2px solid var(--ink);
     border-radius: 8px;
     box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.16);
     font-size: 0.72rem;
     font-weight: 950;
-    white-space: normal;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
     line-height: 1.05;
 }
 
 .quick-actions .location-button {
-    width: auto;
+    width: 100%;
     justify-content: center;
     gap: 4px;
-    font-size: 0.68rem;
+    font-size: 0.62rem;
 }
 
 .favorites-mode .quick-actions {
     grid-template-columns: minmax(0, 1fr);
+}
+
+.favorites-mode .result-summary {
+    min-height: 48px !important;
+    max-height: 48px !important;
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
 }
 
 .favorites-mode .quick-actions .location-button {
@@ -1227,10 +1313,10 @@ select:focus {
 
 .quick-actions .sort-toggle {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 3px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 2px;
     min-width: 0;
-    padding: 3px;
+    padding: 2px;
     border: 2px solid var(--ink);
     border-radius: 8px;
     background: var(--cream-100);
@@ -1238,11 +1324,12 @@ select:focus {
 }
 
 .quick-actions .sort-toggle .sort-toggle-button {
-    min-height: 32px;
+    min-height: 28px;
     border: 0;
     box-shadow: none;
     color: var(--gray-700);
     background: transparent;
+    font-size: 0.6rem;
 }
 
 .quick-actions .sort-toggle .sort-toggle-button.active {
@@ -1333,15 +1420,13 @@ select:focus {
 
 .driving-mode .result-summary {
     grid-template-columns: minmax(0, 1fr);
-    min-height: 44px;
-    padding-top: 6px;
-    padding-bottom: 6px;
+    min-height: 58px;
+    padding: 4px 10px;
 }
 
 .driving-mode .result-info {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
+    display: block;
+    width: 100%;
     min-width: 0;
 }
 
@@ -1354,15 +1439,23 @@ select:focus {
 }
 
 .driving-mode #resultCount {
-    flex: 0 0 auto;
-    display: inline-flex;
+    flex: 1 1 auto;
+    position: relative;
+    display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: center;
     min-width: 0;
+    min-height: 52px;
+    width: 100%;
 }
 
 .drive-header-list-button {
-    min-height: 30px;
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    min-width: 86px;
+    min-height: 40px;
     border: 2px solid var(--ink);
     border-radius: 8px;
     padding: 0 10px;
@@ -1370,49 +1463,60 @@ select:focus {
     background: var(--yellow-300);
     box-shadow: 2px 2px 0 var(--blue-600);
     font: inherit;
-    font-size: 0.86rem;
+    font-size: 1rem;
     font-weight: 950;
 }
 
 .drive-title-text {
-    min-width: 0;
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    max-width: calc(50% - 88px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: var(--blue-700);
+    font-size: 0.95rem;
+    font-weight: 950;
+    letter-spacing: 0;
 }
 
-.driving-mode.view-map .drive-title-text {
-    max-width: 72px;
+.driving-mode.view-map .drive-speed-chip {
+    display: inline-flex;
 }
 
 .drive-speed-chip {
-    min-width: 72px;
+    min-width: 148px;
+    min-height: 48px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 4px 9px;
-    border: 2px solid var(--ink);
+    padding: 8px 16px;
+    border: 3px solid var(--ink);
     border-radius: 999px;
     color: var(--ink);
     background: var(--green-100);
     box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.18);
-    font-size: 1rem;
+    font-size: 2.18rem;
     font-weight: 950;
     line-height: 1;
     white-space: nowrap;
 }
 
 .driving-controls-collapsed .drive-speed-chip {
-    min-width: 126px;
-    min-height: 42px;
-    padding: 7px 14px;
-    font-size: 2rem;
+    min-width: 144px;
+    min-height: 48px;
+    padding: 8px 16px;
+    font-size: 2.18rem;
     border-width: 3px;
     box-shadow: 4px 4px 0 rgba(16, 20, 25, 0.22);
 }
 
 .driving-mode #resultMeta {
-    flex: 1 1 auto;
+    display: none;
 }
 
 .driving-mode .quick-actions,
@@ -1464,23 +1568,159 @@ select:focus {
     right: 12px;
     z-index: 500;
     display: none;
-    min-width: 88px;
-    min-height: 42px;
+    min-width: 144px;
+    min-height: 48px;
     align-items: center;
     justify-content: center;
-    padding: 0 12px;
-    border: 2px solid var(--ink);
+    padding: 8px 16px;
+    border: 3px solid var(--ink);
     border-radius: 999px;
     color: var(--ink);
     background: var(--green-100);
-    box-shadow: 3px 3px 0 var(--blue-600);
-    font-size: 1.08rem;
+    box-shadow: 4px 4px 0 var(--blue-600);
+    font-size: 2.18rem;
     font-weight: 950;
     line-height: 1;
     white-space: nowrap;
 }
 
 .driving-mode.view-map .driving-map-speed { display: none; }
+
+.driving-map-nearest {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: max(180px, calc(env(safe-area-inset-bottom) + 156px));
+    z-index: 620;
+    display: none;
+    pointer-events: auto;
+}
+
+.driving-mode.view-map .driving-map-nearest.visible {
+    display: block;
+}
+
+.driving-map-nearest.entering .driving-map-nearest-card {
+    animation: drivingNearestSlideIn 520ms cubic-bezier(.18, .82, .2, 1) both;
+}
+
+.driving-map-nearest.leaving .driving-map-nearest-card {
+    animation: drivingNearestSlideOut 210ms cubic-bezier(.45, 0, .8, .35) both;
+}
+
+@keyframes drivingNearestSlideIn {
+    from {
+        opacity: 0;
+        transform: translate3d(0, 115%, 0) scale(.98);
+    }
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+}
+
+@keyframes drivingNearestSlideOut {
+    from {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: translate3d(0, 115%, 0) scale(.98);
+    }
+}
+
+.driving-map-nearest-card {
+    display: grid;
+    grid-template-columns: 54px minmax(0, 1fr) 88px;
+    align-items: center;
+    gap: 8px;
+    width: min(100%, 560px);
+    margin: 0 auto;
+    min-height: 74px;
+    padding: 8px;
+    border: 3px solid var(--ink);
+    border-radius: 8px;
+    color: var(--ink);
+    background: var(--cream-100);
+    box-shadow: 5px 5px 0 rgba(16, 20, 25, 0.24);
+}
+
+.driving-map-nearest-card .nearest-logo .brand-logo {
+    width: 50px;
+    height: 50px;
+    font-size: 0.68rem;
+}
+
+.driving-map-nearest-card .nearest-main {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+}
+
+.driving-map-nearest-card .nearest-main span {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.driving-map-nearest-card .nearest-main b,
+.driving-map-nearest-card .nearest-main small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.driving-map-nearest-card .nearest-main b {
+    font-size: 0.9rem;
+    font-weight: 950;
+}
+
+.driving-map-nearest-card .nearest-main i {
+    flex: 0 0 auto;
+    min-width: 28px;
+    padding: 2px 7px;
+    border-radius: 7px;
+    color: var(--white);
+    background: var(--blue-600);
+    font-size: 0.7rem;
+    font-style: normal;
+    font-weight: 950;
+    text-align: center;
+}
+
+.driving-map-nearest-card .nearest-main small {
+    color: var(--gray-700);
+    font-size: 0.76rem;
+    font-weight: 850;
+}
+
+.driving-map-nearest-card .nearest-value {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+    justify-items: end;
+    color: var(--blue-600);
+    text-align: right;
+}
+
+.driving-map-nearest-card .nearest-value b {
+    overflow: hidden;
+    max-width: 100%;
+    font-size: 1rem;
+    font-weight: 950;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.driving-map-nearest-card .nearest-value small {
+    color: var(--blue-600);
+    font-size: 0.72rem;
+    font-weight: 950;
+    white-space: nowrap;
+}
 
 .driving-mode .control-pane {
     height: 100vh;
@@ -2225,6 +2465,7 @@ button.city-row:focus {
 }
 
 .charging-operator-row {
+    width: 100%;
     display: grid;
     grid-template-columns: 30px minmax(0, 1fr) auto;
     grid-template-areas:
@@ -2236,6 +2477,19 @@ button.city-row:focus {
     border: 2px solid rgba(11, 102, 195, 0.32);
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.74);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.charging-operator-row:active {
+    transform: translate(1px, 1px);
+}
+
+.charging-operator-row:focus-visible {
+    outline: 3px solid var(--blue-600);
+    outline-offset: 2px;
 }
 
 .charging-operator-row .rank {
@@ -2280,7 +2534,7 @@ button.city-row:focus {
 .charging-row {
     width: 100%;
     display: grid;
-    grid-template-columns: 52px minmax(0, 1fr) 76px;
+    grid-template-columns: 52px minmax(0, 1fr) minmax(82px, 92px);
     grid-template-areas:
         "logo main distance"
         "logo main power"
@@ -2348,8 +2602,10 @@ button.city-row:focus {
 .charging-main {
     grid-area: main;
     min-width: 0;
+    max-width: 100%;
     display: grid;
     gap: 2px;
+    overflow: hidden;
 }
 
 .charging-main strong,
@@ -2374,9 +2630,12 @@ button.city-row:focus {
 .charging-power {
     grid-area: power;
     justify-self: end;
+    width: 100%;
+    min-width: 0;
     display: grid;
     gap: 1px;
     text-align: right;
+    overflow: hidden;
 }
 
 .charging-power b {
@@ -2384,6 +2643,9 @@ button.city-row:focus {
     font-size: 1rem;
     font-weight: 950;
     line-height: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .charging-power small,
@@ -2398,9 +2660,14 @@ button.city-row:focus {
 .charging-distance {
     grid-area: distance;
     justify-self: end;
+    width: 100%;
+    min-width: 0;
     color: #0b66c3;
     font-size: 0.84rem;
     font-weight: 950;
+    overflow: hidden;
+    text-align: right;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
@@ -2525,6 +2792,47 @@ button.city-row:focus {
     font-size: clamp(0.82rem, 3.5vw, 1rem);
     font-weight: 950;
     line-height: 1.05;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.charging-detail-meta-row {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    min-width: 0;
+}
+
+.charging-detail-meta-row span {
+    min-width: 0;
+    display: grid;
+    align-content: start;
+    gap: 3px;
+    min-height: 54px;
+    padding: 7px;
+    border-radius: 8px;
+    background: #e9f3ff;
+    border: 1px solid #d4e4f6;
+    overflow: hidden;
+}
+
+.charging-detail-meta-row small {
+    min-width: 0;
+    color: var(--gray-500);
+    font-size: 0.62rem;
+    font-weight: 950;
+    line-height: 1;
+    text-transform: uppercase;
+    overflow-wrap: anywhere;
+}
+
+.charging-detail-meta-row strong {
+    min-width: 0;
+    color: var(--gray-950);
+    font-size: clamp(0.68rem, 3vw, 0.86rem);
+    font-weight: 950;
+    line-height: 1.08;
     overflow-wrap: anywhere;
     word-break: break-word;
 }
@@ -3334,15 +3642,15 @@ button.city-row:focus {
 }
 
 .driving-card-charging {
-    min-height: 176px;
-    grid-template-columns: 86px minmax(64px, 1fr) 112px;
+    min-height: 194px;
+    grid-template-columns: 96px minmax(0, 1fr) 108px;
     grid-template-areas:
         "main direction distance"
         "statusbadge direction distance"
         "charge-name charge-name charge-name"
         "charge-address charge-address charge-address"
         "prices prices prices";
-    gap: 7px 10px;
+    gap: 8px 10px;
 }
 
 .driving-dashboard > .city-station-list {
@@ -3677,27 +3985,30 @@ button.city-row:focus {
 
 .driving-card-charging .driving-charging-name,
 .driving-card-charging .driving-charging-address {
-    display: block;
+    display: -webkit-box;
     min-width: 0;
+    max-width: 100%;
     overflow: hidden;
     color: var(--ink);
     font-weight: 950;
-    line-height: 1.2;
+    line-height: 1.18;
     text-overflow: ellipsis;
-    white-space: nowrap;
-    -webkit-line-clamp: unset;
+    white-space: normal;
+    -webkit-box-orient: vertical;
 }
 
 .driving-card-charging .driving-charging-name {
     grid-area: charge-name;
     font-size: 0.98rem;
+    -webkit-line-clamp: 1;
 }
 
 .driving-card-charging .driving-charging-address {
     grid-area: charge-address;
     color: var(--gray-700);
-    font-size: 0.82rem;
+    font-size: 0.78rem;
     font-weight: 850;
+    -webkit-line-clamp: 2;
 }
 
 .driving-card-charging .driving-data-status {
@@ -3737,6 +4048,24 @@ button.city-row:focus {
     border: 2px solid var(--ink);
     border-radius: 50%;
     background: var(--yellow-300);
+}
+
+.driving-mode.view-map .user-location-marker {
+    width: 42px;
+    height: 42px;
+    border-radius: 50% 50% 50% 12px;
+    transform: rotate(calc(var(--user-bearing, 0deg) + 135deg));
+    background: var(--blue-600);
+}
+
+.driving-mode.view-map .user-location-marker i {
+    width: 18px;
+    height: 22px;
+    border: 0;
+    border-radius: 0;
+    background: var(--yellow-300);
+    clip-path: polygon(50% 0, 100% 100%, 50% 74%, 0 100%);
+    transform: rotate(-135deg);
 }
 
 .bottom-nav-button {
@@ -4270,6 +4599,45 @@ button.city-row:focus {
     text-align: center;
 }
 
+.startup-recovery-state {
+    display: grid;
+    gap: 10px;
+    max-width: 520px;
+    margin: 28px auto 0;
+    border: 2px solid rgba(16, 20, 25, 0.16);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.76);
+    text-align: left;
+}
+
+.startup-recovery-state strong {
+    color: var(--ink);
+    font-size: 1.05rem;
+    font-weight: 950;
+}
+
+.startup-recovery-state span {
+    color: var(--gray-700);
+    font-size: 0.9rem;
+    font-weight: 800;
+}
+
+.startup-recovery-list {
+    display: grid;
+    gap: 7px;
+    margin: 2px 0 0;
+    padding-left: 18px;
+    color: var(--gray-800);
+    font-size: 0.82rem;
+    font-weight: 800;
+    line-height: 1.28;
+}
+
+.startup-recovery-list li::marker {
+    color: var(--blue-600);
+    font-weight: 950;
+}
+
 .station-detail {
     display: none;
     padding: 0 12px 16px;
@@ -4771,6 +5139,17 @@ button.city-row:focus {
     text-align: right;
 }
 
+.drive-map-price-marker.map-price-marker {
+    min-width: 108px;
+    height: 40px;
+    padding-right: 9px;
+}
+
+.drive-map-price-marker.map-price-marker strong {
+    min-width: 58px;
+    font-size: 0.78rem;
+}
+
 .drive-map-price-marker.charging strong {
     min-width: 68px;
     font-size: 0.82rem;
@@ -4901,6 +5280,13 @@ button.city-row:focus {
     font-weight: 900;
 }
 
+.popup-nav-links {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    margin-top: 8px;
+}
+
 .nav-link {
     display: inline-flex;
     align-items: center;
@@ -4913,6 +5299,15 @@ button.city-row:focus {
     background: var(--navy-900);
     text-decoration: none;
     font-weight: 800;
+}
+
+.popup-nav-links .nav-link {
+    min-width: 0;
+    min-height: 34px;
+    margin-top: 0;
+    padding: 0 8px;
+    font-size: 0.78rem;
+    white-space: nowrap;
 }
 
 @media (min-width: 760px) {
@@ -5193,7 +5588,7 @@ button.city-row:focus {
     }
 
     .result-summary {
-        grid-template-columns: minmax(76px, auto) minmax(0, 1fr);
+        grid-template-columns: minmax(76px, 0.55fr) minmax(186px, 1.45fr);
         padding: 6px 8px 7px;
     }
 
@@ -5206,18 +5601,21 @@ button.city-row:focus {
     }
 
     .quick-actions {
-        gap: 5px;
+        grid-template-columns: minmax(58px, 0.9fr) minmax(122px, 1.8fr);
+        gap: 4px;
     }
 
     .quick-actions .location-button,
     .quick-actions .text-button,
     .quick-actions .sort-toggle-button {
-        min-height: 34px;
-        font-size: 0.7rem;
+        min-height: 32px;
+        padding-left: 4px;
+        padding-right: 4px;
+        font-size: 0.66rem;
     }
 
     .quick-actions .location-button {
-        font-size: 0.66rem;
+        font-size: 0.6rem;
     }
 
     .status-pill {
@@ -6546,6 +6944,22 @@ button.city-row:focus {
 .city-station-price { grid-area: price !important; justify-self: end !important; font-size: 1rem !important; font-weight: 950 !important; line-height: 1 !important; white-space: nowrap !important; }
 .autobahn-row { grid-template-columns: 34px minmax(0, 1fr) 38px 78px !important; grid-template-areas: "rank main logo meta" "rank main logo services" !important; }
 .autobahn-meta { grid-area: meta !important; justify-self: end !important; font-size: 0.96rem !important; font-weight: 950 !important; line-height: 1 !important; white-space: nowrap !important; }
+.autobahn-row {
+    grid-template-columns: 46px minmax(0, 1fr) 38px 78px !important;
+}
+
+.autobahn-row .rank {
+    width: 42px !important;
+    min-width: 42px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    padding: 0 3px !important;
+    box-sizing: border-box !important;
+    justify-self: center !important;
+    font-size: 0.82rem !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+}
 .detail-price-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 6px !important; }
 .detail-price-grid span, .detail-price-grid span.selected { min-width: 0 !important; padding: 7px 6px !important; transform: none !important; overflow: hidden !important; }
 .detail-price-grid strong, .detail-price-grid span.selected strong { max-width: 100% !important; font-size: clamp(0.92rem, 4.2vw, 1.22rem) !important; line-height: 1.02 !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: clip !important; }
@@ -6556,12 +6970,18 @@ button.city-row:focus {
     .station-item { grid-template-columns: 26px minmax(0, 1fr) 34px 42px 62px !important; min-height: 60px !important; height: 60px !important; padding: 8px !important; }
     .station-list-price { font-size: 0.96rem !important; }
     .city-station-row { grid-template-columns: 28px minmax(0, 1fr) 34px 64px !important; }
-    .autobahn-row { grid-template-columns: 30px minmax(0, 1fr) 34px 70px !important; }
+    .autobahn-row { grid-template-columns: 44px minmax(0, 1fr) 34px 70px !important; }
+
+    .autobahn-row .rank {
+        width: 40px !important;
+        min-width: 40px !important;
+        font-size: 0.78rem !important;
+    }
 }
 .driving-selected-price {
     grid-area: prices !important;
     display: grid !important;
-    grid-template-columns: auto 1fr !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
     align-items: center !important;
     gap: 10px !important;
     min-width: 0 !important;
@@ -6572,17 +6992,22 @@ button.city-row:focus {
 }
 .driving-selected-price small {
     min-width: 0 !important;
+    overflow: hidden !important;
     color: var(--gray-700) !important;
     font-size: 0.78rem !important;
     font-weight: 950 !important;
+    text-overflow: ellipsis !important;
     white-space: nowrap !important;
 }
 .driving-selected-price strong {
     justify-self: end !important;
     min-width: 0 !important;
+    max-width: 112px !important;
+    overflow: hidden !important;
     font-size: 1.55rem !important;
     font-weight: 950 !important;
     line-height: 1 !important;
+    text-overflow: ellipsis !important;
     white-space: nowrap !important;
 }
 .driving-selected-price.price-rank-green-dark,
@@ -6712,12 +7137,24 @@ button.city-row:focus {
         justify-content: flex-start;
     }
 
-    .driving-mode .result-info {
-        gap: 6px;
-    }
-
     .driving-mode #resultCount {
         font-size: 0.86rem;
+        min-height: 50px;
+    }
+
+    .driving-mode .drive-speed-chip {
+        min-width: 136px;
+        min-height: 44px;
+        padding: 7px 12px;
+        border-width: 3px;
+        font-size: 1.95rem;
+    }
+
+    .driving-mode .drive-header-list-button {
+        min-width: 76px;
+        min-height: 38px;
+        padding: 0 10px;
+        font-size: 0.92rem;
     }
 
     .driving-mode #resultMeta {
@@ -6734,4 +7171,217 @@ button.city-row:focus {
         min-height: calc(66px + env(safe-area-inset-top)) !important;
         padding-top: max(22px, calc(5px + env(safe-area-inset-top))) !important;
     }
+}
+
+/* Final bottom navigation placement. Keep last so mobile safe-area repairs do not lift it again. */
+.bottom-nav {
+    min-height: calc(44px + env(safe-area-inset-bottom)) !important;
+    padding-top: 13px !important;
+    padding-bottom: 0 !important;
+}
+
+.app-shell.city-mode > .control-pane > .search-panel,
+.app-shell.directory-mode > .control-pane > .search-panel {
+    display: none !important;
+}
+
+.app-shell.city-mode > .control-pane > .result-summary,
+.app-shell.directory-mode > .control-pane > .result-summary {
+    grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.app-shell.city-mode > .control-pane > .result-summary .quick-actions,
+.app-shell.city-mode > .control-pane > .result-summary .sort-toggle,
+.app-shell.city-mode > .control-pane > .result-summary #refreshButton,
+.app-shell.directory-mode > .control-pane > .result-summary .quick-actions,
+.app-shell.directory-mode > .control-pane > .result-summary .sort-toggle,
+.app-shell.directory-mode > .control-pane > .result-summary #refreshButton {
+    display: none !important;
+}
+
+.app-shell.startup-interaction-locked .brand-bar,
+.app-shell.startup-interaction-locked .search-panel,
+.app-shell.startup-interaction-locked .result-summary,
+.app-shell.startup-interaction-locked .app-content,
+.app-shell.startup-interaction-locked .bottom-nav {
+    pointer-events: none;
+}
+
+.app-shell.startup-interaction-locked.startup-lock-message-visible .control-pane::after {
+    content: var(--startup-lock-message, "Standort und Daten werden geladen ...");
+    position: fixed;
+    left: 18px;
+    right: 18px;
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    z-index: 1600;
+    padding: 12px 14px;
+    border: 3px solid var(--ink);
+    border-radius: 8px;
+    color: var(--ink);
+    background: var(--cream-100);
+    box-shadow: 5px 5px 0 rgba(16, 20, 25, 0.2);
+    font-weight: 900;
+    text-align: center;
+}
+
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 300px) !important;
+    grid-template-areas:
+        "count actions"
+        "meta meta";
+    align-items: center;
+}
+
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary .result-info {
+    display: contents;
+}
+
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary #resultCount {
+    grid-area: count;
+    min-width: 0;
+}
+
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary #resultMeta {
+    grid-area: meta;
+    min-width: 0;
+    margin-top: 1px;
+    white-space: normal;
+}
+
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary .quick-actions {
+    grid-area: actions;
+}
+
+@media (max-width: 420px) {
+    .app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary {
+        grid-template-columns: minmax(0, 0.7fr) minmax(186px, 1.3fr) !important;
+    }
+}
+
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary {
+    grid-template-areas: "info actions" !important;
+    padding-top: 4px !important;
+    padding-bottom: 5px !important;
+}
+
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary .result-info {
+    grid-area: info;
+    display: flex !important;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+}
+
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary #resultCount,
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary #resultMeta {
+    grid-area: auto;
+    min-width: 0;
+    margin-top: 0;
+    white-space: nowrap;
+}
+
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary #resultMeta::before {
+    content: "· ";
+}
+
+/* Normal result summary: keep status/meta out of action buttons */
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 300px) !important;
+    grid-template-areas: "info actions" !important;
+}
+
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary .result-info {
+    grid-area: info;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: center;
+    gap: 1px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary #resultCount,
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary #resultMeta {
+    grid-area: auto;
+    min-width: 0;
+    margin-top: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary #resultMeta::before {
+    content: "";
+}
+
+@media (max-width: 420px) {
+    .app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary {
+        grid-template-columns: minmax(0, 0.78fr) minmax(194px, 1.22fr) !important;
+    }
+
+    .app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary #resultCount {
+        font-size: 0.78rem;
+    }
+
+    .app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary #resultMeta {
+        font-size: 0.66rem;
+    }
+}
+
+/* Header yellow consistency: normal and city use the same yellow. */
+.app-shell:not(.section-tone-autobahn):not(.section-tone-rural):not(.section-tone-charging) .brand-bar,
+.section-tone-city .brand-bar {
+    background: var(--yellow-300) !important;
+}
+
+/* Header size consistency for yellow headers. */
+.app-shell:not(.section-tone-autobahn):not(.section-tone-rural):not(.section-tone-charging) .brand-bar,
+.section-tone-city .brand-bar {
+    min-height: calc(78px + env(safe-area-inset-top)) !important;
+    padding-top: max(26px, calc(8px + env(safe-area-inset-top))) !important;
+    padding-bottom: 7px !important;
+}
+
+/* Normal list header height alignment. */
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .search-panel {
+    gap: 5px !important;
+    padding-top: 7px !important;
+    padding-bottom: 7px !important;
+}
+
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .search-panel .search-row {
+    grid-template-columns: minmax(0, 1fr) 64px !important;
+    gap: 8px !important;
+}
+
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .search-panel input,
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .search-panel .icon-button {
+    min-height: 38px !important;
+}
+
+.app-shell:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary {
+    min-height: 48px !important;
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+}
+
+/* Normal map header height alignment. */
+.app-shell.view-map:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .search-panel {
+    flex: 0 0 auto !important;
+    gap: 5px !important;
+    padding-top: 7px !important;
+    padding-bottom: 7px !important;
+}
+
+.app-shell.view-map:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .result-summary {
+    flex: 0 0 48px !important;
+    min-height: 48px !important;
+    max-height: 48px !important;
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+}
+
+.app-shell.view-map:not(.city-mode):not(.directory-mode):not(.driving-mode):not(.detail-open) > .control-pane > .map-pane {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
 }

@@ -1,0 +1,382 @@
+﻿[
+    {
+        "highway":  "A4",
+        "status":  "completed",
+        "discovered":  11,
+        "imported":  11,
+        "created":  0,
+        "updated":  11,
+        "errors":  0,
+        "runId":  "vRyuXxtxFUaAbt7sCaVP"
+    },
+    {
+        "highway":  "A5",
+        "status":  "completed",
+        "discovered":  6,
+        "imported":  6,
+        "created":  0,
+        "updated":  6,
+        "errors":  0,
+        "runId":  "ya5lbV5sgVxhDkRMTrtp"
+    },
+    {
+        "highway":  "A6",
+        "status":  "completed",
+        "discovered":  6,
+        "imported":  6,
+        "created":  0,
+        "updated":  6,
+        "errors":  0,
+        "runId":  "xxwYOKeqGs3ci8t7maPD"
+    },
+    {
+        "highway":  "A7",
+        "status":  "completed",
+        "discovered":  21,
+        "imported":  21,
+        "created":  0,
+        "updated":  21,
+        "errors":  0,
+        "runId":  "irubLf3dJuoqxeoaKKEy"
+    },
+    {
+        "highway":  "A8",
+        "status":  "completed",
+        "discovered":  10,
+        "imported":  10,
+        "created":  0,
+        "updated":  10,
+        "errors":  0,
+        "runId":  "GpqyCdTXrAkV02tgLZgE"
+    },
+    {
+        "highway":  "A20",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "PHVblldKRw71NS0qEAai"
+    },
+    {
+        "highway":  "A27",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "pD9ss7AKzi5jNQ9FSIFK"
+    },
+    {
+        "highway":  "A30",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "tthaFgOXOGqfsG0IdPhM"
+    },
+    {
+        "highway":  "A31",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "Dyrre0BA09a5jUlB5sSf"
+    },
+    {
+        "highway":  "A33",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "6PZXlVzyztsGJAH98dam"
+    },
+    {
+        "highway":  "A38",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "0oUc2mtCE3V70eOLeUlP"
+    },
+    {
+        "highway":  "A40",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "Lm0O0A1aasntVpPBSXQi"
+    },
+    {
+        "highway":  "A42",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "URofWLDlBdXilfpTdTOa"
+    },
+    {
+        "highway":  "A43",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "5Df2jSyeQ1ScAgW8oww9"
+    },
+    {
+        "highway":  "A44",
+        "status":  "completed",
+        "discovered":  3,
+        "imported":  3,
+        "created":  0,
+        "updated":  3,
+        "errors":  0,
+        "runId":  "hmWOBdy3izKCmlx05Iod"
+    },
+    {
+        "highway":  "A45",
+        "status":  "completed",
+        "discovered":  5,
+        "imported":  5,
+        "created":  0,
+        "updated":  5,
+        "errors":  0,
+        "runId":  "NQQQGmW9Ij7cNwJMw3kd"
+    },
+    {
+        "highway":  "A46",
+        "status":  "completed",
+        "discovered":  3,
+        "imported":  3,
+        "created":  0,
+        "updated":  3,
+        "errors":  0,
+        "runId":  "gZ02hmiFTcE2ek7wmU4S"
+    },
+    {
+        "highway":  "A52",
+        "status":  "completed",
+        "discovered":  2,
+        "imported":  2,
+        "created":  0,
+        "updated":  2,
+        "errors":  0,
+        "runId":  "O6ZLScLMZob8EamhswuW"
+    },
+    {
+        "highway":  "A57",
+        "status":  "completed",
+        "discovered":  2,
+        "imported":  2,
+        "created":  0,
+        "updated":  2,
+        "errors":  0,
+        "runId":  "XKmM8yRYsqZ9OgN7QIlH"
+    },
+    {
+        "highway":  "A59",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "3opKg1cFt1uaVe4EJ5bv"
+    },
+    {
+        "highway":  "A60",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "InFmpuoCmSc9pQkDClBN"
+    },
+    {
+        "highway":  "A61",
+        "status":  "completed",
+        "discovered":  3,
+        "imported":  3,
+        "created":  0,
+        "updated":  3,
+        "errors":  0,
+        "runId":  "5wFpFfoBOV3x8bLarV13"
+    },
+    {
+        "highway":  "A62",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "RTe2iEGdWPtHWc8pMkkE"
+    },
+    {
+        "highway":  "A63",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "zHJgoRWttKDpfXf5KjSg"
+    },
+    {
+        "highway":  "A65",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "coZJQObDkvGQHzdN3cnt"
+    },
+    {
+        "highway":  "A66",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "YILjljva8UNhi1jfxuNq"
+    },
+    {
+        "highway":  "A67",
+        "status":  "completed",
+        "discovered":  2,
+        "imported":  2,
+        "created":  0,
+        "updated":  2,
+        "errors":  0,
+        "runId":  "MFuvurgt7ApH2rjDOoyc"
+    },
+    {
+        "highway":  "A70",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "w3CFAwpnmIstFSH0JvCI"
+    },
+    {
+        "highway":  "A71",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "AIM2XJCY4xAKDjnt80bQ"
+    },
+    {
+        "highway":  "A72",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "HnPLBJzwRl8dHwcYwk7W"
+    },
+    {
+        "highway":  "A73",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "2Br1bT9urxAwbwc4rkXe"
+    },
+    {
+        "highway":  "A81",
+        "status":  "completed",
+        "discovered":  5,
+        "imported":  5,
+        "created":  0,
+        "updated":  5,
+        "errors":  0,
+        "runId":  "PcTodsUP1UCSwK8VjgsD"
+    },
+    {
+        "highway":  "A92",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "vRE9zxMazh4NfoLrn7ub"
+    },
+    {
+        "highway":  "A93",
+        "status":  "completed",
+        "discovered":  1,
+        "imported":  1,
+        "created":  0,
+        "updated":  1,
+        "errors":  0,
+        "runId":  "kH1CglfT2KII4mrMJ9yZ"
+    },
+    {
+        "highway":  "A94",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "7E6fP7gGbsDqvEa5RijT"
+    },
+    {
+        "highway":  "A95",
+        "status":  "completed",
+        "discovered":  2,
+        "imported":  2,
+        "created":  0,
+        "updated":  2,
+        "errors":  0,
+        "runId":  "PmJeg3dMqyL6ngJbuyfV"
+    },
+    {
+        "highway":  "A96",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "0yPJdAscYPhqCSp9LXme"
+    },
+    {
+        "highway":  "A99",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  0,
+        "runId":  "qiX77yEG2YhVkHSJ0tcW"
+    }
+]

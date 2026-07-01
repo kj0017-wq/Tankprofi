@@ -1,0 +1,10 @@
+﻿{
+    "createdAt":  "2026-06-30T10:32:06",
+    "reason":  "pre-koenig-address-import",
+    "source":  "https://tankprofi.web.app/api/admin/addresses/export.csv",
+    "project":  "tankprofi",
+    "csvFile":  "tankprofi-addressdaten-current.csv",
+    "csvBytes":  5981760,
+    "csvLines":  15435,
+    "note":  "CSV export saved before replacing Koenig address data. Direct local Firestore JSON dump skipped because Application Default Credentials are not configured on this machine."
+}

@@ -2,13 +2,14 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260630-ev-filter-chain';
+const appVersion = '20260701-search-ok-map-favorites-stable';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
 const ELECTRIC_RADIUS_OPTIONS = ['5', '10', '25'];
 const COMBUSTION_LIMIT_OPTIONS = ['10', '25', '50', '100'];
 const ELECTRIC_LIMIT_OPTIONS = ['20', '50', '100'];
+const COMBUSTION_NORMAL_SEARCH_LIMIT = '100';
 const ELECTRIC_DRIVE_RADIUS_KM = 25;
 const DRIVE_HIGHWAY_PRICE_MAX_AGE_MS = 15 * 60 * 1000;
 const USAGE_PRICE_MAX_AGE_MS = 30 * 60 * 1000;
@@ -37,10 +38,16 @@ const DRIVE_COMPASS_RENDER_FAST_MS = 1200;
 const DRIVE_MAP_FOLLOW_MIN_MS = 350;
 const DRIVE_MAP_MANUAL_PAUSE_MS = 15 * 1000;
 const DRIVE_MAP_INITIAL_ZOOM_DELAY_MS = 5 * 1000;
+const DRIVE_MAP_NEAREST_OPEN_DELAY_MS = 1000;
+const DRIVE_MAP_FOLLOW_ZOOM = 17;
 const DRIVE_CITY_MAP_RADIUS_KM = 1.5;
 const DRIVE_CONTROL_REVEAL_MS = 10 * 1000;
 const DRIVE_CONTROL_MOVING_KMH = 5;
 const DRIVE_LIST_AUTO_TOP_MS = 10 * 1000;
+const NORMAL_SEARCH_STORED_CACHE_MS = 24 * 60 * 60 * 1000;
+const STARTUP_LOCATION_MESSAGE_MIN_MS = 12000;
+const STARTUP_SEARCH_TIMEOUT_MS = 60000;
+const STARTUP_SEARCH_RETRY_TIMEOUT_MS = 60000;
 const DRIVE_ROUTE_TEMPLATES = [
     { id: 'a9-muenchen', label: 'A9 Richtung Muenchen', routeIds: ['A9'], direction: 'Muenchen' },
     { id: 'a9-berlin', label: 'A9 Richtung Berlin', routeIds: ['A9'], direction: 'Berlin' },
@@ -58,6 +65,10 @@ const state = {
     drivingMapInitialZoomTimer: null,
     drivingMapFocusKey: null,
     drivingMapFocusActive: false,
+    drivingMapNearestId: null,
+    drivingMapNearestSwapTimer: null,
+    drivingMapNearestDelayUntil: 0,
+    drivingMapNearestDelayTimer: null,
     drivingMapFollowAt: null,
     drivingMapUserPanUntil: 0,
     drivingMapProgrammaticMove: false,
@@ -72,6 +83,7 @@ const state = {
     view: 'list',
     listMode: 'results',
     favorites: [],
+    chargingFavorites: [],
     citySnapshot: null,
     cityRankings: [],
     cityStations: [],
@@ -93,6 +105,7 @@ const state = {
     chargingLoadKey: null,
     chargingDistributionLoadKey: null,
     chargingOperators: [],
+    chargingOperatorsLimit: 40,
     chargingOperatorsLoadKey: null,
     chargingCityContext: null,
     chargingFilters: {
@@ -136,6 +149,7 @@ const state = {
     drivingCompassPermissionAsked: false,
     drivingCompassPermissionDenied: false,
     drivingSpeedKmh: null,
+    drivingSpeedUpdatedAt: null,
     drivingAccuracy: null,
     drivingNearestRouteDistanceKm: null,
     drivingCurrentRoutePosition: null,
@@ -168,11 +182,13 @@ const state = {
     normalSearchLastLoadedAt: null,
     normalSearchLastMeta: null,
     normalSearchSnapshotBeforeDrive: null,
+    normalSearchSnapshotBeforeSection: null,
     installPrompt: null,
     splashStartedAt: 0,
     splashHidden: false,
     activeDataRequests: 0,
     startupLocationPending: false,
+    startupInteractionLocked: false,
     vehicleMode: DEFAULT_VEHICLE_MODE,
     drivingVehicleMode: DEFAULT_VEHICLE_MODE,
 };
@@ -213,6 +229,10 @@ const els = {
     tankprofiRastCount: document.querySelector('#tankprofiRastCount'),
     tankprofiChargingCount: document.querySelector('#tankprofiChargingCount'),
     tankprofiTruckCount: document.querySelector('#tankprofiTruckCount'),
+    tankprofiElectricStationCount: document.querySelector('#tankprofiElectricStationCount'),
+    tankprofiElectricBnetzaCount: document.querySelector('#tankprofiElectricBnetzaCount'),
+    tankprofiElectricTeslaCount: document.querySelector('#tankprofiElectricTeslaCount'),
+    tankprofiElectricFastCount: document.querySelector('#tankprofiElectricFastCount'),
     tankprofiKoenigSearchCount: document.querySelector('#tankprofiKoenigSearchCount'),
     tankprofiBerlinKoenigCount: document.querySelector('#tankprofiBerlinKoenigCount'),
     tankprofiKoenigAuditStats: document.querySelector('#tankprofiKoenigAuditStats'),
@@ -231,6 +251,7 @@ const els = {
     resultMeta: document.querySelector('#resultMeta'),
     drivingMapBack: document.querySelector('#drivingMapBackButton'),
     drivingMapSpeed: document.querySelector('#drivingMapSpeed'),
+    drivingMapNearest: document.querySelector('#drivingMapNearest'),
     globalProgress: document.querySelector('#globalProgress'),
     status: document.querySelector('#statusPill'),
     splash: document.querySelector('#splashScreen'),
@@ -417,7 +438,7 @@ function registerServiceWorker() {
 function initMap() {
     if (state.map) return;
     if (window.L) {
-        state.map = L.map('map', { zoomControl: false }).setView([51.1657, 10.4515], 6);
+        state.map = L.map('map', { zoomControl: false, rotate: false, bearing: 0, rotateControl: false }).setView([51.1657, 10.4515], 6);
         state.map.on('dragstart', pauseDrivingMapFollow);
         state.map.on('zoomstart', () => {
             if (!state.drivingMapProgrammaticMove) pauseDrivingMapFollow();
@@ -478,6 +499,19 @@ function updateGlobalProgress() {
     const active = state.activeDataRequests > 0;
     els.appShell?.classList.toggle('data-loading', active);
     els.globalProgress?.setAttribute('aria-hidden', active ? 'false' : 'true');
+}
+
+function setStartupInteractionLock(active, message = '') {
+    state.startupInteractionLocked = Boolean(active);
+    els.appShell?.classList.toggle('startup-interaction-locked', state.startupInteractionLocked);
+    els.appShell?.classList.toggle('startup-lock-message-visible', state.startupInteractionLocked && Boolean(message));
+    if (els.appShell) {
+        els.appShell.style.setProperty('--startup-lock-message', `"${String(message).replace(/"/g, '\\"')}"`);
+    }
+}
+
+function isInteractionLocked() {
+    return Boolean(state.startupInteractionLocked);
 }
 
 function beginDataRequest() {
@@ -615,8 +649,13 @@ function distanceText(station) {
 }
 
 function drivingSpeedText() {
-    return Number.isFinite(state.drivingSpeedKmh)
-        ? `${Math.round(state.drivingSpeedKmh)} km/h`
+    const isFresh = Date.now() - Number(state.drivingSpeedUpdatedAt || 0) <= 6000;
+    if (!isFresh || !Number.isFinite(state.drivingSpeedKmh)) return '0 km/h';
+    const displaySpeed = state.drivingContext === 'city' && state.drivingSpeedKmh > 10
+        ? state.drivingSpeedKmh + 3
+        : state.drivingSpeedKmh;
+    return Number.isFinite(displaySpeed)
+        ? `${Math.round(displaySpeed)} km/h`
         : '0 km/h';
 }
 
@@ -639,6 +678,7 @@ function shouldCollapseDrivingControls() {
     if (!state.drivingActive || state.listMode !== 'driving' || state.view !== 'list') return false;
     if (state.drivingDestinationOpen || state.drivingRouteInfoVisible) return false;
     if (isDrivingDestinationInputActive()) return false;
+    if (isDrivingMoving()) return true;
     return Date.now() > Number(state.drivingControlsVisibleUntil || 0);
 }
 
@@ -717,6 +757,11 @@ function brandInfo(station) {
         station.operator,
         station.displayName,
         station.name,
+    ].filter(Boolean).join(' ')).toLowerCase();
+    const operatorRaw = ([
+        station.brand,
+        station.operatorName,
+        station.operator,
     ].filter(Boolean).join(' ')).toLowerCase();
     const brands = [
         ['aral', 'Aral', 'aral'],
@@ -797,7 +842,8 @@ function brandInfo(station) {
         ['stadtwerke kommunalpartner', 'Berliner Stadtwerke', 'berliner-stadtwerke'],
         ['score', 'Score', 'score'],
     ];
-    const match = brands.find(([needle]) => raw.includes(needle));
+    const matchSource = station.chargingMode && operatorRaw ? operatorRaw : raw;
+    const match = brands.find(([needle]) => matchSource.includes(needle));
     if (match) return { label: match[1], className: match[2] };
 
     const fallback = (station.brand || station.name || 'Tank').trim();
@@ -875,6 +921,10 @@ function isAutohofStation(station) {
 
 function autobahnKindClass(station) {
     return isAutohofStation(station) ? 'autohof-rank' : 'raststaette-rank';
+}
+
+function autobahnKindLabel(station) {
+    return isAutohofStation(station) ? 'Autohof' : 'Raststätte';
 }
 
 function tankRastBadgeHtml(station) {
@@ -980,9 +1030,15 @@ function sortStations() {
 }
 
 function iconFor(station, thresholds, selected = false) {
-    const price = station.price ? String(Math.round(station.price * 100)).slice(-2) : '';
+    const selectedFuel = els.fuel.value;
+    const displayPrice = isValidPriceValue(station.price)
+        ? Number(station.price)
+        : Number(fuelPriceValue(station, selectedFuel));
+    const priceText = isValidPriceValue(displayPrice)
+        ? `${displayPrice.toFixed(3).replace('.', ',')} €`
+        : '-';
     const cls = selected ? 'selected' : markerClass({
-        price,
+        price: displayPrice,
         is_open: station.is_open ?? station.isOpen,
         priceCategory: station.priceCategory,
     }, thresholds);
@@ -992,10 +1048,10 @@ function iconFor(station, thresholds, selected = false) {
         : '';
     return L.divIcon({
         className: '',
-        html: `<span class="price-marker ${cls}${statusHtml ? ` drive-${driveStatus}` : ''}">${price}${statusHtml}</span>`,
-        iconSize: [28, 28],
-        iconAnchor: [14, 14],
-        popupAnchor: [0, -14],
+        html: `<span class="drive-map-price-marker map-price-marker ${cls}${statusHtml ? ` drive-${driveStatus}` : ''}"><span class="drive-map-logo">${brandLogoHtml(station)}</span><strong>${escapeHtml(priceText)}</strong>${statusHtml}</span>`,
+        iconSize: [108, 40],
+        iconAnchor: [54, 20],
+        popupAnchor: [0, -22],
     });
 }
 
@@ -1063,9 +1119,11 @@ function driveMapThresholdsFor(stations) {
 }
 
 function userLocationIcon() {
+    const bearing = state.listMode === 'driving' && state.view === 'map' ? drivingMapHeading(currentDrivingPosition()) : 0;
+    const style = Number.isFinite(bearing) ? ` style="--user-bearing:${bearing}deg"` : '';
     return L.divIcon({
         className: '',
-        html: '<span class="user-location-marker"><i></i></span>',
+        html: `<span class="user-location-marker"${style}><i></i></span>`,
         iconSize: [38, 38],
         iconAnchor: [19, 19],
         popupAnchor: [0, -19],
@@ -1112,8 +1170,26 @@ function popupPriceGridHtml(station) {
     `;
 }
 
+function popupNavigationLinksHtml(station) {
+    const lat = Number(station.lat);
+    const lng = Number(station.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return '';
+    const destination = `${lat},${lng}`;
+    const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
+    const wazeUrl = `https://waze.com/ul?ll=${lat}%2C${lng}&navigate=yes`;
+    const appleUrl = `https://maps.apple.com/?daddr=${destination}`;
+    const geoUrl = `geo:${destination}?q=${destination}`;
+    return `
+        <div class="popup-nav-links" aria-label="Navigation">
+            <a class="nav-link" href="${googleUrl}" target="_blank" rel="noopener">Google</a>
+            <a class="nav-link" href="${wazeUrl}" target="_blank" rel="noopener">Waze</a>
+            <a class="nav-link" href="${appleUrl}" target="_blank" rel="noopener">Apple</a>
+            <a class="nav-link" href="${geoUrl}" target="_blank" rel="noopener">System</a>
+        </div>
+    `;
+}
+
 function popupDetailHtml(station, options = {}) {
-    const navUrl = `https://waze.com/ul?ll=${station.lat}%2C${station.lng}&navigate=yes`;
     const status = station.is_open === null || station.is_open === undefined
         ? 'Status unbekannt'
         : station.is_open ? 'Geoeffnet' : 'Geschlossen';
@@ -1129,13 +1205,12 @@ function popupDetailHtml(station, options = {}) {
             ${distanceLine ? `<p class="popup-meta">${escapeHtml(distanceLine)}</p>` : ''}
             ${popupPriceGridHtml(station)}
             <p class="popup-meta">${escapeHtml(status)}${priceStand ? ` - Stand ${formatDateTime(priceStand)}` : ''}</p>
-            <a class="nav-link" href="${navUrl}" target="_blank" rel="noopener">Navigation</a>
+            ${popupNavigationLinksHtml(station)}
         </div>
     `;
 }
 
 function popupHtml(station) {
-    const navUrl = `https://waze.com/ul?ll=${station.lat}%2C${station.lng}&navigate=yes`;
     const priceClass = visiblePriceClass(station);
     if (station.chargingMode) {
         const addressLine = chargingAddress(station) || '-';
@@ -1150,7 +1225,7 @@ function popupHtml(station) {
                 <p class="popup-price charging-popup">${escapeHtml(chargingPowerText(station))} ${escapeHtml(station.acDc || '')}</p>
                 <p class="popup-meta">${escapeHtml(chargingConnectorText(station))}</p>
                 ${distanceLine ? `<p class="popup-meta">${escapeHtml(distanceLine)}</p>` : ''}
-                <a class="nav-link" href="${navUrl}" target="_blank" rel="noopener">Navigation</a>
+                ${popupNavigationLinksHtml(station)}
             </div>
         `;
     }
@@ -1264,15 +1339,22 @@ function setView(view) {
         button.classList.toggle('active', button.dataset.view === view);
     });
     updateBottomNav();
+    if (state.listMode === 'driving') {
+        window.requestAnimationFrame(() => {
+            if (state.listMode === 'driving') renderDrivingModeList();
+        });
+    }
 
     if (view !== 'map') {
         clearDetailMapZoomTimer();
         clearDrivingMapFocusTimer();
         clearDrivingMapInitialZoomTimer();
+        clearDrivingMapNearestDelayTimer();
         state.drivingMapFocusKey = null;
         state.drivingMapFocusActive = false;
         state.drivingMapFollowAt = null;
         updateDrivingMapRotation();
+        updateDrivingMapNearestBox([]);
     }
 
     if (view === 'map') {
@@ -1283,6 +1365,8 @@ function setView(view) {
                     const now = Date.now();
                     state.drivingMapUserPanUntil = now + DRIVE_MAP_INITIAL_ZOOM_DELAY_MS;
                     state.drivingMapFollowAt = now;
+                    state.drivingMapNearestDelayUntil = now + DRIVE_MAP_NEAREST_OPEN_DELAY_MS;
+                    clearDrivingMapNearestBox();
                     scheduleDrivingMapInitialZoom();
                 }
                 const anchor = drivingMapFallbackPosition(state.drivingSamples[state.drivingSamples.length - 1] || state.selectedLocation);
@@ -1306,8 +1390,8 @@ function setView(view) {
             }
             refreshMapLayout();
             renderMarkers();
-            const station = getVisibleStations().find((item) => item.tankerkoenig_id === state.selectedId)
-                || state.stations.find((item) => item.tankerkoenig_id === state.selectedId);
+        const station = getVisibleStations().find((item) => stationMapId(item) === state.selectedId)
+                || state.stations.find((item) => stationMapId(item) === state.selectedId);
             if (station && state.listMode !== 'driving' && state.map.type !== 'fallback') {
                 state.map.setView([station.lat, station.lng], Math.max(state.map.getZoom(), 14), { animate: true });
             }
@@ -1370,17 +1454,17 @@ function renderMarkers() {
     state.layer.clearLayers();
 
     visibleStations.forEach((station) => {
-        const stationId = station.stationId || station.tankerkoenig_id || station.id;
+        const stationId = stationMapId(station);
         const marker = L.marker([station.lat, station.lng], {
             icon: station.chargingMode
                 ? chargingIconFor(station, stationId === state.selectedId)
-                : iconFor(station, thresholds, station.tankerkoenig_id === state.selectedId),
+                : iconFor(station, thresholds, stationId === state.selectedId),
         }).bindPopup(popupHtml(station));
 
         if (window.matchMedia?.('(hover: hover)').matches) {
             marker.on('mouseover', () => marker.openPopup());
             marker.on('mouseout', () => {
-                if (state.selectedId !== station.tankerkoenig_id) marker.closePopup();
+                if (state.selectedId !== stationId) marker.closePopup();
             });
         }
 
@@ -1404,7 +1488,7 @@ function renderMarkers() {
                 setView('list');
                 return;
             }
-            selectStation(station.tankerkoenig_id, true, true);
+            selectStation(stationId, true, true);
         });
         marker.addTo(state.layer);
         state.markers.set(stationId, marker);
@@ -1430,6 +1514,7 @@ function renderDrivingMap() {
     updateDrivingMapRotation();
     const userPosition = state.drivingSamples[state.drivingSamples.length - 1] || state.selectedLocation;
     const stationsToShow = drivingMapStationsToShow(userPosition);
+    updateDrivingMapNearestBox(stationsToShow);
     if (state.map.type === 'fallback') {
         renderFallbackMap(state.drivingDestination ? stationsToShow : [], thresholdsFor(stationsToShow));
         return;
@@ -1460,6 +1545,177 @@ function renderDrivingMap() {
         });
 
     focusDrivingMapByHeading(stationsToShow, userPosition, { force: !state.drivingMapFollowAt });
+}
+
+function updateDrivingMapNearestBox(stations = state.stations) {
+    if (!els.drivingMapNearest) return;
+    if (state.listMode !== 'driving' || state.view !== 'map' || els.detail.classList.contains('visible')) {
+        clearDrivingMapNearestBox();
+        return;
+    }
+    const delayMs = Number(state.drivingMapNearestDelayUntil || 0) - Date.now();
+    if (delayMs > 0) {
+        els.drivingMapNearest.innerHTML = '';
+        els.drivingMapNearest.classList.remove('visible', 'entering', 'leaving');
+        clearDrivingMapNearestDelayTimer();
+        state.drivingMapNearestDelayTimer = window.setTimeout(() => {
+            state.drivingMapNearestDelayTimer = null;
+            state.drivingMapNearestDelayUntil = 0;
+            updateDrivingMapNearestBox(drivingMapStationsToShow(currentDrivingPosition() || state.selectedLocation));
+        }, delayMs + 20);
+        return;
+    }
+    const currentPosition = currentDrivingPosition() || state.selectedLocation;
+    const drivingBearing = visualDrivingBearing();
+    const stationsWithDistance = [...(stations || [])].map((station) => {
+        const gpsDistance = currentPosition
+            && Number.isFinite(Number(currentPosition.lat))
+            && Number.isFinite(Number(currentPosition.lng))
+            && Number.isFinite(Number(station.lat))
+            && Number.isFinite(Number(station.lng))
+            ? routeDistanceKm(currentPosition.lat, currentPosition.lng, station.lat, station.lng)
+            : null;
+        const stationBearing = currentPosition
+            && Number.isFinite(Number(station.lat))
+            && Number.isFinite(Number(station.lng))
+            ? calculateBearing(currentPosition, station)
+            : null;
+        const bearingDelta = Number.isFinite(drivingBearing) && Number.isFinite(stationBearing)
+            ? angularDifference(drivingBearing, stationBearing)
+            : station.drivingBearingDelta;
+        const behindDrivingDirection = Number.isFinite(bearingDelta)
+            ? bearingDelta > 90
+            : station.behindDrivingDirection;
+        return {
+            ...station,
+            mapDistance: Number.isFinite(gpsDistance) ? gpsDistance : Number(station.distance),
+            mapBearingDelta: bearingDelta,
+            mapBehindDrivingDirection: behindDrivingDirection,
+        };
+    });
+    const nearest = stationsWithDistance
+        .filter((station) => (
+            Number.isFinite(Number(station.mapDistance))
+            && (!isLocalDrivingContext(station.drivingContext)
+                || !station.mapBehindDrivingDirection
+                || Number(station.mapDistance) <= CITY_DRIVE_BEHIND_KEEP_KM)
+        ))
+        .sort((a, b) => Number(a.mapDistance) - Number(b.mapDistance))[0];
+    if (!nearest) {
+        clearDrivingMapNearestBox();
+        return;
+    }
+    renderDrivingMapNearestBox(nearest);
+}
+
+function clearDrivingMapNearestBox() {
+    clearDrivingMapNearestDelayTimer();
+    if (state.drivingMapNearestSwapTimer) {
+        clearTimeout(state.drivingMapNearestSwapTimer);
+        state.drivingMapNearestSwapTimer = null;
+    }
+    state.drivingMapNearestId = null;
+    if (!els.drivingMapNearest) return;
+    els.drivingMapNearest.innerHTML = '';
+    els.drivingMapNearest.classList.remove('visible', 'entering', 'leaving');
+}
+
+function clearDrivingMapNearestDelayTimer() {
+    if (!state.drivingMapNearestDelayTimer) return;
+    clearTimeout(state.drivingMapNearestDelayTimer);
+    state.drivingMapNearestDelayTimer = null;
+}
+
+function bindDrivingMapNearestBox(nearest) {
+    if (!els.drivingMapNearest) return;
+    const card = els.drivingMapNearest.querySelector('[data-driving-station-id]');
+    card?.addEventListener('click', () => {
+        const id = card.dataset.drivingStationId;
+        state.selectedId = id;
+        state.detailReturnView = 'driving-map';
+        const station = state.stations.find((item) => String(item.tankerkoenig_id || item.stationId || item.id) === String(id)) || nearest;
+        renderDetail(station);
+        if (station.chargingMode) return;
+        importMissingDetailStationData(station, { force: true });
+    });
+}
+
+function renderDrivingMapNearestBox(nearest) {
+    if (!els.drivingMapNearest) return;
+    const nearestId = String(nearest.tankerkoenig_id || nearest.stationId || nearest.id || '');
+    const currentId = state.drivingMapNearestId;
+    const html = drivingMapNearestCardHtml(nearest);
+
+    if (state.drivingMapNearestSwapTimer) {
+        clearTimeout(state.drivingMapNearestSwapTimer);
+        state.drivingMapNearestSwapTimer = null;
+    }
+
+    if (!currentId) {
+        state.drivingMapNearestId = nearestId;
+        els.drivingMapNearest.innerHTML = html;
+        els.drivingMapNearest.classList.remove('leaving');
+        els.drivingMapNearest.classList.add('visible', 'entering');
+        window.setTimeout(() => els.drivingMapNearest?.classList.remove('entering'), 360);
+        bindDrivingMapNearestBox(nearest);
+        return;
+    }
+
+    if (currentId === nearestId) {
+        els.drivingMapNearest.innerHTML = html;
+        els.drivingMapNearest.classList.add('visible');
+        els.drivingMapNearest.classList.remove('entering', 'leaving');
+        bindDrivingMapNearestBox(nearest);
+        return;
+    }
+
+    els.drivingMapNearest.classList.remove('entering');
+    els.drivingMapNearest.classList.add('visible', 'leaving');
+    state.drivingMapNearestSwapTimer = window.setTimeout(() => {
+        state.drivingMapNearestSwapTimer = null;
+        state.drivingMapNearestId = nearestId;
+        els.drivingMapNearest.innerHTML = html;
+        els.drivingMapNearest.classList.remove('leaving');
+        els.drivingMapNearest.classList.add('visible', 'entering');
+        window.setTimeout(() => els.drivingMapNearest?.classList.remove('entering'), 360);
+        bindDrivingMapNearestBox(nearest);
+    }, 220);
+}
+
+function drivingMapNearestCardHtml(station) {
+    const id = station.tankerkoenig_id || station.stationId || station.id || '';
+    const distance = Number.isFinite(Number(station.mapDistance))
+        ? Number(station.mapDistance)
+        : Number(station.distance);
+    const distanceTextValue = Number.isFinite(distance)
+        ? `${distance.toFixed(1).replace('.', ',')} km`
+        : 'km offen';
+    if (station.chargingMode) {
+        const mode = station.acDc || (station.fastCharging ? 'DC' : 'AC');
+        return `
+            <article class="driving-map-nearest-card charging" tabindex="0" data-driving-station-id="${escapeHtml(id)}">
+                <span class="nearest-logo">${brandLogoHtml(station)}</span>
+                <span class="nearest-main">
+                    <span><b>${escapeHtml(station.name || station.operatorName || 'Ladeanlage')}</b><i>${escapeHtml(mode)}</i></span>
+                    <small>${escapeHtml(chargingAddress(station) || chargingConnectorText(station) || 'Adresse offen')}</small>
+                </span>
+                <span class="nearest-value"><b>${escapeHtml(chargingPowerText(station))}</b><small>${escapeHtml(distanceTextValue)}</small></span>
+            </article>
+        `;
+    }
+    const selectedFuel = els.fuel.value;
+    const price = fuelPriceValue(station, selectedFuel);
+    const priceText = isValidPriceValue(price) ? money(price) : '-';
+    return `
+        <article class="driving-map-nearest-card" tabindex="0" data-driving-station-id="${escapeHtml(id)}">
+            <span class="nearest-logo">${brandLogoHtml(station)}</span>
+            <span class="nearest-main">
+                <span><b>${escapeHtml(station.name || station.brand || 'Tankpunkt')}</b><i>${escapeHtml(station.routeId || station.autobahn || station.highway || routeLabel())}</i></span>
+                <small>${escapeHtml(drivingStationAddress(station) || compactAddress(station) || station.brand || 'Adresse offen')}</small>
+            </span>
+            <span class="nearest-value"><b>${escapeHtml(priceText)}</b><small>${escapeHtml(distanceTextValue)}</small></span>
+        </article>
+    `;
 }
 
 function drivingMapStationsToShow(position) {
@@ -1499,7 +1755,12 @@ function drivingMapHeading(position) {
 function updateDrivingMapRotation() {
     const mapEl = document.querySelector('#map');
     if (!mapEl) return;
+    const heading = state.listMode === 'driving' && state.view === 'map' ? drivingMapHeading(currentDrivingPosition()) : 0;
     mapEl.style.setProperty('--driving-map-rotation', '0deg');
+    if (state.map && typeof state.map.setBearing === 'function') {
+        state.map.setBearing(0);
+    }
+    if (state.userLocationMarker) state.userLocationMarker.setIcon(userLocationIcon());
 }
 
 function pauseDrivingMapFollow() {
@@ -1521,16 +1782,19 @@ function focusDrivingMapByHeading(stationsToShow, userPosition, { force = false 
     if (!state.map || state.map.type === 'fallback' || state.listMode !== 'driving' || state.view !== 'map') return;
     if (els.detail.classList.contains('visible')) return;
     const now = Date.now();
-    if (!force && now < Number(state.drivingMapUserPanUntil || 0)) return;
+    const speed = Number(state.drivingSpeedKmh);
+    const isMoving = Number.isFinite(speed) && speed >= DRIVE_CONTROL_MOVING_KMH;
+    if (!force && !isMoving && now < Number(state.drivingMapUserPanUntil || 0)) return;
     if (!force && now - Number(state.drivingMapFollowAt || 0) < DRIVE_MAP_FOLLOW_MIN_MS) return;
     const anchor = drivingMapFallbackPosition(userPosition);
-    const speed = Number(state.drivingSpeedKmh);
     const lat = Number(anchor.lat);
     const lng = Number(anchor.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
     state.drivingMapFollowAt = now;
     state.drivingMapProgrammaticMove = true;
-    if (state.drivingContext === 'city') {
+    if (isMoving) {
+        state.map.setView([lat, lng], DRIVE_MAP_FOLLOW_ZOOM, { animate: true });
+    } else if (state.drivingContext === 'city') {
         state.map.fitBounds(drivingMapBoundsAround(lat, lng, DRIVE_CITY_MAP_RADIUS_KM), {
             animate: false,
             padding: [18, 18],
@@ -1802,6 +2066,15 @@ function renderResults() {
     sortStations();
 
     if (state.listMode === 'favorites') {
+        if (isElectricMode()) {
+            renderChargingFavoriteRows();
+            els.resultCount.textContent = `${state.chargingFavorites.length} EV-Favoriten`;
+            els.resultMeta.textContent = 'Gespeicherte Ladeanlagen';
+            if (!state.chargingFavorites.length) {
+                els.results.innerHTML = '<div class="empty-state">Noch keine Elektro-Favoriten gespeichert.</div>';
+            }
+            return;
+        }
         renderFavoriteRows();
         els.resultCount.textContent = `${state.favorites.length} Favoriten`;
         els.resultMeta.textContent = 'Gespeicherte Tankstellen';
@@ -1863,7 +2136,7 @@ function selectStation(id, pan = false, showDetailView = false) {
     });
 
     renderMarkers();
-    const station = state.stations.find((item) => item.tankerkoenig_id === id);
+    const station = state.stations.find((item) => stationMapId(item) === id);
     renderDetail(station);
     if (station?.autobahnMode) {
         refreshAutobahnStationPrices(id).catch((error) => {
@@ -2292,20 +2565,23 @@ function renderDetail(station) {
                         <span class="detail-label">Adresse</span>
                         <span class="detail-value">${escapeHtml(chargingAddress(station) || '-')}</span>
                     </div>
-                    <div class="detail-cell detail-status-cell">
-                        <span class="detail-label">Status</span>
-                        <span class="detail-value">${escapeHtml(station.status || 'unbekannt')}</span>
-                    </div>
-                    <div class="detail-cell detail-address-cell full">
-                        <span class="detail-label">Stecker</span>
-                        <span class="detail-value">${escapeHtml(chargingConnectorText(station))}</span>
-                    </div>
-                    <div class="detail-cell detail-address-cell full">
-                        <span class="detail-label">Bezahlung</span>
-                        <span class="detail-value">${escapeHtml((station.paymentSystems || []).join(', ') || '-')}</span>
+                    <div class="charging-detail-meta-row">
+                        <span>
+                            <small>Betrieb</small>
+                            <strong>${escapeHtml(station.status || 'unbekannt')}</strong>
+                        </span>
+                        <span>
+                            <small>Stecker</small>
+                            <strong>${escapeHtml(chargingConnectorText(station))}</strong>
+                        </span>
+                        <span>
+                            <small>Bezahlung</small>
+                            <strong>${escapeHtml((station.paymentSystems || []).join(', ') || '-')}</strong>
+                        </span>
                     </div>
                 </div>
                 <nav class="detail-footer-nav" aria-label="Detailaktionen">
+                    <button class="${isChargingFavorite(station.stationId || station.id) ? 'active' : ''}" type="button" id="chargingFavoriteButton">Favorit</button>
                     <button type="button" id="showMapButton">Karte</button>
                     <details class="navigation-picker">
                         <summary>Navigation</summary>
@@ -2321,6 +2597,7 @@ function renderDetail(station) {
         `;
         document.querySelector('#detailBackButton')?.addEventListener('click', () => renderDetail(null));
         document.querySelector('#detailCloseButton')?.addEventListener('click', () => renderDetail(null));
+        document.querySelector('#chargingFavoriteButton')?.addEventListener('click', () => toggleChargingFavorite(station));
         document.querySelector('#showMapButton')?.addEventListener('click', () => openDetailStationMap(station));
         return;
     }
@@ -2539,7 +2816,101 @@ async function reverseGeocode(lat, lng) {
 function normalSearchCacheKey(params) {
     const stableParams = new URLSearchParams(params);
     stableParams.delete('sort');
+    stableParams.delete('q');
     return stableParams.toString();
+}
+
+function normalSearchLimitValue() {
+    return isElectricMode() ? String(els.limit?.value || '50') : COMBUSTION_NORMAL_SEARCH_LIMIT;
+}
+
+function isNormalSearchStation(station) {
+    return Boolean(station)
+        && !station.cityOverview
+        && !station.cityMode
+        && !station.autobahnMode
+        && !station.chargingMode
+        && !station.routeMode
+        && (station.tankerkoenig_id || station.id || station.stationId || station.lat);
+}
+
+function saveNormalSearchCache(cacheKey) {
+    const stations = Array.isArray(state.stations)
+        ? state.stations.filter(isNormalSearchStation)
+        : [];
+    if (!cacheKey || !stations.length) return;
+    try {
+        localStorage.setItem('tankprofi_normal_search_cache', JSON.stringify({
+            cacheKey,
+            loadedAt: state.normalSearchLastLoadedAt || Date.now(),
+            meta: state.normalSearchLastMeta || null,
+            selectedLocation: state.selectedLocation || null,
+            searchInputValue: els.searchInput?.value || '',
+            stations: stations.slice(0, 120),
+        }));
+    } catch {
+        localStorage.removeItem('tankprofi_normal_search_cache');
+    }
+}
+
+function loadNormalSearchCache(cacheKey) {
+    try {
+        const cache = JSON.parse(localStorage.getItem('tankprofi_normal_search_cache') || 'null');
+        if (!cache || cache.cacheKey !== cacheKey || !Array.isArray(cache.stations) || !cache.stations.length) return null;
+        const loadedAt = Number(cache.loadedAt || 0);
+        if (!loadedAt || Date.now() - loadedAt > NORMAL_SEARCH_STORED_CACHE_MS) return null;
+        return cache;
+    } catch {
+        localStorage.removeItem('tankprofi_normal_search_cache');
+        return null;
+    }
+}
+
+function renderStoredNormalSearchCache(cache) {
+    state.stations = cache.stations.map((station) => ({ ...station }));
+    state.selectedLocation = cache.selectedLocation ? { ...cache.selectedLocation } : state.selectedLocation;
+    state.normalSearchLastKey = cache.cacheKey;
+    state.normalSearchLastLoadedAt = Number(cache.loadedAt || Date.now());
+    state.normalSearchLastMeta = cache.meta ? { ...cache.meta, fallback: true } : { fallback: true };
+    if (cache.searchInputValue && els.searchInput) els.searchInput.value = cache.searchInputValue;
+    renderCachedNormalSearch();
+}
+
+function renderNormalSearchLoading(message = 'Standortliste wird geladen ...') {
+    els.resultCount.textContent = 'Standortliste';
+    els.resultMeta.textContent = message;
+    els.results.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
+    renderDetail(null);
+}
+
+function setNormalResultSummary(countText, metaText = '') {
+    const compactMeta = String(metaText || '').trim();
+    els.resultCount.textContent = compactMeta ? `${countText} · ${compactMeta}` : countText;
+    els.resultMeta.textContent = '';
+}
+
+function startupSearchRecoveryHtml(error, { retrying = false, final = false } = {}) {
+    const errorText = String(error?.message || error || 'Tankstellenabfrage nicht erreichbar.');
+    return `
+        <div class="empty-state startup-recovery-state">
+            <strong>Standort ist ermittelt.</strong>
+            <span>Die Tankstellenliste konnte noch nicht geladen werden.</span>
+            <ul class="startup-recovery-list">
+                <li>GPS-Koordinaten wurden uebernommen.</li>
+                <li>Die automatische Suche hat geantwortet: ${escapeHtml(errorText)}</li>
+                <li>${retrying ? 'Der zweite Ladeversuch laeuft jetzt.' : final ? 'Automatik beendet. Standort oder Suche erneut antippen.' : 'Die App wartet auf den naechsten Versuch.'}</li>
+            </ul>
+        </div>
+    `;
+}
+
+function finishStartupSearchError(error) {
+    setStatus('Bereit');
+    els.resultCount.textContent = 'Standort gefunden';
+    els.resultMeta.textContent = 'Tankstellen konnten noch nicht geladen werden.';
+    els.results.innerHTML = startupSearchRecoveryHtml(error, { final: true });
+    renderDetail(null);
+    hideSplashScreen();
 }
 
 function renderCachedNormalSearch() {
@@ -2572,12 +2943,28 @@ function captureNormalSearchBeforeDrive() {
     };
 }
 
-function restoreNormalSearchAfterDrive() {
-    const snapshot = state.normalSearchSnapshotBeforeDrive;
-    if (!snapshot?.stations?.length) {
-        restoreStoredStartState();
-        return;
-    }
+function normalSearchSnapshot() {
+    if (state.listMode !== 'results' || !state.stations.length) return null;
+    const stations = state.stations.filter(isNormalSearchStation);
+    if (!stations.length) return null;
+    return {
+        stations: stations.map((station) => ({ ...station })),
+        selectedLocation: state.selectedLocation ? { ...state.selectedLocation } : null,
+        searchInputValue: els.searchInput?.value || '',
+        selectedId: state.selectedId,
+        normalSearchLastKey: state.normalSearchLastKey,
+        normalSearchLastLoadedAt: state.normalSearchLastLoadedAt,
+        normalSearchLastMeta: state.normalSearchLastMeta ? { ...state.normalSearchLastMeta } : null,
+    };
+}
+
+function captureNormalSearchBeforeSection() {
+    const snapshot = normalSearchSnapshot();
+    if (snapshot) state.normalSearchSnapshotBeforeSection = snapshot;
+}
+
+function restoreNormalSearchSnapshot(snapshot) {
+    if (!snapshot?.stations?.length) return false;
     state.stations = snapshot.stations.map((station) => ({ ...station }));
     state.selectedLocation = snapshot.selectedLocation ? { ...snapshot.selectedLocation } : null;
     state.selectedId = snapshot.selectedId || null;
@@ -2586,6 +2973,20 @@ function restoreNormalSearchAfterDrive() {
     state.normalSearchLastMeta = snapshot.normalSearchLastMeta ? { ...snapshot.normalSearchLastMeta } : null;
     if (els.searchInput) els.searchInput.value = snapshot.searchInputValue || state.selectedLocation?.label || '';
     renderCachedNormalSearch();
+    return true;
+}
+
+function restoreNormalSearchAfterSection() {
+    return restoreNormalSearchSnapshot(state.normalSearchSnapshotBeforeSection);
+}
+
+function restoreNormalSearchAfterDrive() {
+    const snapshot = state.normalSearchSnapshotBeforeDrive;
+    if (!snapshot?.stations?.length) {
+        restoreStoredStartState();
+        return;
+    }
+    restoreNormalSearchSnapshot(snapshot);
 
     const stale = !state.normalSearchLastLoadedAt || Date.now() - state.normalSearchLastLoadedAt >= NORMAL_SEARCH_REFRESH_MS;
     if (stale && state.selectedLocation) {
@@ -2594,12 +2995,16 @@ function restoreNormalSearchAfterDrive() {
 }
 
 async function loadStations(options = {}) {
+    const startedAt = Date.now();
+    if (!options.startup) clearStartupSearchRetryTimer();
+    if (options.startup) setStartupInteractionLock(true);
     if (!state.selectedLocation) {
         await chooseFirstSuggestion();
         if (!state.selectedLocation) {
             els.resultCount.textContent = 'Keine Suche';
             els.resultMeta.textContent = 'Adresse eingeben oder Standort verwenden.';
             els.results.innerHTML = '<div class="empty-state">Adresse eingeben oder Standort verwenden.</div>';
+            if (options.startup) setStartupInteractionLock(false);
             hideSplashScreen();
             return;
         }
@@ -2610,7 +3015,7 @@ async function loadStations(options = {}) {
         lng: state.selectedLocation.lng,
         radius: els.radius.value,
         fuel: els.fuel.value,
-        limit: els.limit.value,
+        limit: normalSearchLimitValue(),
         open: els.openOnly.checked ? '1' : '0',
         priced: els.pricedOnly.checked ? '1' : '0',
         sort: document.querySelector('.sort-toggle-button.active')?.dataset.sort || 'price',
@@ -2624,25 +3029,45 @@ async function loadStations(options = {}) {
         && state.listMode === 'results';
     if (cacheFresh) {
         renderCachedNormalSearch();
+        if (options.startup) setStartupInteractionLock(false);
+        return;
+    }
+    const storedCache = options.startup ? loadNormalSearchCache(cacheKey) : null;
+    if (storedCache) {
+        renderStoredNormalSearchCache(storedCache);
+        refreshNormalSearchInBackground().catch(() => null);
+        setStartupInteractionLock(false);
         return;
     }
 
+    const keepVisibleStations = !options.startup
+        && state.listMode === 'results'
+        && Array.isArray(state.stations)
+        && state.stations.length > 0;
     const requestId = state.stationRequestId + 1;
     state.stationRequestId = requestId;
     setStatus('Laedt');
     els.resultCount.textContent = 'Suche läuft';
-    els.resultMeta.textContent = 'Tankstellen werden geladen ...';
-    els.results.innerHTML = '<div class="empty-state">Standort wird abgefragt und Tankstellen werden geladen ...</div>';
+    els.resultMeta.textContent = '';
+    els.results.innerHTML = '<div class="empty-state">Tankstellen werden geladen ...</div>';
+    if (keepVisibleStations) {
+        renderResults();
+        els.resultMeta.textContent = 'Aktualisierung laeuft ...';
+    }
 
     try {
-        const data = await fetchJsonWithRetry(`/api/search.php?${params.toString()}`, { timeoutMs: 24000 }, {
+        const data = await fetchJsonWithRetry(`/api/search.php?${params.toString()}`, { timeoutMs: options.startup ? STARTUP_SEARCH_TIMEOUT_MS : 24000 }, {
             attempts: 2,
-            retryTimeoutMs: 42000,
+            retryTimeoutMs: options.startup ? STARTUP_SEARCH_RETRY_TIMEOUT_MS : 42000,
+            delayMs: options.startup ? 900 : 650,
             onRetry: () => {
                 if (requestId !== state.stationRequestId) return;
                 els.resultCount.textContent = 'Suche läuft';
-                els.resultMeta.textContent = 'Antwort dauert laenger - zweiter Versuch ...';
-                els.results.innerHTML = '<div class="empty-state">Tankstellen werden erneut abgefragt ...</div>';
+                els.resultCount.textContent = options.startup ? 'Standort gefunden' : 'Suche laeuft';
+                els.resultMeta.textContent = '';
+                els.results.innerHTML = options.startup
+                    ? '<div class="empty-state">Zweiter Ladeversuch laeuft ...</div>'
+                    : '<div class="empty-state">Tankstellen werden erneut abgefragt ...</div>';
             },
         });
         if (requestId !== state.stationRequestId) return;
@@ -2654,6 +3079,7 @@ async function loadStations(options = {}) {
         state.normalSearchLastKey = cacheKey;
         state.normalSearchLastLoadedAt = Date.now();
         state.normalSearchLastMeta = { fallback: data.fallback === true || data.stored === true };
+        saveNormalSearchCache(cacheKey);
         sortStations();
         els.resultCount.textContent = `${state.stations.length} Treffer`;
         els.resultMeta.textContent = data.fallback
@@ -2664,9 +3090,25 @@ async function loadStations(options = {}) {
         renderDetail(null);
         setView('list');
         setStatus('Live');
+        if (options.startup) setStartupInteractionLock(false);
         hideSplashScreen();
     } catch (error) {
         if (requestId !== state.stationRequestId) return;
+        if (options.startup) {
+            const remainingMs = STARTUP_LOCATION_MESSAGE_MIN_MS - (Date.now() - startedAt);
+            if (remainingMs > 0) {
+                await new Promise((resolve) => window.setTimeout(resolve, remainingMs));
+            }
+            finishStartupSearchError(error);
+            setStartupInteractionLock(false);
+            return;
+        }
+        if (keepVisibleStations) {
+            setStatus('Cache');
+            els.resultMeta.textContent = `Aktualisierung nicht erreichbar - ${error.message}`;
+            hideSplashScreen();
+            return;
+        }
         setStatus('Fehler');
         els.resultCount.textContent = 'Keine Daten';
         els.resultMeta.textContent = error.message;
@@ -2683,7 +3125,7 @@ async function refreshNormalSearchInBackground() {
         lng: state.selectedLocation.lng,
         radius: els.radius.value,
         fuel: els.fuel.value,
-        limit: els.limit.value,
+        limit: normalSearchLimitValue(),
         open: els.openOnly.checked ? '1' : '0',
         priced: els.pricedOnly.checked ? '1' : '0',
         sort: document.querySelector('.sort-toggle-button.active')?.dataset.sort || 'price',
@@ -2703,6 +3145,7 @@ async function refreshNormalSearchInBackground() {
         state.normalSearchLastKey = cacheKey;
         state.normalSearchLastLoadedAt = Date.now();
         state.normalSearchLastMeta = { fallback: data.fallback === true || data.stored === true };
+        saveNormalSearchCache(cacheKey);
         sortStations();
         els.resultCount.textContent = `${state.stations.length} Treffer`;
         els.resultMeta.textContent = data.fallback
@@ -2726,6 +3169,7 @@ function prepareNormalSearch(clearLocation = false) {
     if (clearLocation) state.selectedLocation = null;
     setCityMode(false);
     setDirectoryMode(false);
+    els.appShell.classList.remove('city-mode', 'directory-mode', 'favorites-mode', 'charging-mode');
     renderDetail(null);
     if (state.view !== 'list') setView('list');
     updateBottomNav();
@@ -2746,6 +3190,7 @@ function prepareChargingSearch(clearLocation = false) {
     if (clearLocation) state.selectedLocation = null;
     setCityMode(false);
     setDirectoryMode(false);
+    els.appShell.classList.remove('city-mode', 'directory-mode', 'favorites-mode');
     renderDetail(null);
     if (state.view !== 'list') setView('list');
     updateBottomNav();
@@ -2767,6 +3212,10 @@ function runCurrentLocationSearch(options = {}) {
     } else {
         prepareNormalSearch(true);
     }
+    setStatus('Laedt');
+    els.resultCount.textContent = 'Standort wird ermittelt';
+    els.resultMeta.textContent = '';
+    els.results.innerHTML = '<div class="empty-state">Standort wird abgefragt ...</div>';
     useCurrentLocation(options);
 }
 
@@ -3075,9 +3524,6 @@ function renderChargingCityRankings(data = null) {
         <section class="city-dashboard charging-city-dashboard">
             <div class="city-toolbar">
                 <strong>Elektro-Ladeanlagen Grossstaedte</strong>
-                <div class="city-view-tabs">
-                    <button type="button" class="active">Liste</button>
-                </div>
             </div>
             <div class="city-table charging-city-table" role="table" aria-label="Ladeanlagen der groessten Staedte">
                 <div class="city-row city-head" role="row">
@@ -3147,10 +3593,6 @@ function renderCityRankings() {
         <section class="city-dashboard">
             <div class="city-toolbar">
                 <strong>Durchschnittspreise Großstädte</strong>
-                <div class="city-view-tabs">
-                    <button type="button" data-city-view="list">Liste</button>
-                    <button type="button" data-city-view="map">Karte</button>
-                </div>
                 <div class="city-fuel-tabs">
                     <button type="button" data-city-fuel="diesel"><span>Diesel</span><strong>${averageMoney(totals.avgDiesel)}</strong></button>
                     <button type="button" data-city-fuel="e5"><span>E5</span><strong>${averageMoney(totals.avgE5)}</strong></button>
@@ -3178,18 +3620,6 @@ function renderCityRankings() {
                 if (state.cityMapMode === 'overview') renderCityOverviewMap();
                 else loadCityStations(state.selectedCityId);
             }
-        });
-    });
-    els.results.querySelectorAll('[data-city-view]').forEach((button) => {
-        button.classList.toggle('active', button.dataset.cityView === 'list');
-        button.addEventListener('click', () => {
-            if (button.dataset.cityView === 'map') {
-                openCityOverviewMap();
-                return;
-            }
-            state.cityMapMode = 'overview';
-            setView('list');
-            renderResults();
         });
     });
     els.results.querySelectorAll('[data-city-id]').forEach((button) => {
@@ -3387,7 +3817,7 @@ function renderCityStationList() {
     });
     els.results.querySelectorAll('[data-city-station-view]').forEach((button) => {
         button.addEventListener('click', () => {
-            if (button.dataset.cityStationView === 'map') openCityMap(state.selectedCityId);
+            if (button.dataset.cityStationView === 'map') loadCityStations(state.selectedCityId, 'map');
         });
     });
     els.results.querySelectorAll('[data-city-fuel]').forEach((button) => {
@@ -3449,8 +3879,13 @@ async function loadCityStations(cityId, target = 'map') {
     els.resultMeta.textContent = city
         ? `${fuelLabel(els.fuel.value)} Ø ${money(city[keys.avg])} · ${city[keys.valid] || 0} Tankstellen · Stand ${formatDateTime(state.citySnapshot.completedAt)}`
         : `Stand ${formatDateTime(state.citySnapshot.completedAt)}`;
-    if (target === 'list') renderCityStationList();
-    else renderMarkers();
+    if (target === 'list') {
+        renderCityStationList();
+    } else {
+        state.cityMapMode = 'stations';
+        setView('map');
+        renderMarkers();
+    }
     setStatus('Aktuell');
 }
 
@@ -3531,19 +3966,42 @@ function isDrivingRestMode(samples = state.drivingSamples) {
 function estimateDrivingSpeedKmh(samples = state.drivingSamples) {
     const usable = samples
         .filter((sample) => Number.isFinite(sample.lat) && Number.isFinite(sample.lng) && Number.isFinite(sample.timestamp))
-        .slice(-4);
+        .slice(-6);
     const last = usable.at(-1);
     if (!last) return null;
-    if (Number.isFinite(last.speedKmh) && last.speedKmh >= 0) return Math.max(0, last.speedKmh);
-    if (usable.length < 2) return 0;
-    const first = usable[0];
-    const distance = routeDistanceKm(first.lat, first.lng, last.lat, last.lng);
-    const elapsedHours = Math.max(0, (last.timestamp - first.timestamp) / 3600000);
-    if (!Number.isFinite(distance) || elapsedHours <= 0) return 0;
-    if (isDrivingRestMode(usable)) return 0;
-    const speedKmh = distance / elapsedHours;
-    if (distance < 0.015 || Number(last.accuracy) > 100) return 0;
-    return Math.max(0, speedKmh);
+    if (Number(last.accuracy) > 100) return Number.isFinite(state.drivingSpeedKmh) ? state.drivingSpeedKmh : 0;
+    if (Number.isFinite(last.speedKmh) && last.speedKmh < 2) return 0;
+
+    const recent = usable.filter((sample) => last.timestamp - sample.timestamp <= 15000);
+    const movedKm = recent.length >= 2
+        ? routeDistanceKm(recent[0].lat, recent[0].lng, last.lat, last.lng)
+        : 0;
+    const movedMs = recent.length >= 2 ? last.timestamp - recent[0].timestamp : 0;
+    const isResting = !Number.isFinite(movedKm) || (movedMs >= 4500 && movedKm < 0.018 && Number(last.speedKmh || 0) < 4);
+    if (isResting) return 0;
+
+    const candidates = [];
+    recent.forEach((sample) => {
+        if (Number.isFinite(sample.speedKmh) && sample.speedKmh >= 0 && Number(sample.accuracy) <= 80) {
+            candidates.push(Math.max(0, sample.speedKmh));
+        }
+    });
+    for (let index = 1; index < recent.length; index += 1) {
+        const previous = recent[index - 1];
+        const current = recent[index];
+        const elapsedHours = Math.max(0, (current.timestamp - previous.timestamp) / 3600000);
+        const segmentKm = routeDistanceKm(previous.lat, previous.lng, current.lat, current.lng);
+        if (!Number.isFinite(segmentKm) || elapsedHours <= 0 || Number(current.accuracy) > 80) continue;
+        const segmentSpeed = segmentKm / elapsedHours;
+        if (segmentKm >= 0.008 && segmentSpeed >= 0 && segmentSpeed <= 180) candidates.push(segmentSpeed);
+    }
+    if (!candidates.length) return 0;
+    candidates.sort((a, b) => a - b);
+    const median = candidates[Math.floor(candidates.length / 2)];
+    const previousSpeed = Number(state.drivingSpeedKmh);
+    if (!Number.isFinite(previousSpeed)) return Math.max(0, median);
+    if (median < 3) return 0;
+    return Math.max(0, (previousSpeed * 0.6) + (median * 0.4));
 }
 
 function visualDrivingBearing(samples = state.drivingSamples) {
@@ -3577,10 +4035,8 @@ function detectDrivingBearing(samples = state.drivingSamples) {
     state.drivingAccuracy = last.accuracy;
     const hasRecentBearing = Date.now() - Number(state.drivingLastBearingAt || 0) <= DRIVE_BEARING_MEMORY_MS;
     if (speedKmh < 10 || Number(last.accuracy) > 100 || distance < 0.03) {
-        state.drivingSpeedKmh = 0;
         return hasRecentBearing ? state.drivingLastBearing : null;
     }
-    state.drivingSpeedKmh = speedKmh;
     const bearing = calculateBearing(first, last);
     if (Number.isFinite(bearing)) {
         state.drivingLastBearing = bearing;
@@ -3602,10 +4058,8 @@ function detectDrivingDirection(samples = state.drivingSamples) {
     const speedKmh = Number.isFinite(last.speedKmh) && last.speedKmh > 0 ? last.speedKmh : calculatedSpeed;
     state.drivingAccuracy = last.accuracy;
     if (speedKmh < 20 || Number(last.accuracy) > 100 || distance < 0.08) {
-        state.drivingSpeedKmh = 0;
         return null;
     }
-    state.drivingSpeedKmh = speedKmh;
 
     const bearing = detectDrivingBearing(samples);
     if (!Number.isFinite(bearing)) return null;
@@ -4375,7 +4829,6 @@ function detectDrivingDirectionOnRoute(samples = state.drivingSamples) {
     const last = state.drivingSamples.at(-1);
     if (last) {
         const speedKmh = Number.isFinite(last.speedKmh) && last.speedKmh > 0 ? last.speedKmh : state.drivingSpeedKmh;
-        state.drivingSpeedKmh = speedKmh;
         state.drivingAccuracy = last.accuracy;
         if (Number(last.accuracy) > 100 || !Number.isFinite(speedKmh) || speedKmh < 20) return state.drivingStableDirection;
     }
@@ -5187,6 +5640,11 @@ function drivingTankpointCardHtml(station, rank, thresholds) {
         const isRouteCharging = station.drivingContext === 'charging-route';
         const directionHtml = `<span class="driving-direction">${drivingTankpointDirectionHtml(station, rank)}</span>`;
         const statusClass = /betrieb/i.test(station.status || '') ? 'live' : 'missing';
+        const chargingName = station.name || station.displayName || station.operatorName || 'Ladeanlage';
+        const chargingDescription = [
+            station.operatorName && station.operatorName !== chargingName ? station.operatorName : '',
+            chargingAddress(station) || station.city || chargingConnectorText(station),
+        ].filter(Boolean).join(' - ');
         return `
             <article class="driving-row driving-card driving-card-charging" tabindex="0" data-driving-station-id="${escapeHtml(station.tankerkoenig_id || station.stationId || station.id)}">
                 <span class="driving-main">
@@ -5195,8 +5653,8 @@ function drivingTankpointCardHtml(station, rank, thresholds) {
                         <span class="driving-route-badge">${escapeHtml(mode)}</span>
                     </span>
                     <span class="driving-data-status ${statusClass}">${escapeHtml(station.status || 'Status offen')}</span>
-                    <small class="driving-charging-name">${escapeHtml(station.name || station.operatorName || 'Ladeanlage')}</small>
-                    <small class="driving-charging-address">${escapeHtml(chargingAddress(station) || chargingConnectorText(station))}</small>
+                    <small class="driving-charging-name">${escapeHtml(chargingName)}</small>
+                    <small class="driving-charging-address">${escapeHtml(chargingDescription || 'Beschreibung offen')}</small>
                 </span>
                 ${directionHtml}
                 <span class="driving-distance">
@@ -5374,6 +5832,21 @@ function drivingCalibrationOverlayHtml() {
     `;
 }
 
+function drivingEmptyStateMessage() {
+    const status = String(state.drivingStatus || '');
+    if (state.drivingUpdateInProgress || ['starting', 'waiting', 'direction-pending', 'loading-prices'].includes(status)) {
+        if (status === 'loading-prices') return 'Aktuelle Preise und Tankpunkte werden geladen ...';
+        if (status === 'direction-pending') return 'Fahrtrichtung wird ermittelt. Tankpunkte werden gleich gefiltert ...';
+        return 'Standort und Tankpunkte werden gesucht ...';
+    }
+    if (state.drivingMessage && !/keine .*gefunden/i.test(state.drivingMessage)) {
+        return state.drivingMessage;
+    }
+    return isLocalDrivingContext()
+        ? 'Keine Tankstellen im aktuellen Suchbereich gefunden.'
+        : 'Keine Tankpunkte in Fahrtrichtung gefunden.';
+}
+
 function renderDrivingModeList() {
     setCityMode(false);
     setDirectoryMode(false);
@@ -5411,18 +5884,15 @@ function renderDrivingModeList() {
     const currentPriceCount = isLocalDrivingContext()
         ? visibleStations.length
         : visibleStations.filter((station) => hasCurrentDrivingPrice(station, els.fuel.value, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS)).length;
-    const driveTitle = state.drivingVehicleMode === 'electric'
-        ? 'Drive Elektro'
-        : state.drivingContext === 'rural'
-        ? 'Drive Land'
-        : `Drive ${state.drivingContext === 'city' ? 'Stadt' : routeLabel()}`;
-    const mapListButton = state.view === 'map'
-        ? '<button class="drive-header-list-button" type="button" data-driving-header-list>Liste</button>'
-        : '';
+    const driveTitle = 'Drive Mode';
+    const isDriveMapView = state.view === 'map' || els.appShell.classList.contains('view-map');
+    const mapListButton = isDriveMapView
+        ? '<button class="drive-header-list-button" type="button" data-driving-header-view="list">Liste</button>'
+        : '<button class="drive-header-list-button" type="button" data-driving-header-view="map">Karte</button>';
     els.resultCount.innerHTML = `
-        ${mapListButton}
         <span class="drive-title-text">${escapeHtml(driveTitle)}</span>
         <span class="drive-speed-chip" aria-label="Geschwindigkeit">${escapeHtml(speed)}</span>
+        ${mapListButton}
     `;
     updateSectionHeaderTone();
     const priceMeta = state.drivingVehicleMode === 'electric'
@@ -5430,14 +5900,13 @@ function renderDrivingModeList() {
         : isLocalDrivingContext()
         ? drivingModePriceStandText(state.stations)
         : `${currentPriceCount}/${visibleStations.length} aktuelle Preise`;
-    els.resultMeta.textContent = `${accuracy} · ${axisPosition} · ${priceMeta}`;
+    els.resultMeta.textContent = '';
 
     els.results.innerHTML = `
         <section class="driving-dashboard">
             ${drivingRouteInfoOverlayHtml()}
             ${drivingCalibrationOverlayHtml()}
             <div class="driving-control-drawer">
-                ${drivingViewToggleHtml()}
                 ${drivingDestinationFormHtml()}
                 ${drivingRefreshVisualizationHtml(visibleStations)}
             </div>
@@ -5446,21 +5915,20 @@ function renderDrivingModeList() {
             <div class="city-station-list">
                 ${visibleStations.length
                     ? visibleStations.map((station, index) => drivingTankpointCardHtml(station, index + 1, thresholds)).join('')
-                    : `<div class="empty-state">${state.drivingStatus === 'loading-prices' ? 'Aktuelle Preise werden geladen ...' : 'Keine Tankpunkte in Fahrtrichtung gefunden.'}</div>`}
+                    : `<div class="empty-state">${escapeHtml(drivingEmptyStateMessage())}</div>`}
             </div>
         </section>
     `;
     syncDrivingControlsVisibility();
 
-    els.results.querySelectorAll('[data-driving-view]').forEach((button) => {
-        button.addEventListener('click', () => {
-            if (button.dataset.drivingView === 'map') {
-                openDrivingDestinationMap();
-                return;
-            }
-            setView('list');
-            renderDrivingModeList();
-        });
+    els.resultCount.querySelector('[data-driving-header-view]')?.addEventListener('click', (event) => {
+        const targetView = event.currentTarget.dataset.drivingHeaderView;
+        if (targetView === 'map') {
+            openDrivingDestinationMap();
+            return;
+        }
+        setView('list');
+        renderDrivingModeList();
     });
     els.results.querySelectorAll('[data-driving-route-info-dismiss]').forEach((element) => {
         element.addEventListener('click', (event) => {
@@ -5606,6 +6074,7 @@ function updateDrivingMapPositionOnly() {
     }
     renderUserLocationMarker();
     focusDrivingMapByHeading(drivingMapStationsToShow(position || state.selectedLocation), position || state.selectedLocation);
+    updateDrivingMapNearestBox(drivingMapStationsToShow(position || state.selectedLocation));
 }
 
 async function applyDrivingTestPosition(formData) {
@@ -5693,7 +6162,7 @@ async function updateDrivingMode(options = {}) {
     }
 
     state.selectedLocation = { label: 'Aktuelle Position', lat: position.lat, lng: position.lng };
-    if (state.drivingVehicleMode === 'electric' || state.vehicleMode === 'electric') {
+    if (state.drivingVehicleMode === 'electric') {
         await updateElectricDrivingMode(position);
         return;
     }
@@ -5834,7 +6303,11 @@ function rememberDrivingPosition(position, { triggerInitialUpdate = true } = {})
     state.drivingSamples = state.drivingSamples.slice(-6);
     state.drivingAccuracy = sample.accuracy;
     const speedKmh = estimateDrivingSpeedKmh();
-    if (Number.isFinite(speedKmh)) state.drivingSpeedKmh = speedKmh;
+    if (Number.isFinite(speedKmh)) {
+        state.drivingSpeedKmh = speedKmh;
+        state.drivingSpeedUpdatedAt = Date.now();
+        updateDrivingMapSpeed();
+    }
     if (triggerInitialUpdate && previousCount === 0 && !isDrivingDestinationInputActive()) evaluateDrivingModeList();
     return sample;
 }
@@ -5954,16 +6427,21 @@ function stopDrivingCompass() {
     state.drivingCompassRenderAt = null;
 }
 
-async function startDrivingMode(routeId = 'ALL') {
+async function startDrivingMode(routeId = 'ALL', options = {}) {
     captureNormalSearchBeforeDrive();
     requestPortraitOrientationLock();
+    const requestedVehicleMode = options.vehicleMode || state.vehicleMode || DEFAULT_VEHICLE_MODE;
     state.drivingControlsVisibleUntil = Date.now() + DRIVE_CONTROL_REVEAL_MS;
     state.listMode = 'driving';
-    state.drivingVehicleMode = state.vehicleMode || DEFAULT_VEHICLE_MODE;
+    state.drivingVehicleMode = requestedVehicleMode === 'electric' ? 'electric' : 'combustion';
     state.drivingRouteId = routeId;
     state.drivingDetectedRouteId = null;
     state.drivingActive = true;
+    state.stations = [];
     state.drivingSamples = [];
+    state.drivingSpeedKmh = null;
+    state.drivingSpeedUpdatedAt = null;
+    state.drivingAccuracy = null;
     state.drivingRouteGeometry = [];
     resetDrivingRoutePreviewCache();
     state.drivingStableDirection = drivingTemplateDirection();
@@ -6039,6 +6517,7 @@ function stopDrivingMode(restore = true) {
     state.drivingLastBearing = null;
     state.drivingLastBearingAt = null;
     state.drivingSpeedKmh = null;
+    state.drivingSpeedUpdatedAt = null;
     state.drivingAccuracy = null;
     state.drivingNearestRouteDistanceKm = null;
     state.drivingCurrentRoutePosition = null;
@@ -6361,13 +6840,14 @@ function chargingRowHtml(station, index) {
 }
 
 function chargingOperatorHtml(operator, index) {
+    const operatorName = operator.operatorName || '';
     return `
-        <div class="charging-operator-row">
+        <button class="charging-operator-row" type="button" data-charging-operator="${escapeHtml(operatorName)}">
             <span class="rank ${index < 3 ? 'cheap' : 'mid'}">${index + 1}</span>
             <strong>${escapeHtml(operator.operatorName || 'Betreiber unbekannt')}</strong>
             <span>${Number(operator.chargingPointCount || 0).toLocaleString('de-DE')} Ladepunkte</span>
             <small>${Number(operator.stationCount || 0).toLocaleString('de-DE')} Orte · ${Number(operator.fastChargingCount || 0).toLocaleString('de-DE')} Schnell · ${Number(operator.cityCount || 0).toLocaleString('de-DE')} Städte</small>
-        </div>
+        </button>
     `;
 }
 
@@ -6390,25 +6870,69 @@ function chargingOperatorsPanelHtml() {
                 <button type="button" data-charging-operators>Aktualisieren</button>
             </div>
             <div class="charging-operator-list">
-                ${state.chargingOperators.slice(0, 12).map(chargingOperatorHtml).join('')}
+                ${state.chargingOperators.map(chargingOperatorHtml).join('')}
             </div>
+            ${state.chargingOperators.length >= state.chargingOperatorsLimit && state.chargingOperatorsLimit < 200
+                ? '<button class="charging-distribution-button" type="button" data-charging-operators-more>Weitere Betreiber laden</button>'
+                : ''}
         </section>
     `;
 }
 
 async function loadChargingOperators(force = false) {
-    const loadKey = 'operators:40';
+    const limit = Math.min(Math.max(Number(state.chargingOperatorsLimit || 40), 40), 200);
+    const loadKey = `operators:${limit}`;
     if (!force && state.chargingOperators.length) return;
     if (state.chargingOperatorsLoadKey === loadKey) return;
     state.chargingOperatorsLoadKey = loadKey;
     try {
-        const data = await fetchJson('/api/charging/operators.php?limit=40', { timeoutMs: 45000, progress: false });
+        const data = await fetchJson(`/api/charging/operators.php?limit=${limit}`, { timeoutMs: 45000, progress: false });
         state.chargingOperators = data.operators || [];
         if (state.listMode === 'charging' && state.view === 'list') renderChargingList();
     } catch (error) {
         if (state.listMode === 'charging') els.resultMeta.textContent = error.message || 'Betreiber konnten nicht geladen werden.';
     } finally {
         if (state.chargingOperatorsLoadKey === loadKey) state.chargingOperatorsLoadKey = null;
+    }
+}
+
+function loadMoreChargingOperators() {
+    state.chargingOperatorsLimit = Math.min(Number(state.chargingOperatorsLimit || 40) + 40, 200);
+    loadChargingOperators(true);
+}
+
+async function loadChargingDistributionStations(requestId = beginNavigation()) {
+    const data = await fetchJson('/api/charging/stations.php?distribution=1&limit=30000', { timeoutMs: 45000 });
+    if (!isCurrentNavigation(requestId, 'charging')) return null;
+    state.chargingStations = (data.stations || []).map(normalizeChargingStation);
+    state.stations = chargingFilteredStations();
+    return data;
+}
+
+async function applyChargingOperatorFilter(operatorName) {
+    const operator = String(operatorName || '').trim();
+    if (!operator) return;
+    const requestId = beginNavigation();
+    if (!isElectricMode()) setVehicleMode('electric');
+    state.listMode = 'charging';
+    state.view = 'list';
+    state.cityMapMode = 'overview';
+    state.chargingCityContext = null;
+    state.chargingFilters = { operator, connector: 'all', minPower: 'all' };
+    renderDetail(null);
+    updateBottomNav();
+    updateSectionHeaderTone();
+    els.resultCount.textContent = operator;
+    els.resultMeta.textContent = 'Alle Betreiberstandorte werden geladen ...';
+    els.results.innerHTML = '<div class="empty-state">Standorte werden deutschlandweit geladen.</div>';
+    try {
+        await loadChargingDistributionStations(requestId);
+        if (!isCurrentNavigation(requestId, 'charging')) return;
+        renderChargingList();
+        renderMarkers();
+    } catch (error) {
+        if (!isCurrentNavigation(requestId, 'charging')) return;
+        els.resultMeta.textContent = error.message || 'Betreiberstandorte konnten nicht geladen werden.';
     }
 }
 
@@ -6450,6 +6974,10 @@ function renderChargingList() {
         openChargingDistributionMap(beginNavigation());
     });
     els.results.querySelector('[data-charging-operators]')?.addEventListener('click', () => loadChargingOperators(true));
+    els.results.querySelector('[data-charging-operators-more]')?.addEventListener('click', () => loadMoreChargingOperators());
+    els.results.querySelectorAll('[data-charging-operator]').forEach((button) => {
+        button.addEventListener('click', () => applyChargingOperatorFilter(button.dataset.chargingOperator));
+    });
     els.results.querySelectorAll('[data-charging-filter]').forEach((select) => {
         const applyFilter = () => {
             const key = select.dataset.chargingFilter;
@@ -6496,7 +7024,6 @@ async function openChargingDistributionMap(requestId = beginNavigation()) {
     state.listMode = 'charging';
     state.cityMapMode = 'overview';
     state.chargingCityContext = null;
-    state.chargingFilters = { operator: 'all', connector: 'all', minPower: 'all' };
     renderDetail(null);
     updateBottomNav();
     updateSectionHeaderTone();
@@ -6506,14 +7033,14 @@ async function openChargingDistributionMap(requestId = beginNavigation()) {
     els.resultCount.textContent = 'Deutschlandkarte';
     els.resultMeta.textContent = 'Ladeanlagen werden deutschlandweit geladen ...';
     try {
-        const data = await fetchJson('/api/charging/stations.php?distribution=1&limit=30000', { timeoutMs: 45000 });
+        const data = await loadChargingDistributionStations(requestId);
         if (!isCurrentNavigation(requestId, 'charging')) return;
-        state.chargingStations = (data.stations || []).map(normalizeChargingStation);
-        state.stations = state.chargingStations;
+        state.stations = chargingFilteredStations();
         setView('map');
         renderMarkers();
-        els.resultCount.textContent = `${state.chargingStations.length} Ladeanlagen`;
-        els.resultMeta.textContent = `${Number(data.chargingPointCount || 0).toLocaleString('de-DE')} Ladepunkte - ${Number(data.chargingUnitCount || 0).toLocaleString('de-DE')} Ladeeinrichtungen deutschlandweit`;
+        const pointCount = state.stations.reduce((sum, station) => sum + Number(station.chargingPointCount || 0), 0);
+        els.resultCount.textContent = `${state.stations.length} Ladeanlagen`;
+        els.resultMeta.textContent = `${chargingFilterActiveText()} - ${pointCount.toLocaleString('de-DE')} Ladepunkte deutschlandweit`;
     } catch (error) {
         if (!isCurrentNavigation(requestId, 'charging')) return;
         els.resultCount.textContent = 'Keine Deutschlandkarte';
@@ -6609,16 +7136,17 @@ function syncAutobahnVisibleStations() {
 
 function normalizeAutobahnStation(station) {
     const tankerkoenigId = tankerkoenigIdFromStation(station);
+    const stationId = station.stationId || station.id || station.externalStationId || tankerkoenigId;
     return {
         autobahnMode: true,
         tankerkoenig_id: tankerkoenigId,
-        stationId: tankerkoenigId,
+        stationId,
         priceStationId: tankerkoenigId,
         type: station.type || '',
         directorySource: station.directorySource || '',
         name: station.name || 'Autobahn-Tankstelle',
         brand: station.primaryFuelBrand || station.fuelBrands?.[0] || station.operator || 'Tankstelle',
-        operator: station.operator || 'Tank & Rast',
+        operator: station.operator || '',
         street: station.street || station.address || station.highway || '',
         house_number: station.houseNumber || '',
         postcode: station.postCode || '',
@@ -6655,16 +7183,16 @@ async function refreshSelectedAutobahnPrices(target = 'list') {
         });
         const data = await fetchJson(`/api/autobahn/stations.php?${params.toString()}`);
         let updated = (data.stations || []).map(normalizeAutobahnStation)
-            .filter((station) => station.tankerkoenig_id && Number.isFinite(station.lat) && Number.isFinite(station.lng));
-        const byId = new Map(state.autobahnStations.map((station) => [station.tankerkoenig_id, station]));
-        updated.forEach((station) => byId.set(station.tankerkoenig_id, station));
+            .filter((station) => stationMapId(station) && Number.isFinite(station.lat) && Number.isFinite(station.lng));
+        const byId = new Map(state.autobahnStations.map((station) => [stationMapId(station), station]));
+        updated.forEach((station) => byId.set(stationMapId(station), station));
         state.autobahnStations = [...byId.values()];
         syncAutobahnVisibleStations();
         const staleStations = state.stations.filter((station) => !hasRecentAutobahnPrice(station, USAGE_PRICE_MAX_AGE_MS));
         if (staleStations.length) {
             const liveUpdated = await refreshAutobahnLivePricesForStations(staleStations);
-            const liveById = new Map(state.autobahnStations.map((station) => [station.tankerkoenig_id, station]));
-            liveUpdated.forEach((station) => liveById.set(station.tankerkoenig_id, station));
+            const liveById = new Map(state.autobahnStations.map((station) => [stationMapId(station), station]));
+            liveUpdated.forEach((station) => liveById.set(stationMapId(station), station));
             state.autobahnStations = [...liveById.values()];
             syncAutobahnVisibleStations();
         }
@@ -6720,7 +7248,7 @@ async function refreshAutobahnStationPrices(id) {
     state.autobahnPriceLoadingId = id;
     setStatus('Preise');
 
-    const current = state.stations.find((station) => station.tankerkoenig_id === id);
+    const current = state.stations.find((station) => stationMapId(station) === id);
     if (current && state.selectedId === id) renderDetail(current);
 
     try {
@@ -6731,13 +7259,13 @@ async function refreshAutobahnStationPrices(id) {
         });
         const data = await fetchJson(`/api/autobahn/stations.php?${params.toString()}`);
         let updated = (data.stations || []).map(normalizeAutobahnStation)
-            .find((station) => station.tankerkoenig_id === id);
+            .find((station) => stationMapId(station) === id);
         if (updated && !hasRecentAutobahnPrice(updated, USAGE_PRICE_MAX_AGE_MS)) {
             [updated] = await refreshAutobahnLivePricesForStations([updated]);
         }
         if (!updated) throw new Error('Keine Preisdaten für diese Raststätte gefunden.');
 
-        const byId = new Map(state.autobahnStations.map((station) => [station.tankerkoenig_id, station]));
+        const byId = new Map(state.autobahnStations.map((station) => [stationMapId(station), station]));
         byId.set(id, updated);
         state.autobahnStations = [...byId.values()];
         syncAutobahnVisibleStations();
@@ -6745,7 +7273,7 @@ async function refreshAutobahnStationPrices(id) {
         if (state.listMode === 'autobahn') renderResults();
         renderMarkers();
         if (state.selectedId === id) {
-            renderDetail(state.stations.find((station) => station.tankerkoenig_id === id) || updated);
+            renderDetail(state.stations.find((station) => stationMapId(station) === id) || updated);
         }
         setStatus('Aktuell');
     } finally {
@@ -6790,46 +7318,64 @@ function activateAllAutobahns() {
     if (state.view === 'map') openAutobahnMap();
 }
 
+function autobahnDirectionLabel(station) {
+    const raw = String(station?.sideLabel || station?.directionText || station?.richtung || '').trim();
+    if (!raw) return '';
+    const normalized = raw
+        .replace(/^richtung\s*/i, '')
+        .replace(/^rg[:\s]*/i, '')
+        .trim();
+    if (!normalized || normalized === '-' || /^unbekannt$/i.test(normalized) || /^\.+$/.test(normalized)) return '';
+    return `RG: ${normalized}`;
+}
+
+function autobahnDirectionMetaHtml(station, className = 'autobahn-meta') {
+    const directionLabel = autobahnDirectionLabel(station);
+    return `<span class="${className}"${directionLabel ? '' : ' aria-hidden="true"'}>${escapeHtml(directionLabel)}</span>`;
+}
+
 function autobahnRowHtml(station, priceThresholds = thresholdsFor(state.stations)) {
-    const side = station.sideLabel || 'Richtung unbekannt';
     const features = station.features?.length ? station.features.slice(0, 3).join(', ') : 'Services nicht angegeben';
     const highwayLabel = station.highway || 'A';
     const rankClass = `${markerClass(station, priceThresholds)} ${autobahnKindClass(station)}`;
-    const stationAddress = address(station) || station.operator || 'Tank & Rast';
+    const kindLabel = autobahnKindLabel(station);
+    const stationAddress = address(station) || station.operator || (isAutohofStation(station) ? 'Autohof' : 'Tankstelle');
     return `
-        <button class="autobahn-row" type="button" data-autobahn-station-id="${escapeHtml(station.tankerkoenig_id)}">
+        <button class="autobahn-row" type="button" data-autobahn-station-id="${escapeHtml(stationMapId(station))}">
             <span class="rank ${escapeHtml(rankClass)}">${escapeHtml(highwayLabel)}</span>
             ${brandLogoHtml(station)}
             <span class="autobahn-main">
                 <strong>${escapeHtml(station.name || 'Autobahn-Tankstelle')}</strong>
-                <small>${escapeHtml(station.brand || 'Tankstelle')} · ${escapeHtml(stationAddress)}</small>
+                <small>${escapeHtml(kindLabel)} - ${escapeHtml(station.brand || 'Tankstelle')} - ${escapeHtml(stationAddress)}</small>
                 ${tankRastBadgeHtml(station)}
             </span>
-            <span class="autobahn-meta">${escapeHtml(side)}</span>
+            ${autobahnDirectionMetaHtml(station)}
             <span class="autobahn-services">${escapeHtml(features)}</span>
         </button>
     `;
 }
 
 function autobahnRowHtmlDetailed(station, priceThresholds = thresholdsFor(state.stations)) {
-    const side = station.sideLabel || 'Richtung unbekannt';
     const features = station.features?.length ? station.features.slice(0, 3).join(', ') : 'Services nicht angegeben';
     const priceStand = autobahnPriceStand(station);
+    const directionLabel = autobahnDirectionLabel(station);
+    const serviceText = [directionLabel, priceStand ? `Stand ${formatDateTime(priceStand)}` : features].filter(Boolean).join(' - ');
     const highwayLabel = station.highway || 'A';
     const rankClass = `${markerClass(station, priceThresholds)} ${autobahnKindClass(station)}`;
-    const stationAddress = address(station) || station.operator || 'Tank & Rast';
+    const kindLabel = autobahnKindLabel(station);
+    const stationAddress = address(station) || station.operator || (isAutohofStation(station) ? 'Autohof' : 'Tankstelle');
     return `
-        <button class="autobahn-row" type="button" data-autobahn-station-id="${escapeHtml(station.tankerkoenig_id)}">
+        <button class="autobahn-row" type="button" data-autobahn-station-id="${escapeHtml(stationMapId(station))}">
             <span class="rank ${escapeHtml(rankClass)}">${escapeHtml(highwayLabel)}</span>
             ${brandLogoHtml(station)}
             <span class="autobahn-main">
                 <strong>${escapeHtml(station.name || 'Autobahn-Tankstelle')}</strong>
-                <small>${escapeHtml(station.brand || 'Tankstelle')} - ${escapeHtml(stationAddress)}</small>
+                <small>${escapeHtml(kindLabel)} - ${escapeHtml(station.brand || 'Tankstelle')} - ${escapeHtml(stationAddress)}</small>
                 ${tankRastBadgeHtml(station)}
                 <small>${escapeHtml(autobahnPriceSummary(station))}</small>
             </span>
             ${selectedFuelPriceHtml(station, 'autobahn-meta')}
-            <span class="autobahn-services">${escapeHtml(side)} - ${escapeHtml(priceStand ? `Stand ${formatDateTime(priceStand)}` : features)}</span>
+            <span class="autobahn-services">${escapeHtml(serviceText)}</span>
         </button>
     `;
 }
@@ -6910,7 +7456,7 @@ async function loadAutobahnStations(target = 'list', requestId = state.navReques
         const data = await fetchJson('/api/autobahn/stations.php?hasFuel=1&prices=1');
         if (!isCurrentNavigation(requestId, 'autobahn')) return;
         state.autobahnStations = (data.stations || []).map(normalizeAutobahnStation)
-            .filter((station) => station.tankerkoenig_id && Number.isFinite(station.lat) && Number.isFinite(station.lng));
+            .filter((station) => stationMapId(station) && Number.isFinite(station.lat) && Number.isFinite(station.lng));
         syncAutobahnVisibleStations();
 
         setStatus('Aktuell');
@@ -7098,15 +7644,61 @@ function loadFavorites() {
     } catch {
         state.favorites = [];
     }
+    try {
+        state.chargingFavorites = JSON.parse(localStorage.getItem('tankprofi_charging_favorites') || '[]');
+    } catch {
+        state.chargingFavorites = [];
+    }
 }
 
 function saveFavorites() {
     localStorage.setItem('tankprofi_favorites', JSON.stringify(state.favorites));
-    if (state.listMode === 'favorites') renderResults();
+    if (state.listMode === 'favorites' && !isElectricMode()) renderResults();
+}
+
+function saveChargingFavorites() {
+    localStorage.setItem('tankprofi_charging_favorites', JSON.stringify(state.chargingFavorites));
+    if (state.listMode === 'favorites' && isElectricMode()) renderResults();
 }
 
 function isFavorite(id) {
     return state.favorites.some((favorite) => favorite.tankerkoenig_id === id);
+}
+
+function isChargingFavorite(id) {
+    return state.chargingFavorites.some((favorite) => (favorite.stationId || favorite.id) === id);
+}
+
+function chargingFavoriteFromStation(station) {
+    return {
+        ...station,
+        stationId: station.stationId || station.id,
+        savedAt: new Date().toISOString(),
+    };
+}
+
+function stationForChargingFavorite(favorite) {
+    const id = favorite.stationId || favorite.id;
+    const current = state.chargingStations.find((station) => (station.stationId || station.id) === id);
+    return current || {
+        ...favorite,
+        chargingMode: true,
+    };
+}
+
+function toggleChargingFavorite(station) {
+    if (!station) return;
+    const id = station.stationId || station.id;
+    if (!id) return;
+
+    if (isChargingFavorite(id)) {
+        state.chargingFavorites = state.chargingFavorites.filter((favorite) => (favorite.stationId || favorite.id) !== id);
+    } else {
+        state.chargingFavorites.unshift(chargingFavoriteFromStation(station));
+    }
+
+    saveChargingFavorites();
+    renderDetail(station);
 }
 
 function favoriteFromStation(station) {
@@ -7296,6 +7888,41 @@ function renderFavoriteRows() {
     });
 }
 
+function renderChargingFavoriteRows() {
+    if (!state.chargingFavorites.length || !els.results) {
+        return;
+    }
+
+    const favoriteStations = state.chargingFavorites.map(stationForChargingFavorite);
+    els.results.innerHTML = `
+        <section class="charging-dashboard">
+            <div class="charging-source-note">
+                <div>
+                    <strong>Elektro-Favoriten</strong>
+                    <span>Eigene Favoriten fuer Ladeanlagen.</span>
+                </div>
+            </div>
+            <div class="charging-list">
+                ${favoriteStations.map((station, index) => chargingRowHtml(station, index)).join('')}
+            </div>
+        </section>
+    `;
+    els.results.querySelectorAll('[data-charging-id]').forEach((button) => {
+        button.addEventListener('click', () => {
+            state.listMode = 'favorites';
+            selectChargingFavorite(button.dataset.chargingId);
+        });
+    });
+}
+
+function selectChargingFavorite(id) {
+    const favorite = state.chargingFavorites.find((item) => (item.stationId || item.id) === id);
+    if (!favorite) return;
+    state.selectedId = id;
+    renderDetail(stationForChargingFavorite(favorite));
+    updateFavoritesButton();
+}
+
 function updateFavoritesButton() {
     const active = state.listMode === 'favorites';
     updateBottomNav();
@@ -7386,6 +8013,10 @@ function renderTankprofiStatsData(data) {
     if (els.tankprofiRastCount) els.tankprofiRastCount.textContent = format(data.raststaetten);
     if (els.tankprofiChargingCount) els.tankprofiChargingCount.textContent = format(data.ladeparks);
     if (els.tankprofiTruckCount) els.tankprofiTruckCount.textContent = format(data.truckStops);
+    if (els.tankprofiElectricStationCount) els.tankprofiElectricStationCount.textContent = format(data.electric?.chargingStations);
+    if (els.tankprofiElectricBnetzaCount) els.tankprofiElectricBnetzaCount.textContent = format(data.electric?.bnetzaStations);
+    if (els.tankprofiElectricTeslaCount) els.tankprofiElectricTeslaCount.textContent = format(data.electric?.teslaSuperchargers);
+    if (els.tankprofiElectricFastCount) els.tankprofiElectricFastCount.textContent = format(data.electric?.fastChargingStations);
     if (els.tankprofiKoenigSearchCount) els.tankprofiKoenigSearchCount.textContent = format(data.tankkoenig?.appSearches);
     if (els.tankprofiBerlinKoenigCount) {
         const berlinStats = (data.tankkoenig?.cityStats || []).find((item) => item.city === 'berlin');
@@ -7541,6 +8172,7 @@ function currentPosition(options = {}) {
 }
 
 async function useCurrentLocation(options = {}) {
+    const startedAt = Date.now();
     if (!navigator.geolocation) {
         if (typeof options.onFail === 'function') {
             options.onFail();
@@ -7551,6 +8183,7 @@ async function useCurrentLocation(options = {}) {
     }
 
     if (options.startup) state.startupLocationPending = true;
+    if (options.startup) setStartupInteractionLock(true, 'Standort wird ermittelt ...');
     setStatus('Ortung');
     if (options.startup && !options.hasImmediateFallback) {
         els.resultMeta.textContent = 'Standort wird waehrend des Ladens ermittelt ...';
@@ -7558,52 +8191,98 @@ async function useCurrentLocation(options = {}) {
         els.resultMeta.textContent = 'Aktueller Standort wird ermittelt ...';
     }
 
+    let position;
     try {
-        const position = await currentPosition({
+        position = await currentPosition({
             timeoutMs: options.startup ? Number(options.timeoutMs || 3200) : Number(options.timeoutMs || 12000),
             maximumAgeMs: options.startup ? 300000 : 0,
             enableHighAccuracy: !options.startup,
         });
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        let label = 'Aktueller Standort';
-
-        try {
-            label = await reverseGeocode(lat, lng);
-        } catch {
-            label = 'Aktueller Standort';
-        }
-
-        state.selectedLocation = {
-            label,
-            lat,
-            lng,
-        };
-        saveLastLocation(state.selectedLocation);
-        els.searchInput.value = label;
-        els.suggestions.innerHTML = '';
-        if (isElectricMode()) {
-            state.listMode = 'charging';
-            state.cityMapMode = 'overview';
-            state.selectedCityId = null;
-            state.selectedHighway = 'all';
-            renderDetail(null);
-            await loadChargingStations(beginNavigation());
-            return;
-        }
-        state.listMode = 'results';
-        state.cityMapMode = 'overview';
-        state.selectedCityId = null;
-        state.selectedHighway = 'all';
-        renderDetail(null);
-        await loadStations({ force: true });
     } catch {
+        if (options.startup) {
+            const remainingMs = STARTUP_LOCATION_MESSAGE_MIN_MS - (Date.now() - startedAt);
+            if (remainingMs > 0) {
+                await new Promise((resolve) => window.setTimeout(resolve, remainingMs));
+            }
+        }
         setStatus('Bereit');
         els.resultMeta.textContent = 'Standort konnte nicht ermittelt werden.';
         if (typeof options.onFail === 'function') options.onFail();
     } finally {
         if (options.startup) state.startupLocationPending = false;
     }
+
+    if (!position) {
+        if (options.startup) setStartupInteractionLock(false);
+        return;
+    }
+
+    const lat = position.coords.latitude;
+    const lng = position.coords.longitude;
+    const previousLocation = state.selectedLocation ? { ...state.selectedLocation } : null;
+    const movementKm = previousLocation
+        && Number.isFinite(Number(previousLocation.lat))
+        && Number.isFinite(Number(previousLocation.lng))
+        ? routeDistanceKm(previousLocation.lat, previousLocation.lng, lat, lng)
+        : Number.POSITIVE_INFINITY;
+    const minimumMoveKm = Number(options.updateOnlyIfMovedKm || 0);
+    if (minimumMoveKm > 0 && Number.isFinite(movementKm) && movementKm < minimumMoveKm) {
+        if (options.startup) hideSplashScreen();
+        setStatus('Bereit');
+        return;
+    }
+
+    let label = options.fastLabel || 'Aktueller Standort';
+    state.selectedLocation = {
+        label,
+        lat,
+        lng,
+    };
+    saveLastLocation(state.selectedLocation);
+    els.searchInput.value = label;
+    els.suggestions.innerHTML = '';
+    if (isElectricMode()) {
+        state.listMode = 'charging';
+        state.cityMapMode = 'overview';
+        state.selectedCityId = null;
+        state.selectedHighway = 'all';
+        renderDetail(null);
+        try {
+            await loadChargingStations(beginNavigation());
+        } catch (error) {
+            els.resultCount.textContent = 'Standort gefunden';
+            els.resultMeta.textContent = error?.message || 'Ladepunkte konnten noch nicht geladen werden.';
+            hideSplashScreen();
+        } finally {
+            if (options.startup) setStartupInteractionLock(false);
+        }
+        return;
+    }
+    state.listMode = 'results';
+    state.cityMapMode = 'overview';
+    state.selectedCityId = null;
+    state.selectedHighway = 'all';
+    els.resultCount.textContent = 'Standort gefunden';
+    els.resultMeta.textContent = 'Tankstellen werden geladen ...';
+    renderDetail(null);
+    try {
+        await loadStations({
+            force: !options.startup,
+            startup: Boolean(options.startup),
+        });
+    } catch (error) {
+        els.resultCount.textContent = 'Standort gefunden';
+        els.resultMeta.textContent = error?.message || 'Tankstellen konnten noch nicht geladen werden.';
+        hideSplashScreen();
+    } finally {
+        if (options.startup) setStartupInteractionLock(false);
+    }
+    reverseGeocode(lat, lng).then((resolvedLabel) => {
+        if (!resolvedLabel || state.selectedLocation?.lat !== lat || state.selectedLocation?.lng !== lng) return;
+        state.selectedLocation = { label: resolvedLabel, lat, lng };
+        saveLastLocation(state.selectedLocation);
+        if (els.searchInput) els.searchInput.value = resolvedLabel;
+    }).catch(() => null);
 }
 
 function autoLocateOnStart() {
@@ -7624,7 +8303,7 @@ function restoreStoredStartState(lastLocation = loadLastLocation()) {
             loadChargingStations(beginNavigation());
             return;
         }
-        loadStations();
+        loadStations({ startup: true });
         return;
     }
 
@@ -7651,35 +8330,48 @@ function loadStartupFallbackList() {
         loadChargingStations(beginNavigation());
         return;
     }
-    loadStations();
+    loadStations({ startup: true });
 }
 
 function restoreStartState() {
     const lastLocation = loadLastLocation();
     if (lastLocation) {
-        state.selectedLocation = lastLocation;
-        els.searchInput.value = lastLocation.label;
-        els.resultMeta.textContent = 'Letzter Standort wird geladen ...';
-        if (isElectricMode()) {
-            state.listMode = 'charging';
-            loadChargingStations(beginNavigation());
-        } else {
-            loadStations();
-        }
+        els.searchInput.value = '';
+        els.resultMeta.textContent = 'Aktueller Standort wird ermittelt ...';
     } else {
         els.resultMeta.textContent = 'Standort wird waehrend des Ladens ermittelt ...';
     }
 
     useCurrentLocation({
         startup: true,
-        hasImmediateFallback: Boolean(lastLocation),
-        timeoutMs: lastLocation ? 6500 : 8500,
+        hasImmediateFallback: false,
+        timeoutMs: lastLocation ? 6200 : 6800,
+        updateOnlyIfMovedKm: 0,
         onFail: () => {
-            if (!lastLocation) restoreStoredStartState(lastLocation);
+            state.selectedLocation = null;
+            if (els.searchInput) els.searchInput.value = '';
+            setStatus('Bereit');
+            els.resultCount.textContent = 'Standort offen';
+            els.resultMeta.textContent = 'Standort konnte nicht ermittelt werden.';
+            els.results.innerHTML = '<div class="empty-state">Bitte Standort antippen. Die letzte Adresse wird beim Start nicht automatisch geladen.</div>';
+            hideSplashScreen();
         },
     });
 
-    window.setTimeout(loadStartupFallbackList, lastLocation ? 7600 : 9500);
+    window.setTimeout(() => {
+        if (state.startupLocationPending && lastLocation) {
+            state.startupLocationPending = false;
+            state.selectedLocation = null;
+            if (els.searchInput) els.searchInput.value = '';
+            setStatus('Bereit');
+            els.resultCount.textContent = 'Standort offen';
+            els.resultMeta.textContent = 'Standort dauert zu lange.';
+            els.results.innerHTML = '<div class="empty-state">Bitte Standort antippen. Keine alte Adresse wird automatisch geladen.</div>';
+            hideSplashScreen();
+            return;
+        }
+        loadStartupFallbackList();
+    }, lastLocation ? 7000 : 7600);
 }
 
 function bindEvents() {
@@ -7691,10 +8383,20 @@ function bindEvents() {
     els.searchInput.addEventListener('pointerdown', clearDeliveredSearchText);
     els.searchInput.addEventListener('input', updateSuggestions);
     els.searchInput.addEventListener('keydown', (event) => {
+        if (isInteractionLocked()) {
+            event.preventDefault();
+            return;
+        }
         if (event.key === 'Enter') runManualSearch();
     });
-    els.searchButton.addEventListener('click', runManualSearch);
-    els.locationButton.addEventListener('click', () => runCurrentLocationSearch({ timeoutMs: 12000 }));
+    els.searchButton.addEventListener('click', () => {
+        if (isInteractionLocked()) return;
+        runManualSearch();
+    });
+    els.locationButton.addEventListener('click', () => {
+        if (isInteractionLocked()) return;
+        runCurrentLocationSearch({ timeoutMs: 12000 });
+    });
     els.refresh.addEventListener('click', () => {
         prepareNormalSearch(false);
         loadStations({ force: true });
@@ -7724,13 +8426,14 @@ function bindEvents() {
         button.addEventListener('click', () => setView(button.dataset.view));
     });
     els.resultCount.addEventListener('click', (event) => {
-        if (!event.target.closest('[data-driving-header-list]')) return;
+        if (!event.target.closest('[data-driving-header-view="list"]')) return;
         if (state.listMode !== 'driving') return;
         setView('list');
         renderDrivingModeList();
     });
     els.bottomNavButtons.forEach((button) => {
         button.addEventListener('click', () => {
+            if (isInteractionLocked()) return;
             const action = button.dataset.action;
             const navRequestId = beginNavigation();
             renderDetail(null);
@@ -7769,17 +8472,27 @@ function bindEvents() {
 
             if (action === 'cities') {
                 if (state.drivingActive) stopDrivingMode(false);
+                captureNormalSearchBeforeSection();
                 state.listMode = 'cities';
                 state.cityMapMode = 'overview';
                 renderDetail(null);
                 setView('list');
                 updateBottomNav();
+                if (isElectricMode() && state.chargingCityRankings.length) {
+                    renderChargingCityRankings();
+                    return;
+                }
+                if (!isElectricMode() && state.citySnapshot) {
+                    renderCityRankings();
+                    return;
+                }
                 loadCitySnapshot(navRequestId);
                 return;
             }
 
             if (action === 'autobahn') {
                 if (state.drivingActive) stopDrivingMode(false);
+                captureNormalSearchBeforeSection();
                 state.listMode = 'autobahn';
                 state.cityMapMode = 'overview';
                 renderDetail(null);
@@ -7812,7 +8525,61 @@ function bindEvents() {
             }
 
             if (action === 'list') {
+                const fromAutobahn = state.listMode === 'autobahn';
+                const fromCities = state.listMode === 'cities';
                 if (state.drivingActive) stopDrivingMode(false);
+                if (fromAutobahn) {
+                    setVehicleMode('combustion', { persist: false, silent: true });
+                    prepareNormalSearch(false);
+                    updateBottomNav();
+                    if (restoreNormalSearchAfterSection()) return;
+                    renderNormalSearchLoading();
+                    if (state.selectedLocation) {
+                        loadStations();
+                    } else {
+                        state.stations = [];
+                        useCurrentLocation({
+                            timeoutMs: 12000,
+                            onFail: () => restoreStoredStartState(),
+                        });
+                    }
+                    return;
+                }
+                if (fromCities) {
+                    if (isElectricMode()) {
+                        prepareChargingSearch(false);
+                        updateBottomNav();
+                        if (state.chargingStations.length) {
+                            renderChargingList();
+                        } else if (state.selectedLocation) {
+                            els.resultCount.textContent = 'Ladeanlagen';
+                            els.resultMeta.textContent = 'Elektro-Liste wird geladen ...';
+                            els.results.innerHTML = '<div class="empty-state">Elektro-Liste wird geladen ...</div>';
+                            loadChargingStations(navRequestId);
+                        } else {
+                            state.stations = [];
+                            useCurrentLocation({
+                                timeoutMs: 12000,
+                                onFail: () => restoreStoredStartState(),
+                            });
+                        }
+                        return;
+                    }
+                    prepareNormalSearch(false);
+                    updateBottomNav();
+                    if (restoreNormalSearchAfterSection()) return;
+                    renderNormalSearchLoading();
+                    if (state.selectedLocation) {
+                        loadStations();
+                    } else {
+                        state.stations = [];
+                        useCurrentLocation({
+                            timeoutMs: 12000,
+                            onFail: () => restoreStoredStartState(),
+                        });
+                    }
+                    return;
+                }
                 if (isElectricMode()) {
                     prepareChargingSearch(false);
                     if (state.chargingStations.length) {
@@ -7829,7 +8596,11 @@ function bindEvents() {
                 renderDetail(null);
                 setView('list');
                 updateBottomNav();
-                if (state.selectedLocation) {
+                if (state.stations.length && state.listMode === 'results') {
+                    renderCachedNormalSearch();
+                } else if (restoreNormalSearchAfterSection()) {
+                    return;
+                } else if (state.selectedLocation) {
                     loadStations();
                 } else {
                     state.stations = [];
@@ -7844,7 +8615,7 @@ function bindEvents() {
             updateFavoritesButton();
             renderResults();
             setView('list');
-            if (showFavorites) refreshFavoritesOnOpen();
+            if (showFavorites && !isElectricMode()) refreshFavoritesOnOpen();
         });
     });
     els.settingsBackdrop.addEventListener('click', () => {
@@ -7887,7 +8658,11 @@ function bindEvents() {
             stopDrivingMode(true);
             return;
         }
-        startDrivingMode('ALL');
+        const startsFromElectricArea = state.listMode === 'charging'
+            || (state.listMode === 'cities' && state.vehicleMode === 'electric');
+        startDrivingMode('ALL', {
+            vehicleMode: startsFromElectricArea ? 'electric' : 'combustion',
+        });
     });
     els.cityUpdate?.addEventListener('click', () => runCityUpdate(false));
     els.cityForceUpdate?.addEventListener('click', () => runCityUpdate(true));

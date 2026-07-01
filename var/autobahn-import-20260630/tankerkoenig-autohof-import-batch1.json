@@ -1,0 +1,153 @@
+﻿[
+    {
+        "highway":  "A4",
+        "status":  "failed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  1,
+        "stations":  0,
+        "error":  "Ungültiger JSON-Primitiv: ."
+    },
+    {
+        "highway":  "A5",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  6,
+        "stations":  0
+    },
+    {
+        "highway":  "A6",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  6,
+        "stations":  0
+    },
+    {
+        "highway":  "A7",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  8,
+        "stations":  0
+    },
+    {
+        "highway":  "A8",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  8,
+        "stations":  0
+    },
+    {
+        "highway":  "A44",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  3,
+        "stations":  0
+    },
+    {
+        "highway":  "A45",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  3,
+        "stations":  0
+    },
+    {
+        "highway":  "A46",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  1,
+        "stations":  0
+    },
+    {
+        "highway":  "A52",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  2,
+        "stations":  0
+    },
+    {
+        "highway":  "A57",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  1,
+        "stations":  0
+    },
+    {
+        "highway":  "A61",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  3,
+        "stations":  0
+    },
+    {
+        "highway":  "A67",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  2,
+        "stations":  0
+    },
+    {
+        "highway":  "A81",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  5,
+        "stations":  0
+    },
+    {
+        "highway":  "A93",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  1,
+        "stations":  0
+    },
+    {
+        "highway":  "A95",
+        "status":  "completed",
+        "discovered":  0,
+        "imported":  0,
+        "created":  0,
+        "updated":  0,
+        "errors":  2,
+        "stations":  0
+    }
+]

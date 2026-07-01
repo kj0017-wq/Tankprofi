@@ -46,7 +46,14 @@ const supportedScanCountries = new Set(['DE', 'AT', 'CH', 'PL']);
 const raststaettenDirectoryUrl = 'https://www.raststaetten.de/alle-standorte/';
 const bnetzaChargingCsvUrl = 'https://data.bundesnetzagentur.de/Bundesnetzagentur/DE/Fachthemen/ElektrizitaetundGas/E-Mobilitaet/Ladesaeulenregister_BNetzA_2026-04-22.csv';
 const bnetzaChargingSourceDate = '2026-04-22';
+const superchargeInfoSitesUrl = 'https://supercharge.info/service/supercharge/allSites';
 const overpassApiUrl = 'https://overpass-api.de/api/interpreter';
+const overpassApiUrls = [
+  overpassApiUrl,
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.osm.ch/api/interpreter',
+];
+const overpassRequestTimeoutMs = 25000;
 const autohofKeywords = /autohof|euro rastpark|svg autohof|24[- ]?autohof|truckstop|rasthof/i;
 const highwayCandidateHints = {
   A9: /\bA\s?9\b|BAB\s?9|Coswig|Droy[sß]ig|Osterfeld|Gro[ßs]kugel|Schkeuditz|M[üu]nchberg|Koesching|K[öo]sching|Marktschorgast|Niemegk|Triptis|Berg|Leupoldsgr[üu]n|Allersberg|Langenbruck|Himmelkron|Dittersdorf|Pegnitz/i,
@@ -121,6 +128,28 @@ const highwaySearchPoints = {
     { id: 'linum', label: 'Linumer Bruch', lat: 52.7540, lng: 12.8540 },
     { id: 'kremmen', label: 'Kremmen', lat: 52.7520, lng: 13.0300 },
     { id: 'berliner-ring', label: 'Berliner Ring', lat: 52.6542, lng: 13.5064 },
+  ],
+  A93: [
+    { id: 'hof', label: 'Hof', lat: 50.3135, lng: 11.9128 },
+    { id: 'marktredwitz', label: 'Marktredwitz', lat: 50.0044, lng: 12.0859 },
+    { id: 'weiden', label: 'Weiden', lat: 49.6744, lng: 12.1489 },
+    { id: 'schwandorf', label: 'Schwandorf', lat: 49.3263, lng: 12.1098 },
+    { id: 'regensburg', label: 'Regensburg', lat: 49.0134, lng: 12.1016 },
+    { id: 'abensberg', label: 'Abensberg', lat: 48.8164, lng: 11.8494 },
+    { id: 'holledau', label: 'Dreieck Holledau', lat: 48.6052, lng: 11.5960 },
+    { id: 'rosenheim', label: 'Rosenheim', lat: 47.8564, lng: 12.1225 },
+    { id: 'kiefersfelden', label: 'Kiefersfelden', lat: 47.6148, lng: 12.1907 },
+  ],
+  A94: [
+    { id: 'muenchen-ost', label: 'Muenchen Ost', lat: 48.1372, lng: 11.7030 },
+    { id: 'forstinning', label: 'Forstinning', lat: 48.1682, lng: 11.9124 },
+    { id: 'markt-schwaben', label: 'Markt Schwaben', lat: 48.1891, lng: 11.8694 },
+    { id: 'dorfen', label: 'Dorfen', lat: 48.2706, lng: 12.1528 },
+    { id: 'muehldorf', label: 'Muehldorf am Inn', lat: 48.2465, lng: 12.5217 },
+    { id: 'altoetting', label: 'Altoetting', lat: 48.2256, lng: 12.6760 },
+    { id: 'simbach', label: 'Simbach am Inn', lat: 48.2640, lng: 13.0237 },
+    { id: 'pocking', label: 'Pocking', lat: 48.4014, lng: 13.3135 },
+    { id: 'passau', label: 'Passau', lat: 48.5667, lng: 13.4319 },
   ],
 };
 const raststaettenFuelBrands = ['Aral', 'Avia', 'bft', 'Eni', 'Esso', 'Orlen', 'Score', 'Shell', 'Tamoil', 'Total', 'Westfalen'];
@@ -217,6 +246,7 @@ function endpointFrom(req) {
   if (path.endsWith('/admin/addresses/export.csv') || path.endsWith('/admin/addresses/export')) return 'addressExport';
   if (path.endsWith('/admin/addresses/consolidate.php') || path.endsWith('/admin/addresses/consolidate')) return 'addressConsolidate';
   if (path.endsWith('/admin/charging/import.php') || path.endsWith('/admin/charging/import')) return 'chargingImport';
+  if (path.endsWith('/admin/charging/tesla-import.php') || path.endsWith('/admin/charging/tesla-import')) return 'chargingTeslaImport';
   if (path.endsWith('/admin/charging/cleanup.php') || path.endsWith('/admin/charging/cleanup')) return 'chargingCleanup';
   if (path.endsWith('/charging/stations.php') || path.endsWith('/charging/stations')) return 'chargingStations';
   if (path.endsWith('/charging/cities.php') || path.endsWith('/charging/cities')) return 'chargingCities';
@@ -3905,7 +3935,8 @@ function directoryStationFromTankprofiDoc(doc) {
   const data = doc.data();
   const tankerkoenigId = explicitTankerkoenigId(data, doc.id);
   const stationTypes = data.standortTyp || [];
-  const directoryType = data.autohofTyp || (stationTypes.includes('Raststätte') ? 'autobahn_raststaette' : 'autohof');
+  const isRaststaette = stationTypes.includes('Raststätte') || stationTypes.includes('RaststÃ¤tte');
+  const directoryType = data.autohofTyp || (isRaststaette ? 'autobahn_raststaette' : 'autohof');
   const prices = {};
   cityFuels.forEach((fuel) => {
     const current = data.currentPrices?.[fuel];
@@ -3956,7 +3987,6 @@ async function loadUnifiedServiceStation(stationId) {
   const direct = await db.collection('tankprofi_stations').doc(stationId).get();
   if (direct.exists) {
     const stationRecord = directoryStationFromTankprofiDoc(direct);
-    if (!stationRecord.tankerkoenigId) return null;
     const [station] = await hydrateCanonicalAddresses([stationRecord]);
     return station;
   }
@@ -3967,20 +3997,19 @@ async function loadUnifiedServiceStation(stationId) {
     .get();
   if (snapshot.empty) return null;
   const stationRecord = directoryStationFromTankprofiDoc(snapshot.docs[0]);
-  if (!stationRecord.tankerkoenigId) return null;
   const [station] = await hydrateCanonicalAddresses([stationRecord]);
   return station;
 }
 
 async function loadUnifiedServiceStations({ highway, hasFuel }) {
   const byId = new Map();
+  const serviceTypeNames = ['Autohof', 'Raststätte', 'RaststÃ¤tte', 'Truck Stop', 'Ladepark', 'Service Area'];
   const addSnapshot = async (query) => {
     const snapshot = await query.limit(1000).get();
     snapshot.docs.forEach((doc) => {
       const station = directoryStationFromTankprofiDoc(doc);
-      if (!station.tankerkoenigId) return;
       const types = doc.data().standortTyp || [];
-      if (!types.some((type) => ['Autohof', 'Raststätte', 'Truck Stop', 'Ladepark', 'Service Area'].includes(type))) return;
+      if (!types.some((type) => serviceTypeNames.includes(type))) return;
       if (highway && station.highway !== highway) return;
       if (hasFuel && !station.hasFuel) return;
       if (Number.isFinite(station.lat) && Number.isFinite(station.lng)) byId.set(station.stationId, station);
@@ -3989,6 +4018,7 @@ async function loadUnifiedServiceStations({ highway, hasFuel }) {
 
   await Promise.all([
     addSnapshot(db.collection('tankprofi_stations').where('standortTyp', 'array-contains', 'Raststätte')),
+    addSnapshot(db.collection('tankprofi_stations').where('standortTyp', 'array-contains', 'RaststÃ¤tte')),
     addSnapshot(db.collection('tankprofi_stations').where('standortTyp', 'array-contains', 'Autohof')),
     addSnapshot(db.collection('tankprofi_stations').where('standortTyp', 'array-contains', 'Truck Stop')),
     addSnapshot(db.collection('tankprofi_stations').where('standortTyp', 'array-contains', 'Ladepark')),
@@ -4107,7 +4137,6 @@ async function handleAutobahnStations(req, res) {
     stations = mergeDirectoryStations([...unifiedStations, ...raststaetten, ...autohoefe]);
   }
 
-  stations = stations.filter((station) => explicitTankerkoenigId(station, ''));
   if (includePrices) stations = await enrichAutobahnStationsWithPrices(stations, refreshPrices);
   stations.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'de'));
   return sendJson(res, { count: stations.length, stations });
@@ -4138,7 +4167,7 @@ function routeTankpointFromDoc(doc, data, sourceCollection) {
     data.typ
     || data.type
     || data.autohofTyp
-    || (stationTypes.includes('Raststätte') ? 'raststaette' : '')
+    || (stationTypes.includes('Raststätte') || stationTypes.includes('RaststÃ¤tte') ? 'raststaette' : '')
     || (stationTypes.includes('Autohof') ? 'autohof' : '')
     || (stationTypes.includes('Tankstelle') ? 'tankstelle_nahe_abfahrt' : '')
     || 'tankpunkt',
@@ -4637,7 +4666,7 @@ async function loadTankkoenigAuditStats() {
 async function handleAdminStats(req, res) {
   const quick = String(req.query.quick || '0') === '1';
   if (quick) {
-    const [addresses, stations, pendingCells, autohoefe, raststaetten, ladeparks, truckStops, searchCount] = await Promise.all([
+    const [addresses, stations, pendingCells, autohoefe, raststaetten, ladeparks, truckStops, searchCount, chargingStations, chargingBnetza, chargingTesla, chargingFast] = await Promise.all([
       collectionCount('tankprofi_addresses'),
       collectionCount('tankprofi_stations'),
       db.collection('tankprofi_scan_cells').where('status', '==', 'pending').count().get(),
@@ -4646,6 +4675,10 @@ async function handleAdminStats(req, res) {
       db.collection('tankprofi_stations').where('standortTyp', 'array-contains', 'Ladepark').count().get(),
       db.collection('tankprofi_stations').where('standortTyp', 'array-contains', 'Truck Stop').count().get(),
       collectionCount('searches'),
+      collectionCount('charging_stations'),
+      db.collection('charging_stations').where('source', '==', 'bnetza').count().get(),
+      db.collection('charging_stations').where('source', '==', 'supercharge_info').count().get(),
+      db.collection('charging_stations').where('fastCharging', '==', true).count().get(),
     ]);
 
     return sendJson(res, {
@@ -4659,12 +4692,18 @@ async function handleAdminStats(req, res) {
       tankkoenig: {
         appSearches: searchCount,
       },
+      electric: {
+        chargingStations,
+        bnetzaStations: Number(chargingBnetza.data().count || 0),
+        teslaSuperchargers: Number(chargingTesla.data().count || 0),
+        fastChargingStations: Number(chargingFast.data().count || 0),
+      },
       partial: true,
       updatedAt: new Date().toISOString(),
     });
   }
 
-  const [addresses, stations, pendingCells, autohoefe, raststaetten, ladeparks, truckStops, searchCount, deviceStats, tankkoenigAddressStats, tankkoenigCityStats, tankkoenigAuditStats] = await Promise.all([
+  const [addresses, stations, pendingCells, autohoefe, raststaetten, ladeparks, truckStops, searchCount, chargingStations, chargingBnetza, chargingTesla, chargingFast, deviceStats, tankkoenigAddressStats, tankkoenigCityStats, tankkoenigAuditStats] = await Promise.all([
     collectionCount('tankprofi_addresses'),
     collectionCount('tankprofi_stations'),
     db.collection('tankprofi_scan_cells').where('status', '==', 'pending').count().get(),
@@ -4673,6 +4712,10 @@ async function handleAdminStats(req, res) {
     db.collection('tankprofi_stations').where('standortTyp', 'array-contains', 'Ladepark').count().get(),
     db.collection('tankprofi_stations').where('standortTyp', 'array-contains', 'Truck Stop').count().get(),
     collectionCount('searches'),
+    collectionCount('charging_stations'),
+    db.collection('charging_stations').where('source', '==', 'bnetza').count().get(),
+    db.collection('charging_stations').where('source', '==', 'supercharge_info').count().get(),
+    db.collection('charging_stations').where('fastCharging', '==', true).count().get(),
     loadSearchDeviceStats(),
     loadTankkoenigAddressStats(),
     loadTankkoenigCityStats(),
@@ -4693,6 +4736,12 @@ async function handleAdminStats(req, res) {
       cityStats: tankkoenigCityStats,
       audit: tankkoenigAuditStats,
       ...tankkoenigAddressStats,
+    },
+    electric: {
+      chargingStations,
+      bnetzaStations: Number(chargingBnetza.data().count || 0),
+      teslaSuperchargers: Number(chargingTesla.data().count || 0),
+      fastChargingStations: Number(chargingFast.data().count || 0),
     },
     updatedAt: new Date().toISOString(),
   });
@@ -5025,13 +5074,318 @@ async function handleChargingImport(req, res) {
   sendJson(res, { ok: true, ...stats, durationMs: Date.now() - startedAt });
 }
 
+function normalizeTeslaSuperchargerElement(element) {
+  const tags = element.tags || {};
+  const center = element.center || {};
+  const lat = Number(element.lat ?? center.lat);
+  const lng = Number(element.lon ?? center.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const osmType = element.type || 'node';
+  const osmId = String(element.id || '').trim();
+  if (!osmId) return null;
+  const name = normalizeCsvText(tags.name || tags['charging_station:name'] || 'Tesla Supercharger');
+  const operatorName = normalizeCsvText(tags.operator || tags.brand || 'Tesla');
+  const capacity = Number(tags.capacity || tags['charging_station:capacity'] || 0);
+  const maxPowerKw = Number(
+    String(tags['socket:tesla_supercharger:output'] || tags['socket:tesla_supercharger_ccs:output'] || tags['socket:ccs:output'] || tags.output || '')
+      .replace(/[^\d.,]/g, '')
+      .replace(',', '.')
+  );
+  const chargingPointCount = Number.isFinite(capacity) && capacity > 0 ? capacity : 1;
+  const connectors = [];
+  if (tags['socket:tesla_supercharger'] || tags['socket:tesla_supercharger_ccs']) {
+    connectors.push({
+      index: 1,
+      type: tags['socket:tesla_supercharger_ccs'] ? 'Tesla Supercharger CCS' : 'Tesla Supercharger',
+      mode: 'DC',
+      powerKw: Number.isFinite(maxPowerKw) && maxPowerKw > 0 ? maxPowerKw : null,
+      powerRaw: tags['socket:tesla_supercharger:output'] || tags['socket:tesla_supercharger_ccs:output'] || '',
+      evseId: '',
+      publicKey: '',
+    });
+  }
+  if (!connectors.length) {
+    connectors.push({
+      index: 1,
+      type: 'Tesla Supercharger',
+      mode: 'DC',
+      powerKw: Number.isFinite(maxPowerKw) && maxPowerKw > 0 ? maxPowerKw : null,
+      powerRaw: '',
+      evseId: '',
+      publicKey: '',
+    });
+  }
+  const idBase = `${osmType}_${osmId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+  return {
+    source: 'openstreetmap_overpass',
+    sourceId: idBase,
+    stationId: `osm_tesla_${idBase}`,
+    osmType,
+    osmId,
+    name,
+    operatorName,
+    displayName: name,
+    status: 'In Betrieb',
+    facilityType: 'Tesla Supercharger',
+    chargingPointCount,
+    nominalPowerKw: Number.isFinite(maxPowerKw) && maxPowerKw > 0 ? maxPowerKw : null,
+    maxConnectorPowerKw: Number.isFinite(maxPowerKw) && maxPowerKw > 0 ? maxPowerKw : null,
+    acDc: 'DC',
+    fastCharging: true,
+    commissioningDateRaw: '',
+    street: normalizeCsvText(tags['addr:street'] || ''),
+    houseNumber: normalizeCsvText(tags['addr:housenumber'] || ''),
+    addressLine: [tags['addr:street'], tags['addr:housenumber']].filter(Boolean).join(' '),
+    postcode: normalizeCsvText(tags['addr:postcode'] || ''),
+    city: normalizeCsvText(tags['addr:city'] || tags['addr:place'] || ''),
+    district: '',
+    state: '',
+    lat,
+    lng,
+    siteName: name,
+    parkingInfo: normalizeCsvText(tags.parking || ''),
+    paymentSystems: ['Tesla App'],
+    openingHours: normalizeCsvText(tags.opening_hours || ''),
+    openingWeekdays: [],
+    openingTimes: [],
+    connectors,
+    connectorTypes: [...new Set(connectors.map((connector) => connector.type).filter(Boolean))],
+    evseIds: [],
+    publicKeys: [],
+    sourceUrl: 'https://www.openstreetmap.org/',
+    sourceName: 'OpenStreetMap Overpass',
+    sourceLicense: 'ODbL',
+    sourceUpdatedAt: new Date().toISOString().slice(0, 10),
+    updatedAt: FieldValue.serverTimestamp(),
+    importedAt: FieldValue.serverTimestamp(),
+  };
+}
+
+function normalizeTeslaSuperchargeInfoSite(site) {
+  const lat = Number(site?.gps?.latitude);
+  const lng = Number(site?.gps?.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const sourceId = String(site.id || site.locationId || '').trim();
+  if (!sourceId) return null;
+  const address = site.address || {};
+  const statusRaw = String(site.status || '').trim().toUpperCase();
+  const status = statusRaw === 'OPEN' ? 'In Betrieb' : (statusRaw || 'unbekannt');
+  const stallCount = Number(site.stallCount || 0);
+  const powerKw = Number(site.powerKilowatt || 0);
+  const connectorTypes = Object.keys(site.plugs || {})
+    .filter((key) => Number(site.plugs[key] || 0) > 0)
+    .map((key) => key.toUpperCase());
+  const connectorLabel = connectorTypes.includes('CCS2') ? 'Tesla Supercharger CCS2' : 'Tesla Supercharger';
+  const city = normalizeCsvText(address.city || '');
+  const name = normalizeCsvText(site.name || city || 'Tesla Supercharger');
+  const stationId = `supercharge_info_${sourceId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+  return {
+    source: 'supercharge_info',
+    sourceId,
+    stationId,
+    locationId: site.locationId || '',
+    name: `Tesla Supercharger ${name}`.trim(),
+    operatorName: 'Tesla',
+    displayName: `Tesla Supercharger ${name}`.trim(),
+    status,
+    facilityType: 'Tesla Supercharger',
+    chargingPointCount: Number.isFinite(stallCount) && stallCount > 0 ? stallCount : 1,
+    nominalPowerKw: Number.isFinite(powerKw) && powerKw > 0 ? powerKw : null,
+    maxConnectorPowerKw: Number.isFinite(powerKw) && powerKw > 0 ? powerKw : null,
+    acDc: 'DC',
+    fastCharging: true,
+    commissioningDateRaw: site.dateOpened || '',
+    street: normalizeCsvText(address.street || ''),
+    houseNumber: '',
+    addressLine: normalizeCsvText(address.street || ''),
+    postcode: normalizeCsvText(address.zip || ''),
+    city,
+    district: '',
+    state: normalizeCsvText(address.state || ''),
+    lat,
+    lng,
+    siteName: normalizeCsvText(site.facilityName || name),
+    parkingInfo: normalizeCsvText(site.facilityHours || ''),
+    paymentSystems: ['Tesla App'],
+    openingHours: normalizeCsvText(site.facilityHours || ''),
+    openingWeekdays: [],
+    openingTimes: [],
+    connectors: [{
+      index: 1,
+      type: connectorLabel,
+      mode: 'DC',
+      powerKw: Number.isFinite(powerKw) && powerKw > 0 ? powerKw : null,
+      powerRaw: powerKw ? `${powerKw} kW` : '',
+      evseId: '',
+      publicKey: '',
+    }],
+    connectorTypes: connectorTypes.length ? connectorTypes : [connectorLabel],
+    evseIds: [],
+    publicKeys: [],
+    sourceUrl: superchargeInfoSitesUrl,
+    sourceName: 'supercharge.info',
+    sourceLicense: 'Quelle: supercharge.info',
+    sourceUpdatedAt: new Date().toISOString().slice(0, 10),
+    rawStalls: site.stalls || {},
+    rawPlugs: site.plugs || {},
+    updatedAt: FieldValue.serverTimestamp(),
+    importedAt: FieldValue.serverTimestamp(),
+  };
+}
+
+async function handleChargingTeslaImport(req, res) {
+  const limit = Math.round(numberParam(req.query.limit || req.body?.limit, 300, 1, 2000));
+  const startedAt = Date.now();
+  const includePlanned = ['1', 'true', 'yes'].includes(String(req.query.includePlanned || req.body?.includePlanned || '').toLowerCase());
+  const response = await fetch(superchargeInfoSitesUrl, {
+    headers: { 'user-agent': 'Tankprofi/1.0 (tesla-supercharger-import)' },
+    signal: AbortSignal.timeout(60000),
+  });
+  const sourceText = await response.text();
+  if (!response.ok) throw new Error(`supercharge.info failed with HTTP ${response.status}: ${sourceText.slice(0, 200)}`);
+  const sourceSites = JSON.parse(sourceText);
+  const germanySites = (Array.isArray(sourceSites) ? sourceSites : [])
+    .filter((site) => site?.address?.country === 'Germany' || Number(site?.address?.countryId) === 103);
+  const activeSites = germanySites
+    .filter((site) => includePlanned || String(site.status || '').toUpperCase() === 'OPEN');
+  const stations = activeSites
+    .map(normalizeTeslaSuperchargeInfoSite)
+    .filter(Boolean)
+    .slice(0, limit);
+  let batch = db.batch();
+  let batchSize = 0;
+  for (const station of stations) {
+    batch.set(db.collection('charging_stations').doc(station.stationId), station, { merge: true });
+    batchSize += 1;
+    if (batchSize >= 450) {
+      await batch.commit();
+      batch = db.batch();
+      batchSize = 0;
+    }
+  }
+  if (batchSize) await batch.commit();
+  const chargingPointCount = stations.reduce((sum, station) => sum + Number(station.chargingPointCount || 0), 0);
+  await db.collection('tankprofi_jobs').doc('charging-tesla-import').set({
+    jobId: 'charging-tesla-import',
+    source: 'supercharge.info',
+    sourceUrl: superchargeInfoSitesUrl,
+    importedStations: stations.length,
+    importedChargingPoints: chargingPointCount,
+    discoveredCount: germanySites.length,
+    openCount: activeSites.length,
+    lastRunAt: FieldValue.serverTimestamp(),
+    durationMs: Date.now() - startedAt,
+  }, { merge: true });
+  return sendJson(res, {
+    ok: true,
+    source: 'supercharge.info',
+    sourceUrl: superchargeInfoSitesUrl,
+    sourceLicense: 'Quelle: supercharge.info',
+    discoveredCount: germanySites.length,
+    openCount: activeSites.length,
+    importedStations: stations.length,
+    importedChargingPoints: chargingPointCount,
+    durationMs: Date.now() - startedAt,
+    sample: stations.slice(0, 10).map((station) => ({
+      stationId: station.stationId,
+      name: station.name,
+      city: station.city,
+      chargingPointCount: station.chargingPointCount,
+      maxConnectorPowerKw: station.maxConnectorPowerKw,
+    })),
+  });
+}
+
+async function handleChargingTeslaOsmImport(req, res) {
+  const limit = Math.round(numberParam(req.query.limit || req.body?.limit, 300, 1, 2000));
+  const startedAt = Date.now();
+  const query = `
+[out:json][timeout:90];
+area(3600051477)->.de;
+(
+  nwr(area.de)["amenity"="charging_station"]["brand"~"Supercharger",i];
+  nwr(area.de)["amenity"="charging_station"]["operator"~"Supercharger",i];
+  nwr(area.de)["amenity"="charging_station"]["name"~"Tesla|Supercharger",i];
+  nwr(area.de)["socket:tesla_supercharger"];
+  nwr(area.de)["socket:tesla_supercharger_ccs"];
+);
+out center tags ${limit};
+`;
+  let text = '';
+  let usedSourceUrl = '';
+  const errors = [];
+  for (const sourceUrl of overpassApiUrls) {
+    try {
+      const response = await fetch(sourceUrl, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded; charset=utf-8',
+          'user-agent': 'Tankprofi/1.0 (tesla-supercharger-import)',
+        },
+        signal: AbortSignal.timeout(overpassRequestTimeoutMs),
+        body: new URLSearchParams({ data: query }).toString(),
+      });
+      text = await response.text();
+      if (!response.ok) {
+        errors.push(`${sourceUrl} HTTP ${response.status}: ${text.slice(0, 120)}`);
+        continue;
+      }
+      usedSourceUrl = sourceUrl;
+      break;
+    } catch (error) {
+      errors.push(`${sourceUrl}: ${error.message}`);
+    }
+  }
+  if (!usedSourceUrl) throw new Error(`Overpass failed: ${errors.join(' | ')}`);
+  const data = JSON.parse(text);
+  const stations = (data.elements || [])
+    .map(normalizeTeslaSuperchargerElement)
+    .filter(Boolean)
+    .slice(0, limit);
+  const batch = db.batch();
+  stations.forEach((station) => {
+    batch.set(db.collection('charging_stations').doc(station.stationId), station, { merge: true });
+  });
+  if (stations.length) await batch.commit();
+  const chargingPointCount = stations.reduce((sum, station) => sum + Number(station.chargingPointCount || 0), 0);
+  await db.collection('tankprofi_jobs').doc('charging-tesla-import').set({
+    jobId: 'charging-tesla-import',
+    source: 'OpenStreetMap Overpass',
+    sourceUrl: usedSourceUrl,
+    importedStations: stations.length,
+    importedChargingPoints: chargingPointCount,
+    lastRunAt: FieldValue.serverTimestamp(),
+    durationMs: Date.now() - startedAt,
+  }, { merge: true });
+  return sendJson(res, {
+    ok: true,
+    source: 'OpenStreetMap Overpass',
+    sourceUrl: usedSourceUrl,
+    sourceLicense: 'ODbL',
+    discoveredCount: data.elements?.length || 0,
+    importedStations: stations.length,
+    importedChargingPoints: chargingPointCount,
+    durationMs: Date.now() - startedAt,
+    sample: stations.slice(0, 10).map((station) => ({
+      stationId: station.stationId,
+      name: station.name,
+      city: station.city,
+      chargingPointCount: station.chargingPointCount,
+      maxConnectorPowerKw: station.maxConnectorPowerKw,
+    })),
+  });
+}
+
 function invalidChargingDocument(data) {
   const sourceId = String(data?.sourceId || '').trim();
   const stationId = String(data?.stationId || '').trim();
   const lat = Number(data?.lat);
   const lng = Number(data?.lng);
-  return !/^\d+$/.test(sourceId)
-    || !/^bnetza_\d+$/.test(stationId)
+  const isBnetza = data?.source === 'bnetza' || /^bnetza_\d+$/.test(stationId);
+  const isOsmTesla = data?.source === 'openstreetmap_overpass' && /^osm_tesla_/.test(stationId);
+  const isSuperchargeInfo = data?.source === 'supercharge_info' && /^supercharge_info_/.test(stationId);
+  return !(isBnetza || isOsmTesla || isSuperchargeInfo)
+    || (isBnetza && !/^\d+$/.test(sourceId))
     || !Number.isFinite(lat)
     || !Number.isFinite(lng)
     || lat < 47
@@ -5224,6 +5578,17 @@ function groupChargingFacilities(stations, origin = null) {
   });
 }
 
+async function loadChargingDocsWithSupplemental(limit = 30000) {
+  const [primarySnapshot, teslaSnapshot] = await Promise.all([
+    db.collection('charging_stations').orderBy('sourceId').limit(limit).get(),
+    db.collection('charging_stations').where('source', '==', 'supercharge_info').limit(1000).get(),
+  ]);
+  const byId = new Map();
+  primarySnapshot.docs.forEach((doc) => byId.set(doc.id, doc));
+  teslaSnapshot.docs.forEach((doc) => byId.set(doc.id, doc));
+  return [...byId.values()];
+}
+
 async function handleChargingStations(req, res) {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
@@ -5239,8 +5604,7 @@ async function handleChargingStations(req, res) {
   const limit = Math.round(numberParam(req.query.limit, distributionMode || cityMode ? 30000 : 100, 1, maxLimit));
   let docs = [];
   if (cityMode) {
-    const snapshot = await db.collection('charging_stations').orderBy('sourceId').limit(30000).get();
-    docs = snapshot.docs;
+    docs = await loadChargingDocsWithSupplemental(30000);
   } else if (hasOrigin) {
     const latDelta = radiusKm / 111;
     const snapshot = await db.collection('charging_stations')
@@ -5250,8 +5614,7 @@ async function handleChargingStations(req, res) {
       .get();
     docs = snapshot.docs;
   } else {
-    const snapshot = await db.collection('charging_stations').orderBy('sourceId').limit(limit).get();
-    docs = snapshot.docs;
+    docs = distributionMode ? await loadChargingDocsWithSupplemental(30000) : (await db.collection('charging_stations').orderBy('sourceId').limit(limit).get()).docs;
   }
   const origin = hasOrigin
     ? { lat, lng }
@@ -5308,8 +5671,8 @@ function chargingCityKeys(city) {
 async function handleChargingCities(req, res) {
   const limit = Math.round(numberParam(req.query.limit, 20, 1, 20));
   const cities = defaultCityConfig.slice(0, limit);
-  const snapshot = await db.collection('charging_stations').orderBy('sourceId').limit(30000).get();
-  const rawStations = snapshot.docs
+  const docs = await loadChargingDocsWithSupplemental(30000);
+  const rawStations = docs
     .map((doc) => normalizeChargingForClient(doc))
     .filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lng));
   const facilities = groupChargingFacilities(rawStations);
@@ -5355,9 +5718,9 @@ async function handleChargingCities(req, res) {
 
 async function handleChargingOperators(req, res) {
   const limit = Math.round(numberParam(req.query.limit, 40, 1, 200));
-  const snapshot = await db.collection('charging_stations').orderBy('sourceId').limit(30000).get();
+  const docs = await loadChargingDocsWithSupplemental(30000);
   const operators = new Map();
-  snapshot.docs.forEach((doc) => {
+  docs.forEach((doc) => {
     const station = normalizeChargingForDistribution(doc);
     if (!Number.isFinite(station.lat) || !Number.isFinite(station.lng)) return;
     const label = String(station.operatorName || station.displayName || station.name || 'Betreiber unbekannt').trim() || 'Betreiber unbekannt';
@@ -5717,6 +6080,7 @@ export const api = onRequest({
     if (endpoint === 'addressExport') return await handleAddressExport(req, res);
     if (endpoint === 'addressConsolidate') return await handleAddressConsolidate(req, res);
     if (endpoint === 'chargingImport') return await handleChargingImport(req, res);
+    if (endpoint === 'chargingTeslaImport') return await handleChargingTeslaImport(req, res);
     if (endpoint === 'chargingCleanup') return await handleChargingCleanup(req, res);
     if (endpoint === 'chargingStations') return await handleChargingStations(req, res);
     if (endpoint === 'chargingCities') return await handleChargingCities(req, res);

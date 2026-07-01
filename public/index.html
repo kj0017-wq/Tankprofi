@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
-    <link rel="stylesheet" href="assets/css/app.css?v=20260630-ev-filter-chain">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260701-search-ok-map-favorites-stable">
 </head>
 <body>
     <section class="splash-screen" id="splashScreen" aria-label="Tankprofi wird geladen">
@@ -69,7 +69,7 @@
                     <label class="sr-only" for="searchInput">Adresse, Ort oder PLZ</label>
                     <div class="search-row">
                         <input id="searchInput" type="search" autocomplete="off" placeholder="Adresse, Ort oder PLZ" inputmode="search">
-                        <button class="icon-button primary" id="searchButton" type="button" aria-label="Suchen" title="Suchen">⌕</button>
+                        <button class="icon-button primary search-submit-button" id="searchButton" type="button" aria-label="Suchen" title="Suchen">OK</button>
                     </div>
                     <div class="suggestions" id="suggestions" role="listbox"></div>
                 </div>
@@ -101,6 +101,7 @@
                     <div id="map"></div>
                     <button class="driving-map-back" id="drivingMapBackButton" type="button">Liste</button>
                     <div class="driving-map-speed" id="drivingMapSpeed" aria-label="Geschwindigkeit">0 km/h</div>
+                    <div class="driving-map-nearest" id="drivingMapNearest" aria-live="polite"></div>
                     <div class="map-legend" aria-label="Marker Legende">
                         <span><i class="dot cheap"></i>günstig</span>
                         <span><i class="dot mid"></i>mittel</span>
@@ -302,6 +303,8 @@
 
                     <section class="share-panel tankprofi-stats-panel" aria-label="Tankprofi Datenbestand">
                         <strong>Gesammelte Daten</strong>
+                        <details class="settings-data-section" open>
+                            <summary>Verbrenner-Daten</summary>
                         <div class="stats-grid">
                             <div class="stat-item">
                                 <span>Adressen</span>
@@ -348,6 +351,29 @@
                             <button class="text-button" id="cityForceUpdateButton" type="button">Trotzdem erzwingen</button>
                             <span id="cityUpdateStatus">Nur gespeicherte Snapshots werden angezeigt.</span>
                         </div>
+                        </details>
+                        <details class="settings-data-section">
+                            <summary>Elektro-Daten</summary>
+                            <div class="stats-grid stats-grid-electric">
+                                <div class="stat-item">
+                                    <span>Ladeeinrichtungen</span>
+                                    <b id="tankprofiElectricStationCount">...</b>
+                                </div>
+                                <div class="stat-item">
+                                    <span>BNetzA</span>
+                                    <b id="tankprofiElectricBnetzaCount">...</b>
+                                </div>
+                                <div class="stat-item">
+                                    <span>Tesla Supercharger</span>
+                                    <b id="tankprofiElectricTeslaCount">...</b>
+                                </div>
+                                <div class="stat-item">
+                                    <span>Schnellladen</span>
+                                    <b id="tankprofiElectricFastCount">...</b>
+                                </div>
+                            </div>
+                            <span class="settings-data-note">Elektro wird separat aus dem Ladesaeulenbestand gefuehrt.</span>
+                        </details>
                     </section>
                 </div>
             </section>
@@ -370,9 +396,10 @@
     </template>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <script type="module" src="assets/js/firebase-app.js?v=20260630-ev-filter-chain"></script>
-    <script src="assets/js/app.js?v=20260630-ev-filter-chain" defer></script>
+    <script type="module" src="assets/js/firebase-app.js?v=20260701-city-speed-display-plus3"></script>
+    <script src="assets/js/app.js?v=20260701-search-ok-map-favorites-stable" defer></script>
 </body>
 </html>
 
