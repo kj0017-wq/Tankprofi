@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-drive-arrow-higher';
+const appVersion = '20260701-drive-arrow-balanced';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -45,7 +45,7 @@ const DRIVE_MAP_MANUAL_PAUSE_MS = 15 * 1000;
 const DRIVE_MAP_INITIAL_ZOOM_DELAY_MS = 5 * 1000;
 const DRIVE_MAP_NEAREST_OPEN_DELAY_MS = 1000;
 const DRIVE_MAP_FOLLOW_ZOOM = 17;
-const DRIVE_MAP_USER_VERTICAL_OFFSET_RATIO = 0.22;
+const DRIVE_MAP_USER_VERTICAL_OFFSET_RATIO = 0.16;
 const DRIVE_CITY_MAP_RADIUS_KM = 1.5;
 const DRIVE_CONTROL_REVEAL_MS = 10 * 1000;
 const DRIVE_CONTROL_MOVING_KMH = 5;
