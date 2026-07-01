@@ -2231,9 +2231,9 @@ button.city-row:focus {
     padding: 8px 12px;
     border: 2px solid var(--ink);
     border-radius: 8px;
-    color: var(--ink);
-    background: var(--yellow-300);
-    box-shadow: 3px 3px 0 rgba(16, 20, 25, 0.16);
+    color: var(--white);
+    background: linear-gradient(180deg, #1f69d6 0%, #0d47a1 100%);
+    box-shadow: 3px 3px 0 rgba(13, 71, 161, 0.24);
     font: inherit;
     text-align: left;
 }
@@ -2246,7 +2246,7 @@ button.city-row:focus {
 .autobahn-group-title span {
     min-width: 0;
     overflow: hidden;
-    color: var(--gray-700);
+    color: rgba(255, 255, 255, 0.82);
     font-size: 0.78rem;
     font-weight: 900;
     text-overflow: ellipsis;
