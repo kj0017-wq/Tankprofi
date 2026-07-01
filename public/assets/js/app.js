@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-ev-mode-sync-map';
+const appVersion = '20260701-ev-list-address-priority';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -8399,6 +8399,17 @@ async function loadNearestChargingStationsFromCurrentLocation() {
     renderDetail(null);
     updateBottomNav();
     updateSectionHeaderTone();
+    const query = String(els.searchInput?.value || '').trim();
+    const selectedLabel = String(state.selectedLocation?.label || '').trim();
+    if (query && query !== selectedLabel) {
+        state.selectedLocation = null;
+        state.chargingLoadKey = null;
+        els.resultCount.textContent = 'Laden';
+        els.resultMeta.textContent = 'Adresse wird gesucht ...';
+        els.results.innerHTML = '<div class="empty-state">Ladeanlagen zur eingegebenen Adresse werden geladen.</div>';
+        await loadChargingStations(beginNavigation());
+        return;
+    }
     els.resultCount.textContent = 'Laden';
     els.resultMeta.textContent = 'Aktueller Standort wird ermittelt ...';
     els.results.innerHTML = '<div class="empty-state">Die 100 naechsten Ladepunkte werden geladen.</div>';

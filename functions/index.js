@@ -5071,6 +5071,7 @@ async function handleChargingImport(req, res) {
     lastRunAt: FieldValue.serverTimestamp(),
     durationMs: Date.now() - startedAt,
   }, { merge: true });
+  if (stats.done) await refreshChargingCityCacheAfterImport('charging-import');
   sendJson(res, { ok: true, ...stats, durationMs: Date.now() - startedAt });
 }
 
@@ -5276,6 +5277,7 @@ async function handleChargingTeslaImport(req, res) {
     lastRunAt: FieldValue.serverTimestamp(),
     durationMs: Date.now() - startedAt,
   }, { merge: true });
+  await refreshChargingCityCacheAfterImport('charging-tesla-import');
   return sendJson(res, {
     ok: true,
     source: 'supercharge.info',
@@ -5357,6 +5359,7 @@ out center tags ${limit};
     lastRunAt: FieldValue.serverTimestamp(),
     durationMs: Date.now() - startedAt,
   }, { merge: true });
+  await refreshChargingCityCacheAfterImport('charging-tesla-import');
   return sendJson(res, {
     ok: true,
     source: 'OpenStreetMap Overpass',
@@ -5622,6 +5625,106 @@ async function loadChargingDocsAroundOrigin(lat, lng, radiusKm) {
   return docs;
 }
 
+async function calculateChargingCityRankings() {
+  const docs = await loadChargingDocsWithSupplemental(30000);
+  const rawStations = docs
+    .map((doc) => normalizeChargingForClient(doc))
+    .filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lng));
+  const facilities = groupChargingFacilities(rawStations);
+
+  const rankings = defaultCityConfig.map((city) => {
+    const cityKeys = chargingCityKeys(city);
+    const matches = facilities.filter((station) => cityKeys.has(normalizeText(station.city)));
+    const chargingPointCount = matches.reduce((sum, station) => sum + Number(station.chargingPointCount || 0), 0);
+    const chargingUnitCount = matches.reduce((sum, station) => sum + Number(station.chargingUnitCount || 1), 0);
+    const fastChargingCount = matches.filter((station) => station.fastCharging === true || Number(station.maxConnectorPowerKw || station.nominalPowerKw || 0) >= 50).length;
+    const maxPowerKw = matches.reduce((max, station) => Math.max(max, Number(station.maxConnectorPowerKw || station.nominalPowerKw || 0)), 0);
+    const operatorCount = new Set(matches
+      .map((station) => normalizeText(station.operatorName || station.displayName || station.name || ''))
+      .filter(Boolean)).size;
+    return {
+      cityId: city.cityId,
+      cityName: city.cityName,
+      state: city.state,
+      sortOrder: city.sortOrder,
+      centerLat: city.centerLat,
+      centerLng: city.centerLng,
+      matchMode: 'city',
+      stationCount: matches.length,
+      chargingPointCount,
+      chargingUnitCount,
+      fastChargingCount,
+      operatorCount,
+      maxPowerKw,
+    };
+  });
+
+  return { rankings, stationTotal: facilities.length };
+}
+
+async function writeChargingCityCache(reason = 'manual') {
+  const { rankings, stationTotal } = await calculateChargingCityRankings();
+  const updatedAt = FieldValue.serverTimestamp();
+  let batch = db.batch();
+  let batchSize = 0;
+  rankings.forEach((ranking) => {
+    batch.set(db.collection('charging_city_rankings').doc(ranking.cityId), {
+      ...ranking,
+      source: 'Bundesnetzagentur Ladesaeulenregister',
+      sourceUpdatedAt: bnetzaChargingSourceDate,
+      updatedAt,
+    }, { merge: true });
+    batchSize += 1;
+    if (batchSize >= 450) {
+      throw new Error('Unexpected charging city ranking batch overflow.');
+    }
+  });
+  batch.set(db.collection('tankprofi_jobs').doc('charging-city-cache'), {
+    jobId: 'charging-city-cache',
+    reason,
+    source: 'Bundesnetzagentur Ladesaeulenregister',
+    sourceUpdatedAt: bnetzaChargingSourceDate,
+    cityCount: rankings.length,
+    stationTotal,
+    lastRunAt: updatedAt,
+  }, { merge: true });
+  await batch.commit();
+  return { rankings, stationTotal };
+}
+
+async function readChargingCityCache(limit) {
+  const [jobDoc, rankingsSnapshot] = await Promise.all([
+    db.collection('tankprofi_jobs').doc('charging-city-cache').get(),
+    db.collection('charging_city_rankings').get(),
+  ]);
+  if (!jobDoc.exists || rankingsSnapshot.empty) return null;
+  const job = jobDoc.data() || {};
+  const rankings = rankingsSnapshot.docs
+    .map((doc) => doc.data())
+    .sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0))
+    .slice(0, limit);
+  if (!rankings.length) return null;
+  return {
+    rankings,
+    stationTotal: Number(job.stationTotal || 0),
+    sourceUpdatedAt: job.sourceUpdatedAt || bnetzaChargingSourceDate,
+    cachedAt: isoFromTimestamp(job.lastRunAt),
+  };
+}
+
+async function refreshChargingCityCacheAfterImport(reason) {
+  try {
+    await writeChargingCityCache(reason);
+  } catch (error) {
+    await db.collection('tankprofi_jobs').doc('charging-city-cache').set({
+      jobId: 'charging-city-cache',
+      reason,
+      error: error.message || String(error),
+      failedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
+}
+
 async function handleChargingStations(req, res) {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
@@ -5697,49 +5800,31 @@ function chargingCityKeys(city) {
 
 async function handleChargingCities(req, res) {
   const limit = Math.round(numberParam(req.query.limit, 20, 1, 20));
-  const cities = defaultCityConfig.slice(0, limit);
-  const docs = await loadChargingDocsWithSupplemental(30000);
-  const rawStations = docs
-    .map((doc) => normalizeChargingForClient(doc))
-    .filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lng));
-  const facilities = groupChargingFacilities(rawStations);
-
-  const rankings = cities.map((city) => {
-    const cityKeys = chargingCityKeys(city);
-    const matches = facilities.filter((station) => cityKeys.has(normalizeText(station.city)));
-    const chargingPointCount = matches.reduce((sum, station) => sum + Number(station.chargingPointCount || 0), 0);
-    const chargingUnitCount = matches.reduce((sum, station) => sum + Number(station.chargingUnitCount || 1), 0);
-    const fastChargingCount = matches.filter((station) => station.fastCharging === true || Number(station.maxConnectorPowerKw || station.nominalPowerKw || 0) >= 50).length;
-    const maxPowerKw = matches.reduce((max, station) => Math.max(max, Number(station.maxConnectorPowerKw || station.nominalPowerKw || 0)), 0);
-    const operatorCount = new Set(matches
-      .map((station) => normalizeText(station.operatorName || station.displayName || station.name || ''))
-      .filter(Boolean)).size;
-    return {
-      cityId: city.cityId,
-      cityName: city.cityName,
-      state: city.state,
-      sortOrder: city.sortOrder,
-      centerLat: city.centerLat,
-      centerLng: city.centerLng,
-      matchMode: 'city',
-      stationCount: matches.length,
-      chargingPointCount,
-      chargingUnitCount,
-      fastChargingCount,
-      operatorCount,
-      maxPowerKw,
+  const refresh = ['1', 'true', 'yes'].includes(String(req.query.refresh || '').toLowerCase());
+  let cached = refresh ? null : await readChargingCityCache(limit);
+  if (!cached) {
+    const rebuilt = await writeChargingCityCache(refresh ? 'manual-refresh' : 'cache-miss');
+    cached = {
+      rankings: rebuilt.rankings
+        .sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0))
+        .slice(0, limit),
+      stationTotal: rebuilt.stationTotal,
+      sourceUpdatedAt: bnetzaChargingSourceDate,
+      cachedAt: new Date().toISOString(),
     };
-  });
+  }
 
   sendJson(res, {
     ok: true,
     source: 'Bundesnetzagentur Ladesaeulenregister',
-    sourceUpdatedAt: bnetzaChargingSourceDate,
+    sourceUpdatedAt: cached.sourceUpdatedAt || bnetzaChargingSourceDate,
     license: 'CC BY 4.0',
     matchMode: 'city',
-    cityCount: rankings.length,
-    stationTotal: facilities.length,
-    rankings,
+    cityCount: cached.rankings.length,
+    stationTotal: cached.stationTotal,
+    cached: true,
+    cachedAt: cached.cachedAt || null,
+    rankings: cached.rankings,
   });
 }
 
