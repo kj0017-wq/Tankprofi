@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-drive-arrow-centered';
+const appVersion = '20260701-drive-arrow-higher';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -45,6 +45,7 @@ const DRIVE_MAP_MANUAL_PAUSE_MS = 15 * 1000;
 const DRIVE_MAP_INITIAL_ZOOM_DELAY_MS = 5 * 1000;
 const DRIVE_MAP_NEAREST_OPEN_DELAY_MS = 1000;
 const DRIVE_MAP_FOLLOW_ZOOM = 17;
+const DRIVE_MAP_USER_VERTICAL_OFFSET_RATIO = 0.22;
 const DRIVE_CITY_MAP_RADIUS_KM = 1.5;
 const DRIVE_CONTROL_REVEAL_MS = 10 * 1000;
 const DRIVE_CONTROL_MOVING_KMH = 5;
@@ -1933,6 +1934,14 @@ function drivingMapBoundsAround(lat, lng, radiusKm) {
     );
 }
 
+function liftDrivingMapUserMarker({ animate = false } = {}) {
+    if (!state.map || state.map.type === 'fallback' || state.listMode !== 'driving' || state.view !== 'map') return;
+    const mapElement = state.map.getContainer?.();
+    const height = Number(mapElement?.clientHeight || 0);
+    const offsetY = Math.round(Math.max(96, Math.min(190, height * DRIVE_MAP_USER_VERTICAL_OFFSET_RATIO)));
+    state.map.panBy([0, offsetY], { animate });
+}
+
 function focusDrivingMapByHeading(stationsToShow, userPosition, { force = false } = {}) {
     if (!state.map || state.map.type === 'fallback' || state.listMode !== 'driving' || state.view !== 'map') return;
     if (els.detail.classList.contains('visible')) return;
@@ -1949,20 +1958,23 @@ function focusDrivingMapByHeading(stationsToShow, userPosition, { force = false 
     state.drivingMapProgrammaticMove = true;
     if (isMoving) {
         state.map.setView([lat, lng], DRIVE_MAP_FOLLOW_ZOOM, { animate: true });
+        window.setTimeout(() => liftDrivingMapUserMarker({ animate: true }), 140);
     } else if (state.drivingContext === 'city') {
         state.map.fitBounds(drivingMapBoundsAround(lat, lng, DRIVE_CITY_MAP_RADIUS_KM), {
             animate: false,
             padding: [18, 18],
             maxZoom: 15,
         });
+        liftDrivingMapUserMarker();
     } else {
         const targetZoom = Number.isFinite(speed) && speed > 40 ? 14 : 15;
         const zoom = Math.max(state.map.getZoom() || targetZoom, targetZoom);
         state.map.setView([lat, lng], zoom, { animate: false });
+        liftDrivingMapUserMarker();
     }
     window.setTimeout(() => {
         state.drivingMapProgrammaticMove = false;
-    }, 0);
+    }, isMoving ? 320 : 0);
     updateDrivingMapRotation();
 }
 
