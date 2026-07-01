@@ -1481,15 +1481,15 @@ select:focus {
     display: inline-flex;
     align-items: center;
     min-height: 30px;
-    padding: 4px 9px;
+    padding: 4px 8px;
     border: 2px solid var(--ink);
     border-radius: 8px;
-    max-width: calc(50% - 88px);
+    max-width: min(164px, calc(50% - 40px));
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--blue-700);
-    font-size: 0.95rem;
+    font-size: 0.82rem;
     font-weight: 950;
     letter-spacing: 0;
     box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.18);
@@ -7255,6 +7255,13 @@ button.city-row:focus {
         font-size: 1.95rem;
     }
 
+    .driving-mode .drive-title-text {
+        max-width: min(148px, calc(50% - 36px));
+        min-height: 32px;
+        padding: 4px 6px;
+        font-size: 0.72rem;
+    }
+
     .driving-mode .drive-header-list-button {
         min-width: 76px;
         min-height: 38px;
@@ -7275,6 +7282,13 @@ button.city-row:focus {
         grid-template-columns: 40px minmax(0, 1fr) 138px !important;
         min-height: calc(66px + env(safe-area-inset-top)) !important;
         padding-top: max(22px, calc(5px + env(safe-area-inset-top))) !important;
+    }
+}
+
+@media (max-width: 360px) {
+    .driving-mode .drive-title-text {
+        max-width: min(132px, calc(50% - 30px));
+        font-size: 0.66rem;
     }
 }
 
