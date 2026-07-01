@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-start-switch-unblock';
+const appVersion = '20260701-start-switch-force-load';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -7891,25 +7891,37 @@ function releaseStartupVehicleChoicePending() {
     setStartupInteractionLock(false);
 }
 
+function ensureVehicleSwitchSearchLocation() {
+    if (state.selectedLocation
+        && Number.isFinite(Number(state.selectedLocation.lat))
+        && Number.isFinite(Number(state.selectedLocation.lng))) {
+        return state.selectedLocation;
+    }
+    const lastLocation = loadLastLocation();
+    const nextLocation = lastLocation || { ...startupFallbackLocation };
+    state.selectedLocation = nextLocation;
+    if (els.searchInput) els.searchInput.value = nextLocation.label || '';
+    if (els.suggestions) els.suggestions.innerHTML = '';
+    return nextLocation;
+}
+
+function reloadListAfterVehicleSwitch(nextMode) {
+    ensureVehicleSwitchSearchLocation();
+    if (nextMode === 'electric') {
+        loadChargingStations(beginNavigation());
+        return;
+    }
+    els.resultMeta.textContent = 'Tankstellen werden geladen ...';
+    loadStations({ force: true });
+}
+
 function chooseVehicleMode(mode) {
     const nextMode = mode === 'electric' ? 'electric' : DEFAULT_VEHICLE_MODE;
     releaseStartupVehicleChoicePending();
     setVehicleMode(nextMode);
     if (els.vehicleChoice) els.vehicleChoice.hidden = true;
     clearListForVehicleSwitch(nextMode);
-    if (nextMode === 'electric') {
-        if (!state.selectedLocation) {
-            loadNearestChargingStationsFromCurrentLocation().catch(() => null);
-            return;
-        }
-        loadChargingStations(beginNavigation());
-        return;
-    }
-    if (state.selectedLocation) {
-        loadStations({ force: true });
-    } else {
-        restoreStoredStartState();
-    }
+    reloadListAfterVehicleSwitch(nextMode);
 }
 
 function openVehicleChoice() {
@@ -9049,21 +9061,8 @@ function bindEvents() {
                 releaseStartupVehicleChoicePending();
                 setVehicleMode(nextMode);
                 clearListForVehicleSwitch(nextMode);
-                if (nextMode === 'electric') {
-                    if (!state.selectedLocation) {
-                        loadNearestChargingStationsFromCurrentLocation().catch(() => null);
-                        return;
-                    }
-                    loadChargingStations(beginNavigation());
-                    return;
-                }
-                if (state.selectedLocation) {
-                    loadStations({ force: true });
-                    return;
-                } else {
-                    restoreStoredStartState();
-                    return;
-                }
+                reloadListAfterVehicleSwitch(nextMode);
+                return;
             } else {
                 saveUserSettings();
             }
