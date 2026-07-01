@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-autobahn-route-geometry';
+const appVersion = '20260701-ev-list-nearby-only';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -114,6 +114,7 @@ const state = {
     chargingCityContext: null,
     chargingSearchContext: 'city',
     chargingSearchRadiusKm: ELECTRIC_CITY_RADIUS_KM,
+    chargingShowOperators: false,
     chargingFilters: {
         operator: 'all',
         connector: 'all',
@@ -3292,6 +3293,7 @@ function prepareChargingSearch(clearLocation = false) {
     state.selectedHighway = 'all';
     state.chargingCityContext = null;
     state.chargingFilters = { operator: 'all', connector: 'all', minPower: 'all' };
+    state.chargingShowOperators = false;
     if (clearLocation) state.selectedLocation = null;
     setCityMode(false);
     setDirectoryMode(false);
@@ -6994,6 +6996,7 @@ function chargingOperatorHtml(operator, index) {
 }
 
 function chargingOperatorsPanelHtml() {
+    if (!state.chargingShowOperators) return '';
     if (state.chargingFilters?.operator && state.chargingFilters.operator !== 'all') return '';
     if (!state.chargingOperators.length) {
         return `
@@ -7083,6 +7086,7 @@ async function applyChargingOperatorFilter(operatorName) {
 
 function resetChargingOperatorFilter() {
     state.chargingFilters = { operator: 'all', connector: 'all', minPower: 'all' };
+    state.chargingShowOperators = true;
     renderChargingList();
     renderMarkers();
 }
@@ -8352,6 +8356,7 @@ async function loadNearestChargingStationsFromCurrentLocation() {
     prepareChargingSearch(false);
     state.chargingCityContext = null;
     state.chargingFilters = { operator: 'all', connector: 'all', minPower: 'all' };
+    state.chargingShowOperators = false;
     state.chargingStations = [];
     renderDetail(null);
     updateBottomNav();
@@ -8736,6 +8741,7 @@ function bindEvents() {
                 state.cityMapMode = 'overview';
                 state.chargingCityContext = null;
                 state.chargingFilters = { operator: 'all', connector: 'all', minPower: 'all' };
+                state.chargingShowOperators = true;
                 renderDetail(null);
                 setView('list');
                 updateBottomNav();
