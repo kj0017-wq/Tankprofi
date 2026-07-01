@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-vehicle-start-choice';
+const appVersion = '20260701-vehicle-switch-reload';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -7856,15 +7856,53 @@ function setVehicleMode(mode, options = {}) {
     }
 }
 
+function clearListForVehicleSwitch(nextMode) {
+    state.selectedId = null;
+    state.stations = [];
+    state.chargingStations = [];
+    state.chargingLoadKey = null;
+    state.chargingDistributionLoadKey = null;
+    state.chargingOperatorsLoadKey = null;
+    state.cityMapMode = 'overview';
+    state.selectedCityId = null;
+    state.selectedHighway = 'all';
+    state.chargingCityContext = null;
+    state.chargingFilters = { operator: 'all', connector: 'all', minPower: 'all' };
+    state.chargingShowOperators = false;
+    renderDetail(null);
+    setView('list');
+    if (nextMode === 'electric') {
+        state.listMode = 'charging';
+        updateBottomNav();
+        updateSectionHeaderTone();
+        els.resultCount.textContent = 'Laden';
+        els.resultMeta.textContent = 'Ladeanlagen werden neu geladen ...';
+        els.results.innerHTML = '<div class="empty-state">Elektro-Ladeanlagen werden neu geladen.</div>';
+        return;
+    }
+    state.listMode = 'results';
+    updateBottomNav();
+    updateSectionHeaderTone();
+    renderNormalSearchLoading('Tankstellen werden neu geladen ...');
+}
+
 function chooseVehicleMode(mode) {
-    setVehicleMode(mode);
+    const nextMode = mode === 'electric' ? 'electric' : DEFAULT_VEHICLE_MODE;
+    setVehicleMode(nextMode);
     if (els.vehicleChoice) els.vehicleChoice.hidden = true;
-    if (state.vehicleMode === 'electric' && state.selectedLocation) {
-        prepareChargingSearch(false);
+    clearListForVehicleSwitch(nextMode);
+    if (nextMode === 'electric') {
+        if (!state.selectedLocation) {
+            loadNearestChargingStationsFromCurrentLocation().catch(() => null);
+            return;
+        }
         loadChargingStations(beginNavigation());
-    } else if (state.vehicleMode !== 'electric' && state.listMode === 'charging') {
-        prepareNormalSearch(false);
-        if (state.selectedLocation) loadStations({ force: true });
+        return;
+    }
+    if (state.selectedLocation) {
+        loadStations({ force: true });
+    } else {
+        restoreStoredStartState();
     }
 }
 
@@ -9001,16 +9039,22 @@ function bindEvents() {
     [els.vehicleMode, els.radius, els.fuel, els.limit, els.openOnly, els.pricedOnly].filter(Boolean).forEach((el) => {
         el.addEventListener('change', () => {
             if (el === els.vehicleMode) {
-                setVehicleMode(els.vehicleMode.value);
-                if (isElectricMode()) {
-                    prepareChargingSearch(false);
-                    state.chargingLoadKey = null;
+                const nextMode = els.vehicleMode.value === 'electric' ? 'electric' : DEFAULT_VEHICLE_MODE;
+                setVehicleMode(nextMode);
+                clearListForVehicleSwitch(nextMode);
+                if (nextMode === 'electric') {
+                    if (!state.selectedLocation) {
+                        loadNearestChargingStationsFromCurrentLocation().catch(() => null);
+                        return;
+                    }
                     loadChargingStations(beginNavigation());
                     return;
                 }
-                if (state.listMode === 'charging') {
-                    prepareNormalSearch(false);
-                    if (state.selectedLocation) loadStations({ force: true });
+                if (state.selectedLocation) {
+                    loadStations({ force: true });
+                    return;
+                } else {
+                    restoreStoredStartState();
                     return;
                 }
             } else {
