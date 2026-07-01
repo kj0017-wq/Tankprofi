@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-ev-progressive-radius';
+const appVersion = '20260701-ev-autobahn-mode';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -8809,6 +8809,13 @@ function bindEvents() {
 
             if (action === 'autobahn') {
                 if (state.drivingActive) stopDrivingMode(false);
+                if (isElectricMode()) {
+                    startDrivingMode('ALL', { vehicleMode: 'electric' }).catch((error) => {
+                        setStatus('Fehler');
+                        els.resultMeta.textContent = error.message || 'Elektro-Autobahnmodus konnte nicht gestartet werden.';
+                    });
+                    return;
+                }
                 captureNormalSearchBeforeSection();
                 state.listMode = 'autobahn';
                 state.cityMapMode = 'overview';
@@ -8847,7 +8854,10 @@ function bindEvents() {
                 const fromCities = state.listMode === 'cities';
                 if (state.drivingActive) stopDrivingMode(false);
                 if (fromAutobahn) {
-                    setVehicleMode('combustion', { persist: false, silent: true });
+                    if (isElectricMode()) {
+                        loadNearestChargingStationsFromCurrentLocation().catch(() => null);
+                        return;
+                    }
                     prepareNormalSearch(false);
                     updateBottomNav();
                     if (restoreNormalSearchAfterSection()) return;
