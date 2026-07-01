@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-combustion-list-reload';
+const appVersion = '20260701-switch-current-location';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -7891,18 +7891,40 @@ function releaseStartupVehicleChoicePending() {
     setStartupInteractionLock(false);
 }
 
-function ensureVehicleSwitchSearchLocation() {
+function hasUsableLocation(location) {
+    return Boolean(location)
+        && Number.isFinite(Number(location.lat))
+        && Number.isFinite(Number(location.lng));
+}
+
+function vehicleSwitchSearchText() {
+    const query = String(els.searchInput?.value || '').trim();
+    if (!query) return '';
+    const reservedLabels = new Set([
+        'aktueller standort',
+        'deutschland mitte',
+    ]);
+    return reservedLabels.has(query.toLowerCase()) ? '' : query;
+}
+
+async function resolveVehicleSwitchSearchLocation() {
     if (state.selectedLocation
         && Number.isFinite(Number(state.selectedLocation.lat))
         && Number.isFinite(Number(state.selectedLocation.lng))) {
-        return state.selectedLocation;
+        return true;
+    }
+    if (vehicleSwitchSearchText()) {
+        await chooseFirstSuggestion();
+        if (hasUsableLocation(state.selectedLocation)) return true;
     }
     const lastLocation = loadLastLocation();
-    const nextLocation = lastLocation || { ...startupFallbackLocation };
-    state.selectedLocation = nextLocation;
-    if (els.searchInput) els.searchInput.value = nextLocation.label || '';
-    if (els.suggestions) els.suggestions.innerHTML = '';
-    return nextLocation;
+    if (hasUsableLocation(lastLocation)) {
+        state.selectedLocation = lastLocation;
+        if (els.searchInput) els.searchInput.value = lastLocation.label || '';
+        if (els.suggestions) els.suggestions.innerHTML = '';
+        return true;
+    }
+    return false;
 }
 
 function resetCombustionSearchBeforeReload() {
@@ -7917,13 +7939,27 @@ function resetCombustionSearchBeforeReload() {
     }
 }
 
-function reloadListAfterVehicleSwitch(nextMode) {
-    ensureVehicleSwitchSearchLocation();
+async function reloadListAfterVehicleSwitch(nextMode) {
     if (nextMode === 'electric') {
-        loadChargingStations(beginNavigation());
+        loadNearestChargingStationsFromCurrentLocation().catch(() => null);
         return;
     }
     resetCombustionSearchBeforeReload();
+    const hasLocation = await resolveVehicleSwitchSearchLocation();
+    if (!hasLocation) {
+        els.resultCount.textContent = 'Standort';
+        els.resultMeta.textContent = 'Aktueller Standort wird ermittelt ...';
+        els.results.innerHTML = '<div class="empty-state">Standort wird ermittelt, dann werden Tankstellen geladen.</div>';
+        await useCurrentLocation({
+            timeoutMs: 12000,
+            onFail: () => {
+                els.resultCount.textContent = 'Standort offen';
+                els.resultMeta.textContent = 'Standort konnte nicht ermittelt werden.';
+                els.results.innerHTML = '<div class="empty-state">Bitte Standortfreigabe erlauben oder eine PLZ eingeben.</div>';
+            },
+        });
+        return;
+    }
     els.resultMeta.textContent = 'Tankstellen werden geladen ...';
     loadStations({ force: true }).catch((error) => {
         setStatus('Fehler');
@@ -7939,7 +7975,7 @@ function chooseVehicleMode(mode) {
     setVehicleMode(nextMode);
     if (els.vehicleChoice) els.vehicleChoice.hidden = true;
     clearListForVehicleSwitch(nextMode);
-    reloadListAfterVehicleSwitch(nextMode);
+    reloadListAfterVehicleSwitch(nextMode).catch(() => null);
 }
 
 function openVehicleChoice() {
@@ -9079,7 +9115,7 @@ function bindEvents() {
                 releaseStartupVehicleChoicePending();
                 setVehicleMode(nextMode);
                 clearListForVehicleSwitch(nextMode);
-                reloadListAfterVehicleSwitch(nextMode);
+                reloadListAfterVehicleSwitch(nextMode).catch(() => null);
                 return;
             } else {
                 saveUserSettings();
