@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-autobahn-a6-map-context';
+const appVersion = '20260701-autobahn-map-visible';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -1387,7 +1387,7 @@ function setView(view) {
                         state.drivingMapProgrammaticMove = false;
                     }, 0);
                 }
-            } else {
+            } else if (state.listMode !== 'autobahn') {
                 state.map.setView([51.1657, 10.4515], state.stations.length ? 7 : 6, { animate: false });
             }
         }
@@ -7835,7 +7835,7 @@ async function openAutobahnMap(options = {}) {
     syncAutobahnVisibleStations();
     setView('map');
     renderMarkers();
-    els.resultCount.textContent = 'Karte';
+    els.resultCount.textContent = state.selectedHighway === 'all' ? 'Autobahn-Karte' : `${state.selectedHighway} Karte`;
     els.resultMeta.textContent = `${state.stations.length} Standorte - ${autobahnDataStandText(state.stations)}`;
 }
 
@@ -8437,7 +8437,7 @@ function updateBottomNav() {
         const active = (action === 'map' && state.view === 'map')
             || (action === 'favorites' && state.view === 'list' && state.listMode === 'favorites')
             || (action === 'cities' && state.listMode === 'cities')
-            || (action === 'autobahn' && state.listMode === 'autobahn')
+            || (action === 'autobahn' && state.view === 'list' && state.listMode === 'autobahn')
             || (action === 'charging' && state.listMode === 'charging' && state.chargingShowOperators)
             || (action === 'settings' && els.settingsSheet?.classList.contains('open'))
             || (action === 'list' && state.view === 'list' && !els.detail.classList.contains('visible') && (
