@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-search-ok-map-favorites-stable';
+const appVersion = '20260701-autobahn-map-load';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -60,6 +60,7 @@ const state = {
     drivingMarkerLayer: null,
     drivingRouteLayer: null,
     drivingDirectionLayer: null,
+    autobahnRouteLayer: null,
     detailMapZoomTimer: null,
     drivingMapFocusTimer: null,
     drivingMapInitialZoomTimer: null,
@@ -325,10 +326,7 @@ function setupTopControls() {
     }
 
     const sortToggle = document.querySelector('.sort-toggle');
-    if (els.locationButton) {
-        els.locationButton.lastChild.textContent = 'Standort';
-        actions.appendChild(els.locationButton);
-    }
+    if (els.locationButton) els.locationButton.hidden = true;
     if (sortToggle) actions.appendChild(sortToggle);
     if (els.refresh) els.refresh.remove();
 }
@@ -1505,6 +1503,7 @@ function renderMarkers() {
     }
     renderUserLocationMarker();
     renderDrivingRouteOverlay();
+    renderAutobahnRouteOverlay();
 }
 
 function renderDrivingMap() {
@@ -1926,6 +1925,10 @@ function clearDrivingRouteOverlay() {
         state.drivingDirectionLayer.remove();
         state.drivingDirectionLayer = null;
     }
+    if (state.autobahnRouteLayer) {
+        state.autobahnRouteLayer.remove();
+        state.autobahnRouteLayer = null;
+    }
 }
 
 function drivingDirectionTarget(position, direction) {
@@ -2002,6 +2005,37 @@ function renderDrivingRouteOverlay() {
     ].filter(([lat, lng]) => Number.isFinite(Number(lat)) && Number.isFinite(Number(lng)));
     if (fitPoints.length && !state.drivingMapFocusActive) {
         state.map.fitBounds(L.latLngBounds(fitPoints).pad(0.22), { maxZoom: 13 });
+    }
+}
+
+function renderAutobahnRouteOverlay() {
+    if (!state.map || state.map.type === 'fallback') return;
+    if (state.autobahnRouteLayer) {
+        state.autobahnRouteLayer.remove();
+        state.autobahnRouteLayer = null;
+    }
+    if (state.listMode !== 'autobahn' || state.selectedHighway === 'all') return;
+
+    syncAutobahnVisibleStations();
+    const routePoints = state.autobahnStations
+        .filter((station) => station.autobahnMode && station.highway === state.selectedHighway)
+        .filter((station) => Number.isFinite(Number(station.lat)) && Number.isFinite(Number(station.lng)))
+        .sort(sortAutobahnStationsByGps)
+        .map((station) => [Number(station.lat), Number(station.lng)]);
+    if (routePoints.length < 2) return;
+
+    state.autobahnRouteLayer = L.polyline(routePoints, {
+        color: '#ffd230',
+        weight: 7,
+        opacity: 0.72,
+        lineCap: 'round',
+        lineJoin: 'round',
+    }).addTo(state.map);
+    state.autobahnRouteLayer.bringToBack();
+
+    const bounds = L.latLngBounds(routePoints);
+    if (bounds.isValid()) {
+        state.map.fitBounds(bounds.pad(0.2), { maxZoom: 12, animate: true });
     }
 }
 
@@ -3196,14 +3230,33 @@ function prepareChargingSearch(clearLocation = false) {
     updateBottomNav();
 }
 
-function runManualSearch() {
-    if (isElectricMode()) {
-        prepareChargingSearch(true);
-        loadChargingStations(beginNavigation());
-        return;
+async function runManualSearch() {
+    const startedAt = Date.now();
+    beginDataRequest();
+    try {
+        const hasSearchText = Boolean(els.searchInput?.value?.trim());
+        if (isElectricMode()) {
+            prepareChargingSearch(hasSearchText);
+            if (!hasSearchText) {
+                await useCurrentLocation({ timeoutMs: 12000 });
+                return;
+            }
+            await loadChargingStations(beginNavigation());
+            return;
+        }
+        prepareNormalSearch(hasSearchText);
+        if (!hasSearchText) {
+            await useCurrentLocation({ timeoutMs: 12000 });
+            return;
+        }
+        await loadStations({ force: true });
+    } finally {
+        const remainingMs = 360 - (Date.now() - startedAt);
+        if (remainingMs > 0) {
+            await new Promise((resolve) => window.setTimeout(resolve, remainingMs));
+        }
+        endDataRequest();
     }
-    prepareNormalSearch(true);
-    loadStations({ force: true });
 }
 
 function runCurrentLocationSearch(options = {}) {
@@ -3793,10 +3846,6 @@ function renderCityStationList() {
             <div class="city-toolbar">
                 <button class="text-button city-back-button" type="button" data-city-back>Zurück</button>
                 <strong>${escapeHtml(city.cityName)} · Tankstellen</strong>
-                <div class="city-view-tabs">
-                    <button type="button" class="active" data-city-station-view="list">Liste</button>
-                    <button type="button" data-city-station-view="map">Karte</button>
-                </div>
                 <div class="city-fuel-tabs">
                     <button type="button" data-city-fuel="diesel">Diesel</button>
                     <button type="button" data-city-fuel="e5">E5</button>
@@ -3814,11 +3863,6 @@ function renderCityStationList() {
         state.selectedCityId = null;
         state.stations = [];
         renderResults();
-    });
-    els.results.querySelectorAll('[data-city-station-view]').forEach((button) => {
-        button.addEventListener('click', () => {
-            if (button.dataset.cityStationView === 'map') loadCityStations(state.selectedCityId, 'map');
-        });
     });
     els.results.querySelectorAll('[data-city-fuel]').forEach((button) => {
         button.classList.toggle('active', button.dataset.cityFuel === els.fuel.value);
@@ -7475,6 +7519,10 @@ async function loadAutobahnStations(target = 'list', requestId = state.navReques
 function openAutobahnMap() {
     state.listMode = 'autobahn';
     setDirectoryMode(true);
+    if (!state.autobahnStations.length) {
+        loadAutobahnStations('map', beginNavigation());
+        return;
+    }
     syncAutobahnVisibleStations();
     setView('map');
     renderMarkers();
@@ -7945,8 +7993,7 @@ function updateBottomNav() {
             icon.className = 'drive-back-icon';
             icon.setAttribute('aria-hidden', 'true');
             icon.textContent = '←';
-            badge.textContent = 'A';
-            els.driveMode.append(icon, badge);
+            els.driveMode.append(icon, document.createTextNode('Zurück'));
             els.driveMode.setAttribute('aria-label', 'Drive beenden und zurück');
             els.driveMode.title = 'Zurück';
         } else {
@@ -8161,6 +8208,13 @@ function clearDeliveredSearchText() {
     els.suggestions.innerHTML = '';
 }
 
+function clearListSearchInputForManualEntry() {
+    if (state.listMode !== 'results' || state.view !== 'list') return;
+    if (!els.searchInput.value.trim()) return;
+    els.searchInput.value = '';
+    els.suggestions.innerHTML = '';
+}
+
 function currentPosition(options = {}) {
     return new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -8363,6 +8417,7 @@ function restoreStartState() {
             state.startupLocationPending = false;
             state.selectedLocation = null;
             if (els.searchInput) els.searchInput.value = '';
+            setStartupInteractionLock(false);
             setStatus('Bereit');
             els.resultCount.textContent = 'Standort offen';
             els.resultMeta.textContent = 'Standort dauert zu lange.';
@@ -8380,18 +8435,21 @@ function bindEvents() {
     window.visualViewport?.addEventListener('resize', updateViewportHeightVar);
     window.visualViewport?.addEventListener('scroll', updateViewportHeightVar);
     els.searchInput.addEventListener('focus', clearDeliveredSearchText);
-    els.searchInput.addEventListener('pointerdown', clearDeliveredSearchText);
+    els.searchInput.addEventListener('pointerdown', clearListSearchInputForManualEntry);
     els.searchInput.addEventListener('input', updateSuggestions);
     els.searchInput.addEventListener('keydown', (event) => {
         if (isInteractionLocked()) {
             event.preventDefault();
             return;
         }
-        if (event.key === 'Enter') runManualSearch();
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            runManualSearch().catch(() => null);
+        }
     });
     els.searchButton.addEventListener('click', () => {
         if (isInteractionLocked()) return;
-        runManualSearch();
+        runManualSearch().catch(() => null);
     });
     els.locationButton.addEventListener('click', () => {
         if (isInteractionLocked()) return;
@@ -8447,6 +8505,10 @@ function bindEvents() {
                     return;
                 }
                 if (state.listMode === 'autobahn') {
+                    if (!state.autobahnStations.length) {
+                        loadAutobahnStations('map', navRequestId);
+                        return;
+                    }
                     openAutobahnMap();
                     return;
                 }

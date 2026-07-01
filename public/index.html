@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
-    <link rel="stylesheet" href="assets/css/app.css?v=20260701-search-ok-map-favorites-stable">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260701-autobahn-map-load">
 </head>
 <body>
     <section class="splash-screen" id="splashScreen" aria-label="Tankprofi wird geladen">
@@ -56,11 +56,11 @@
                     <h1>Tankprofi</h1>
                 </div>
                 <div class="header-actions">
-                    <button class="help-button" id="helpButton" type="button" aria-label="Hilfe öffnen">?</button>
                     <button class="drive-mode-button" id="driveModeButton" type="button">
                         <span aria-hidden="true">A</span>
                         Drive
                     </button>
+                    <button class="help-button" id="helpButton" type="button" aria-label="Hilfe öffnen">?</button>
                 </div>
             </header>
 
@@ -93,7 +93,7 @@
                     <button class="sort-toggle-button active" type="button" data-sort="price">Preis</button>
                     <button class="sort-toggle-button" type="button" data-sort="distance">Entfernung</button>
                 </div>
-                <button class="text-button" id="refreshButton" type="button">Neu laden</button>
+                <button class="text-button" id="refreshButton" type="button" hidden>Neu laden</button>
             </section>
 
             <div class="app-content">
@@ -399,7 +399,7 @@
     <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script type="module" src="assets/js/firebase-app.js?v=20260701-city-speed-display-plus3"></script>
-    <script src="assets/js/app.js?v=20260701-search-ok-map-favorites-stable" defer></script>
+    <script src="assets/js/app.js?v=20260701-autobahn-map-load" defer></script>
 </body>
 </html>
 
