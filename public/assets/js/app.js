@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-drive-mode-context-text';
+const appVersion = '20260701-drive-mode-context-prefix';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -6189,13 +6189,14 @@ function renderDrivingModeList() {
     const currentPriceCount = isLocalDrivingContext()
         ? visibleStations.length
         : visibleStations.filter((station) => hasCurrentDrivingPrice(station, els.fuel.value, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS)).length;
-    const driveTitle = state.drivingVehicleMode === 'electric'
+    const driveContextText = state.drivingVehicleMode === 'electric'
         ? 'Laden'
         : state.drivingContext === 'rural'
             ? 'Land'
             : state.drivingContext === 'city'
                 ? 'Stadt'
                 : 'Autobahn';
+    const driveTitle = `Drive Mode: ${driveContextText}`;
     const isDriveMapView = state.view === 'map' || els.appShell.classList.contains('view-map');
     const mapListButton = isDriveMapView
         ? '<button class="drive-header-list-button" type="button" data-driving-header-view="list">Liste</button>'
