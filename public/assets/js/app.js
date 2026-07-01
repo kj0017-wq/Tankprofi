@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-ev-list-address-priority';
+const appVersion = '20260701-ev-progressive-radius';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -7262,9 +7262,8 @@ async function loadChargingStations(requestId = state.navRequestId) {
     } else if (hasLocalLocation) {
         params.set('lat', location.lat);
         params.set('lng', location.lng);
-        params.set('radius', String(ELECTRIC_CITY_RADIUS_KM));
         state.chargingSearchContext = 'city';
-        state.chargingSearchRadiusKm = ELECTRIC_CITY_RADIUS_KM;
+        state.chargingSearchRadiusKm = null;
     } else if (!cityContext?.cityId) {
         state.chargingLoadKey = null;
         els.resultCount.textContent = 'Keine Adresse';
@@ -7288,14 +7287,30 @@ async function loadChargingStations(requestId = state.navRequestId) {
     els.resultMeta.textContent = 'Ladeanlagen werden geladen ...';
     els.results.innerHTML = '<div class="empty-state">Elektro-Ladeanlagen werden geladen.</div>';
     try {
-        let data = await fetchJson(`/api/charging/stations.php?${params.toString()}`, { timeoutMs: 30000 });
-        if (!isCurrentNavigation(requestId, 'charging')) return;
-        let stations = (data.stations || []).map(normalizeChargingStation);
-        if (hasLocalLocation && localDriveContextFor(stations) === 'rural') {
-            params.set('radius', String(ELECTRIC_RURAL_RADIUS_KM));
-            state.chargingSearchContext = 'rural';
-            state.chargingSearchRadiusKm = ELECTRIC_RURAL_RADIUS_KM;
-            data = await fetchJson(`/api/charging/stations.php?${params.toString()}`, { timeoutMs: 30000 });
+        let stations = [];
+        if (hasLocalLocation) {
+            const radiusSteps = [5, 10, ELECTRIC_CITY_RADIUS_KM];
+            for (const radiusKm of radiusSteps) {
+                params.set('radius', String(radiusKm));
+                state.chargingSearchContext = 'city';
+                state.chargingSearchRadiusKm = radiusKm;
+                els.resultMeta.textContent = `Ladeanlagen bis ${radiusKm} km werden geladen ...`;
+                const data = await fetchJson(`/api/charging/stations.php?${params.toString()}`, { timeoutMs: 24000 });
+                if (!isCurrentNavigation(requestId, 'charging')) return;
+                stations = (data.stations || []).map(normalizeChargingStation);
+                if (stations.length >= ELECTRIC_NEAREST_LIMIT) break;
+            }
+            if (localDriveContextFor(stations) === 'rural') {
+                params.set('radius', String(ELECTRIC_RURAL_RADIUS_KM));
+                state.chargingSearchContext = 'rural';
+                state.chargingSearchRadiusKm = ELECTRIC_RURAL_RADIUS_KM;
+                els.resultMeta.textContent = `Landmodus - Ladeanlagen bis ${ELECTRIC_RURAL_RADIUS_KM} km werden geladen ...`;
+                const data = await fetchJson(`/api/charging/stations.php?${params.toString()}`, { timeoutMs: 30000 });
+                if (!isCurrentNavigation(requestId, 'charging')) return;
+                stations = (data.stations || []).map(normalizeChargingStation);
+            }
+        } else {
+            const data = await fetchJson(`/api/charging/stations.php?${params.toString()}`, { timeoutMs: 30000 });
             if (!isCurrentNavigation(requestId, 'charging')) return;
             stations = (data.stations || []).map(normalizeChargingStation);
         }
