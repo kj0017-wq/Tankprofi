@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase-admin/app';
-import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, FieldPath, Timestamp } from 'firebase-admin/firestore';
 import crypto from 'node:crypto';
 import { defineSecret } from 'firebase-functions/params';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
@@ -3635,11 +3635,25 @@ async function enrichAutobahnStationsWithPrices(stations, refresh = false) {
 }
 
 async function loadStoredTankerkoenigStationsForMatch() {
-  const snapshot = await db.collection('tankprofi_stations')
+  const docs = [];
+  const pageSize = 5000;
+  let query = db.collection('tankprofi_stations')
     .where('source', '==', 'tankkoenig')
-    .limit(5000)
-    .get();
-  return snapshot.docs.map((doc) => {
+    .orderBy(FieldPath.documentId())
+    .limit(pageSize);
+
+  for (;;) {
+    const snapshot = await query.get();
+    docs.push(...snapshot.docs);
+    if (snapshot.size < pageSize) break;
+    query = db.collection('tankprofi_stations')
+      .where('source', '==', 'tankkoenig')
+      .orderBy(FieldPath.documentId())
+      .startAfter(snapshot.docs[snapshot.docs.length - 1])
+      .limit(pageSize);
+  }
+
+  return docs.map((doc) => {
     const data = doc.data();
     return {
       stationId: String(data.externalStationId || doc.id.replace(/^tankkoenig_/, '')),
