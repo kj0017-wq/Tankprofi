@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-autobahn-list-map-repair3';
+const appVersion = '20260701-drive-speed-responsive';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -17,6 +17,8 @@ const ELECTRIC_ROUTE_CORRIDOR_KM = 8;
 const DRIVE_HIGHWAY_PRICE_MAX_AGE_MS = 15 * 60 * 1000;
 const USAGE_PRICE_MAX_AGE_MS = 30 * 60 * 1000;
 const DRIVE_UPDATE_INTERVAL_MS = 5000;
+const DRIVE_SPEED_STALE_MS = 4000;
+const DRIVE_SPEED_RESET_DELAY_MS = DRIVE_SPEED_STALE_MS + 300;
 const NORMAL_SEARCH_REFRESH_MS = 60 * 1000;
 const CITY_DRIVE_PRICE_REFRESH_MS = 60 * 1000;
 const DRIVE_HIGHWAY_LIVE_PRICE_LIMIT = 24;
@@ -160,6 +162,7 @@ const state = {
     drivingCompassPermissionDenied: false,
     drivingSpeedKmh: null,
     drivingSpeedUpdatedAt: null,
+    drivingSpeedResetTimer: null,
     drivingAccuracy: null,
     drivingNearestRouteDistanceKm: null,
     drivingCurrentRoutePosition: null,
@@ -696,7 +699,7 @@ function distanceText(station) {
 }
 
 function drivingSpeedText() {
-    const isFresh = Date.now() - Number(state.drivingSpeedUpdatedAt || 0) <= 6000;
+    const isFresh = Date.now() - Number(state.drivingSpeedUpdatedAt || 0) <= DRIVE_SPEED_STALE_MS;
     if (!isFresh || !Number.isFinite(state.drivingSpeedKmh)) return '0 km/h';
     const displaySpeed = state.drivingContext === 'city' && state.drivingSpeedKmh > 10
         ? state.drivingSpeedKmh + 3
@@ -707,8 +710,29 @@ function drivingSpeedText() {
 }
 
 function updateDrivingMapSpeed() {
-    if (!els.drivingMapSpeed) return;
-    els.drivingMapSpeed.textContent = drivingSpeedText();
+    const speedText = drivingSpeedText();
+    if (els.drivingMapSpeed) els.drivingMapSpeed.textContent = speedText;
+    document.querySelectorAll('.drive-speed-chip').forEach((element) => {
+        element.textContent = speedText;
+    });
+}
+
+function clearDrivingSpeedResetTimer() {
+    if (!state.drivingSpeedResetTimer) return;
+    window.clearTimeout(state.drivingSpeedResetTimer);
+    state.drivingSpeedResetTimer = null;
+}
+
+function scheduleDrivingSpeedReset() {
+    clearDrivingSpeedResetTimer();
+    state.drivingSpeedResetTimer = window.setTimeout(() => {
+        state.drivingSpeedResetTimer = null;
+        if (state.listMode !== 'driving') return;
+        state.drivingSpeedKmh = 0;
+        state.drivingSpeedUpdatedAt = Date.now();
+        updateDrivingMapSpeed();
+        if (state.view === 'list') renderDrivingModeList({ preserveScroll: true });
+    }, DRIVE_SPEED_RESET_DELAY_MS);
 }
 
 function isDrivingMoving() {
@@ -4238,12 +4262,12 @@ function estimateDrivingSpeedKmh(samples = state.drivingSamples) {
     if (Number(last.accuracy) > 100) return Number.isFinite(state.drivingSpeedKmh) ? state.drivingSpeedKmh : 0;
     if (Number.isFinite(last.speedKmh) && last.speedKmh < 2) return 0;
 
-    const recent = usable.filter((sample) => last.timestamp - sample.timestamp <= 15000);
+    const recent = usable.filter((sample) => last.timestamp - sample.timestamp <= 10000);
     const movedKm = recent.length >= 2
         ? routeDistanceKm(recent[0].lat, recent[0].lng, last.lat, last.lng)
         : 0;
     const movedMs = recent.length >= 2 ? last.timestamp - recent[0].timestamp : 0;
-    const isResting = !Number.isFinite(movedKm) || (movedMs >= 4500 && movedKm < 0.018 && Number(last.speedKmh || 0) < 4);
+    const isResting = !Number.isFinite(movedKm) || (movedMs >= 2500 && movedKm < 0.012 && Number(last.speedKmh || 0) < 4);
     if (isResting) return 0;
 
     const candidates = [];
@@ -4267,7 +4291,7 @@ function estimateDrivingSpeedKmh(samples = state.drivingSamples) {
     const previousSpeed = Number(state.drivingSpeedKmh);
     if (!Number.isFinite(previousSpeed)) return Math.max(0, median);
     if (median < 3) return 0;
-    return Math.max(0, (previousSpeed * 0.6) + (median * 0.4));
+    return Math.max(0, (previousSpeed * 0.35) + (median * 0.65));
 }
 
 function visualDrivingBearing(samples = state.drivingSamples) {
@@ -6575,6 +6599,7 @@ function rememberDrivingPosition(position, { triggerInitialUpdate = true } = {})
         state.drivingSpeedKmh = speedKmh;
         state.drivingSpeedUpdatedAt = Date.now();
         updateDrivingMapSpeed();
+        scheduleDrivingSpeedReset();
     }
     if (triggerInitialUpdate && previousCount === 0 && !isDrivingDestinationInputActive()) evaluateDrivingModeList();
     return sample;
@@ -6709,6 +6734,7 @@ async function startDrivingMode(routeId = 'ALL', options = {}) {
     state.drivingSamples = [];
     state.drivingSpeedKmh = null;
     state.drivingSpeedUpdatedAt = null;
+    clearDrivingSpeedResetTimer();
     state.drivingAccuracy = null;
     state.drivingRouteGeometry = [];
     resetDrivingRoutePreviewCache();
@@ -6741,7 +6767,7 @@ async function startDrivingMode(routeId = 'ALL', options = {}) {
         renderDrivingModeList();
     }, {
         enableHighAccuracy: true,
-        maximumAge: 5000,
+        maximumAge: 1000,
         timeout: 12000,
     });
     if (state.drivingUpdateTimer !== null) window.clearInterval(state.drivingUpdateTimer);
@@ -6769,6 +6795,7 @@ function stopDrivingMode(restore = true) {
         navigator.geolocation.clearWatch(state.drivingWatchId);
     }
     if (state.drivingUpdateTimer !== null) window.clearInterval(state.drivingUpdateTimer);
+    clearDrivingSpeedResetTimer();
     state.drivingWatchId = null;
     state.drivingUpdateTimer = null;
     state.drivingUpdateInProgress = false;
