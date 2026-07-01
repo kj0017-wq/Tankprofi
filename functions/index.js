@@ -21,6 +21,7 @@ const autobahnPriceRefreshScheduleMs = 15 * 60 * 1000;
 const autobahnPriceRefreshRadiusKm = 6;
 const autobahnPriceRefreshMaxQueries = 30;
 const autobahnPriceRefreshDelayMs = 450;
+const tankIdAdminPinHash = '1c6d7c838b3bde9154ede84d8c4ef4ab8420bf1990f82b63a3af81acecfc3323';
 const cityPriceThresholds = {
   cheapDelta: -0.02,
   expensiveDelta: 0.02,
@@ -304,6 +305,17 @@ function cleanTankerkoenigId(value) {
   if (/^(node|way|relation|osm|addr|station|scan)_/i.test(id)) return '';
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return '';
   return id;
+}
+
+function verifyTankIdAdmin(req) {
+  const pin = String(req.headers['x-tankprofi-admin-pin'] || req.body?.adminPin || req.query.adminPin || '').trim();
+  if (!pin) return false;
+  const hash = crypto.createHash('sha256').update(pin).digest('hex');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(tankIdAdminPinHash, 'hex'));
+  } catch {
+    return false;
+  }
 }
 
 function explicitTankerkoenigId(data = {}, docId = '') {
@@ -4347,6 +4359,7 @@ async function handleAutohofTankerkoenigImport(req, res) {
 
 async function handleTankIdMatch(req, res) {
   if (!['POST', 'GET'].includes(req.method)) return sendJson(res, { error: 'Method not allowed.' }, 405);
+  if (!verifyTankIdAdmin(req)) return sendJson(res, { error: 'Admin-Code erforderlich.' }, 403);
   if (Array.isArray(req.body?.pairs)) {
     const dryRunBody = String(req.query.dryRun || req.body?.dryRun || '') === '1'
       || String(req.query.dryRun || req.body?.dryRun || '').toLowerCase() === 'true';
@@ -4365,6 +4378,7 @@ async function handleTankIdMatch(req, res) {
 
 async function handleTankIdCandidates(req, res) {
   if (!['POST', 'GET'].includes(req.method)) return sendJson(res, { error: 'Method not allowed.' }, 405);
+  if (!verifyTankIdAdmin(req)) return sendJson(res, { error: 'Admin-Code erforderlich.' }, 403);
   const limit = Math.round(numberParam(req.query.limit || req.body?.limit, 200, 1, 1000));
   const radiusKm = numberParam(req.query.radiusKm || req.body?.radiusKm, 0.8, 0.05, 2);
   const result = await reportTankIdCandidates({ limit, radiusKm });

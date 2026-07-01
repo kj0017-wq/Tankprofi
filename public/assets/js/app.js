@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-preserve-autobahn-detail-badge';
+const appVersion = '20260701-tank-id-admin';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -104,6 +104,9 @@ const state = {
     cityAutoUpdateTimer: null,
     cityAutoUpdateProgress: null,
     cityAutoUpdateMessage: null,
+    tankIdAdminUnlocked: false,
+    tankIdAdminPin: '',
+    tankIdCandidates: [],
     autobahnStations: [],
     selectedHighway: 'all',
     autobahnPriceLoadingId: null,
@@ -253,6 +256,14 @@ const els = {
     tankprofiKoenigAuditStats: document.querySelector('#tankprofiKoenigAuditStats'),
     tankprofiDeviceStats: document.querySelector('#tankprofiDeviceStats'),
     tankprofiStatsStatus: document.querySelector('#tankprofiStatsStatus'),
+    tankIdAdminPin: document.querySelector('#tankIdAdminPin'),
+    tankIdUnlock: document.querySelector('#tankIdUnlock'),
+    tankIdUnlockButton: document.querySelector('#tankIdUnlockButton'),
+    tankIdAdminContent: document.querySelector('#tankIdAdminContent'),
+    tankIdRadius: document.querySelector('#tankIdRadiusSelect'),
+    tankIdLoad: document.querySelector('#tankIdLoadButton'),
+    tankIdAdminList: document.querySelector('#tankIdAdminList'),
+    tankIdAdminStatus: document.querySelector('#tankIdAdminStatus'),
     vehicleMode: document.querySelector('#vehicleModeSelect'),
     radius: document.querySelector('#radiusSelect'),
     fuel: document.querySelector('#fuelSelect'),
@@ -8740,6 +8751,133 @@ function renderTankprofiStatsData(data) {
         : 'Aktualisiert';
 }
 
+function setTankIdAdminUnlocked(unlocked) {
+    state.tankIdAdminUnlocked = unlocked;
+    if (!unlocked) state.tankIdAdminPin = '';
+    if (els.tankIdUnlock) els.tankIdUnlock.hidden = unlocked;
+    if (els.tankIdAdminContent) els.tankIdAdminContent.hidden = !unlocked;
+    if (els.tankIdAdminStatus) {
+        els.tankIdAdminStatus.textContent = unlocked
+            ? 'Freigeschaltet. Kandidaten koennen geladen und manuell bestaetigt werden.'
+            : 'Manuelle Zuordnung erst nach Codefreigabe.';
+    }
+}
+
+async function unlockTankIdAdmin() {
+    const pin = String(els.tankIdAdminPin?.value || '').trim();
+    if (!pin) {
+        if (els.tankIdAdminStatus) els.tankIdAdminStatus.textContent = 'Bitte Zahlencode eingeben.';
+        return;
+    }
+    if (els.tankIdAdminStatus) els.tankIdAdminStatus.textContent = 'Code wird geprueft ...';
+    try {
+        await fetchJson('/api/admin/tank-id/candidates.php?limit=1&radiusKm=0.5', {
+            headers: { 'X-Tankprofi-Admin-Pin': pin },
+            timeoutMs: 30000,
+        });
+        state.tankIdAdminPin = pin;
+        if (els.tankIdAdminPin) els.tankIdAdminPin.value = '';
+        setTankIdAdminUnlocked(true);
+    } catch (error) {
+        state.tankIdAdminPin = '';
+        if (els.tankIdAdminStatus) els.tankIdAdminStatus.textContent = error.message || 'Zahlencode stimmt nicht.';
+    }
+}
+
+function tankIdCandidateCategoryLabel(category) {
+    return ({
+        strong_auto_candidate: 'starker Kandidat',
+        review_good_candidate: 'pruefen',
+        review_distance_candidate: 'Entfernung pruefen',
+        no_nearby_candidate: 'kein Kandidat',
+    })[category] || category || 'offen';
+}
+
+function renderTankIdCandidates(data = {}) {
+    if (!els.tankIdAdminList) return;
+    state.tankIdCandidates = Array.isArray(data.items) ? data.items : [];
+    if (!state.tankIdCandidates.length) {
+        els.tankIdAdminList.innerHTML = '<div class="tank-id-empty">Keine offenen Zuordnungen gefunden.</div>';
+        return;
+    }
+    els.tankIdAdminList.innerHTML = state.tankIdCandidates.map((item) => {
+        const candidates = Array.isArray(item.candidates) ? item.candidates : [];
+        return `
+            <article class="tank-id-card">
+                <strong>${escapeHtml(item.name || item.stationId || 'Standort')}</strong>
+                <small>${escapeHtml(item.stationId || '')} · ${escapeHtml(tankIdCandidateCategoryLabel(item.category))}</small>
+                <div class="tank-id-candidates">
+                    ${candidates.length ? candidates.map((candidate) => `
+                        <button class="tank-id-candidate" type="button"
+                            data-tank-id-station="${escapeHtml(item.stationId)}"
+                            data-tank-id-price="${escapeHtml(candidate.stationId)}">
+                            <span>
+                                <b>${escapeHtml(candidate.brand || candidate.name || 'Tankstelle')}</b>
+                                <small>${escapeHtml(candidate.name || candidate.stationId)} · ${Number(candidate.distanceKm || 0).toFixed(2).replace('.', ',')} km</small>
+                            </span>
+                            <i>Zuordnen</i>
+                        </button>
+                    `).join('') : '<span class="tank-id-empty">Keine Tankerkoenig-ID im Radius.</span>'}
+                </div>
+            </article>
+        `;
+    }).join('');
+}
+
+async function loadTankIdCandidates() {
+    if (!state.tankIdAdminUnlocked) return;
+    const radiusKm = String(els.tankIdRadius?.value || '0.8');
+    if (els.tankIdAdminStatus) els.tankIdAdminStatus.textContent = 'Kandidaten werden geladen ...';
+    if (els.tankIdAdminList) els.tankIdAdminList.innerHTML = '<div class="tank-id-empty">Bitte warten ...</div>';
+    try {
+        const params = new URLSearchParams({ limit: '80', radiusKm });
+        const data = await fetchJson(`/api/admin/tank-id/candidates.php?${params.toString()}`, {
+            headers: { 'X-Tankprofi-Admin-Pin': state.tankIdAdminPin },
+            timeoutMs: 60000,
+        });
+        renderTankIdCandidates(data);
+        if (els.tankIdAdminStatus) {
+            const openCount = Number(data.scanned || state.tankIdCandidates.length || 0);
+            els.tankIdAdminStatus.textContent = `${openCount} offene Standorte geprueft. Radius ${String(data.radiusKm || radiusKm).replace('.', ',')} km.`;
+        }
+    } catch (error) {
+        if (els.tankIdAdminStatus) els.tankIdAdminStatus.textContent = error.message || 'Kandidaten konnten nicht geladen werden.';
+    }
+}
+
+async function confirmTankIdCandidate(stationId, priceStationId) {
+    const item = state.tankIdCandidates.find((entry) => String(entry.stationId) === String(stationId));
+    const candidate = item?.candidates?.find((entry) => String(entry.stationId) === String(priceStationId));
+    if (!item || !candidate) return;
+    if (els.tankIdAdminStatus) els.tankIdAdminStatus.textContent = 'Zuordnung wird gespeichert ...';
+    const body = {
+        pairs: [{
+            stationId,
+            priceStationId,
+            matchName: candidate.name || '',
+            matchBrand: candidate.brand || '',
+            distanceKm: candidate.distanceKm || 0,
+            source: 'verified_manual_match',
+        }],
+    };
+    try {
+        const result = await fetchJson('/api/admin/tank-id/match.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Tankprofi-Admin-Pin': state.tankIdAdminPin,
+            },
+            body: JSON.stringify(body),
+            timeoutMs: 60000,
+        });
+        const status = result.results?.[0]?.status || 'gespeichert';
+        if (els.tankIdAdminStatus) els.tankIdAdminStatus.textContent = `Zuordnung ${status}: ${priceStationId}`;
+        await loadTankIdCandidates();
+    } catch (error) {
+        if (els.tankIdAdminStatus) els.tankIdAdminStatus.textContent = error.message || 'Zuordnung konnte nicht gespeichert werden.';
+    }
+}
+
 async function copyShareLink() {
     const link = els.shareLink?.value || 'https://tankprofi.web.app';
     try {
@@ -9417,6 +9555,18 @@ function bindEvents() {
     });
     els.cityUpdate?.addEventListener('click', () => runCityUpdate(false));
     els.cityForceUpdate?.addEventListener('click', () => runCityUpdate(true));
+    els.tankIdUnlockButton?.addEventListener('click', unlockTankIdAdmin);
+    els.tankIdAdminPin?.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        unlockTankIdAdmin();
+    });
+    els.tankIdLoad?.addEventListener('click', loadTankIdCandidates);
+    els.tankIdAdminList?.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-tank-id-station][data-tank-id-price]');
+        if (!button) return;
+        confirmTankIdCandidate(button.dataset.tankIdStation, button.dataset.tankIdPrice);
+    });
     els.sortButtons.forEach((button) => {
         button.addEventListener('click', () => {
             els.sortButtons.forEach((item) => item.classList.toggle('active', item === button));

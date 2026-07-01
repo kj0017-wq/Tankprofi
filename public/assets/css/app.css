@@ -1137,6 +1137,124 @@ select:focus {
     line-height: 1.05;
 }
 
+.tank-id-admin-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    margin: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--gray-200);
+}
+
+.tank-id-admin-panel > strong {
+    color: var(--ink);
+    font-size: 0.86rem;
+    font-weight: 950;
+}
+
+.tank-id-unlock,
+.tank-id-admin-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px;
+}
+
+.tank-id-unlock input,
+.tank-id-admin-controls select {
+    min-width: 0;
+    min-height: 40px;
+    padding: 0 10px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    color: var(--ink);
+    background: var(--white);
+    font: inherit;
+    font-weight: 850;
+}
+
+.tank-id-admin-panel > span,
+.tank-id-empty {
+    color: var(--gray-700);
+    font-size: 0.74rem;
+    font-weight: 850;
+    line-height: 1.25;
+}
+
+.tank-id-admin-list {
+    display: grid;
+    gap: 7px;
+    max-height: 360px;
+    overflow: auto;
+    padding-right: 2px;
+}
+
+.tank-id-card {
+    display: grid;
+    gap: 5px;
+    padding: 8px;
+    border: 1px solid #c8d8ee;
+    border-radius: 8px;
+    background: #eef5ff;
+}
+
+.tank-id-card > strong {
+    color: var(--ink);
+    font-size: 0.86rem;
+    font-weight: 950;
+    line-height: 1.1;
+}
+
+.tank-id-card > small {
+    color: var(--gray-700);
+    font-size: 0.68rem;
+    font-weight: 800;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+
+.tank-id-candidates {
+    display: grid;
+    gap: 5px;
+}
+
+.tank-id-candidate {
+    min-width: 0;
+    min-height: 42px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    color: var(--ink);
+    background: var(--cream-100);
+    font: inherit;
+    text-align: left;
+    box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.14);
+}
+
+.tank-id-candidate span {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.tank-id-candidate b,
+.tank-id-candidate small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tank-id-candidate i {
+    color: var(--blue-700);
+    font-size: 0.72rem;
+    font-style: normal;
+    font-weight: 950;
+}
+
 .share-copy {
     width: 100%;
 }
