@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-autobahn-map-load';
+const appVersion = '20260701-electric-header';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -3333,13 +3333,27 @@ function updateSectionHeaderTone() {
     const isRural = isDriving && state.drivingContext === 'rural';
     const isElectricDrive = isDriving && state.drivingVehicleMode === 'electric';
     const isElectricCity = state.listMode === 'cities' && state.vehicleMode === 'electric';
+    const isElectricFavorites = state.listMode === 'favorites' && state.vehicleMode === 'electric';
+    const isElectricResults = state.listMode === 'results' && state.vehicleMode === 'electric';
     const isAutobahn = state.listMode === 'autobahn' || (isDriving && state.drivingContext === 'highway' && !isElectricDrive);
     const isCity = (state.listMode === 'cities' && !isElectricCity) || (isDriving && state.drivingContext === 'city' && !isElectricDrive);
-    const isCharging = state.listMode === 'charging' || isElectricDrive || isElectricCity;
+    const isCharging = state.listMode === 'charging' || isElectricDrive || isElectricCity || isElectricFavorites || isElectricResults;
     els.appShell.classList.toggle('section-tone-autobahn', isAutobahn);
     els.appShell.classList.toggle('section-tone-city', isCity && !isAutobahn);
     els.appShell.classList.toggle('section-tone-rural', isRural);
     els.appShell.classList.toggle('section-tone-charging', isCharging);
+}
+
+function syncHeaderVehicleMode() {
+    const isElectric = state.vehicleMode === 'electric';
+    const eyebrow = document.querySelector('.brand-title .eyebrow');
+    if (eyebrow) eyebrow.textContent = isElectric ? 'Live Ladepreise' : 'Live Tankpreise';
+    if (els.brandLogo) {
+        const logoName = isElectric ? 'tankprofi-electric-icon.svg' : 'tankprofi-home-icon.png';
+        els.brandLogo.src = `assets/img/${logoName}?v=${appVersion}`;
+        els.brandLogo.alt = isElectric ? 'Elektro oder Verbrenner waehlen' : 'Antriebsart waehlen';
+        els.brandLogo.title = 'Verbrenner oder Elektro waehlen';
+    }
 }
 
 function citySnapshotAgeMs(snapshot = state.citySnapshot) {
@@ -7645,6 +7659,8 @@ function setVehicleMode(mode, options = {}) {
     if (els.vehicleMode) els.vehicleMode.value = nextMode;
     els.appShell?.classList.toggle('vehicle-electric', nextMode === 'electric');
     els.appShell?.classList.toggle('vehicle-combustion', nextMode !== 'electric');
+    syncHeaderVehicleMode();
+    updateSectionHeaderTone();
     syncVehicleOptionSets();
     if (options.persist !== false) {
         saveUserSettings();

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Tankprofi Elektro">
+  <rect x="9" y="12" width="102" height="102" rx="22" fill="#fff8d6" stroke="#111827" stroke-width="8"/>
+  <path d="M29 105h75a20 20 0 0 0 20-20V34" fill="none" stroke="#e94b4b" stroke-width="12" stroke-linecap="round"/>
+  <rect x="24" y="26" width="52" height="72" rx="9" fill="#ffd230" stroke="#111827" stroke-width="6"/>
+  <rect x="34" y="36" width="32" height="22" rx="3" fill="#e8f3ff" stroke="#174aa8" stroke-width="4"/>
+  <path d="M87 32v26a15 15 0 0 0 15 15h5" fill="none" stroke="#174aa8" stroke-width="7" stroke-linecap="round"/>
+  <path d="M88 31h17m-12-10v16m10-16v16" fill="none" stroke="#111827" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="50" cy="78" r="17" fill="#0aa35f" stroke="#111827" stroke-width="5"/>
+  <path d="M54 62 39 82h11l-5 13 18-22H52z" fill="#fff" stroke="#111827" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M28 105h52" fill="none" stroke="#111827" stroke-width="7" stroke-linecap="round"/>
+</svg>

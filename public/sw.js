@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tankprofi-shell-v441';
+const CACHE_NAME = 'tankprofi-shell-v442';
 const CORE_ASSETS = [
   '/',
   '/index.html',
@@ -7,6 +7,7 @@ const CORE_ASSETS = [
   '/assets/js/firebase-app.js',
   '/assets/img/tankprofi-splash-popart.png',
   '/assets/img/tankprofi-home-icon.png',
+  '/assets/img/tankprofi-electric-icon.svg',
   '/assets/img/star-logo.webp',
   '/assets/img/shell-logo.webp',
   '/assets/img/total-logo.webp',
