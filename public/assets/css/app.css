@@ -1217,6 +1217,53 @@ select:focus {
     gap: 5px;
 }
 
+.tank-id-ai-button {
+    min-height: 34px;
+    padding: 5px 8px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    color: var(--white);
+    background: linear-gradient(180deg, #1f69d6 0%, #0d47a1 100%);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 950;
+    box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.14);
+}
+
+.tank-id-ai-button:disabled {
+    color: var(--gray-500);
+    background: #edf2f7;
+}
+
+.tank-id-ai-result {
+    display: grid;
+    gap: 3px;
+    padding: 7px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    background: var(--yellow-100);
+}
+
+.tank-id-ai-result.strong {
+    background: var(--green-100);
+}
+
+.tank-id-ai-result.uncertain,
+.tank-id-ai-result.reject {
+    background: #f5f7fb;
+}
+
+.tank-id-ai-result b,
+.tank-id-ai-result span,
+.tank-id-ai-result small {
+    min-width: 0;
+    color: var(--ink);
+    font-size: 0.72rem;
+    font-weight: 850;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+
 .tank-id-candidate {
     min-width: 0;
     min-height: 42px;

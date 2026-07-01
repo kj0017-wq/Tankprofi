@@ -10,6 +10,7 @@ initializeApp();
 
 const db = getFirestore();
 const tankerkoenigApiKey = defineSecret('TANKERKOENIG_API_KEY');
+const openaiApiKey = defineSecret('OPENAI_API_KEY');
 const allowedFuels = new Set(['e10', 'e5', 'diesel']);
 const cityFuels = ['diesel', 'e5', 'e10'];
 const snapshotTtlMs = 60 * 60 * 1000;
@@ -260,6 +261,7 @@ function endpointFrom(req) {
   if (path.endsWith('/admin/autohof/tankerkoenig-import.php') || path.endsWith('/admin/autohof/tankerkoenig-import')) return 'autohofTankerkoenigImport';
   if (path.endsWith('/admin/tank-id/match.php') || path.endsWith('/admin/tank-id/match')) return 'tankIdMatch';
   if (path.endsWith('/admin/tank-id/candidates.php') || path.endsWith('/admin/tank-id/candidates')) return 'tankIdCandidates';
+  if (path.endsWith('/admin/tank-id/ai.php') || path.endsWith('/admin/tank-id/ai')) return 'tankIdAi';
   if (path.endsWith('/autohof/stations.php') || path.endsWith('/autohof/stations')) return 'autohofStations';
   return '';
 }
@@ -4385,6 +4387,117 @@ async function handleTankIdCandidates(req, res) {
   return sendJson(res, result);
 }
 
+function openaiKey() {
+  return String(process.env.OPENAI_API_KEY || openaiApiKey.value() || '').trim();
+}
+
+function parseOpenAiJsonText(text) {
+  const raw = String(text || '').trim();
+  if (!raw) throw new Error('KI hat keine Antwort geliefert.');
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('KI-Antwort konnte nicht gelesen werden.');
+    return JSON.parse(match[0]);
+  }
+}
+
+async function handleTankIdAi(req, res) {
+  if (req.method !== 'POST') return sendJson(res, { error: 'Method not allowed.' }, 405);
+  if (!verifyTankIdAdmin(req)) return sendJson(res, { error: 'Admin-Code erforderlich.' }, 403);
+  const key = openaiKey();
+  if (!key) return sendJson(res, { error: 'OPENAI_API_KEY ist in Firebase Functions noch nicht gesetzt.' }, 503);
+
+  const station = req.body?.station || {};
+  const candidates = Array.isArray(req.body?.candidates) ? req.body.candidates.slice(0, 8) : [];
+  if (!station.stationId || !candidates.length) return sendJson(res, { error: 'Station und Kandidaten erforderlich.' }, 422);
+
+  const payload = {
+    model: 'gpt-4.1-mini',
+    input: [
+      {
+        role: 'system',
+        content: [
+          {
+            type: 'input_text',
+            text: 'Du bist ein Datenpruefer fuer Tankstellen-Zuordnungen. Bewerte, welcher Tankerkoenig-Kandidat zu einem Autobahn- oder Autohof-Standort passt. Nutze Name, Marke, Entfernung, Adresse und Plausibilitaet. Antworte ausschliesslich als JSON.',
+          },
+        ],
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: JSON.stringify({
+              task: 'Waehle maximal einen Kandidaten. Wenn unsicher, recommendedPriceStationId null setzen.',
+              outputSchema: {
+                recommendedPriceStationId: 'string|null',
+                confidence: '0..1 number',
+                verdict: 'strong|review|uncertain|reject',
+                reason: 'kurze deutsche Begruendung',
+              },
+              station: {
+                stationId: station.stationId,
+                name: station.name,
+                lat: station.lat,
+                lng: station.lng,
+                category: station.category,
+              },
+              candidates: candidates.map((candidate) => ({
+                priceStationId: candidate.stationId,
+                name: candidate.name,
+                brand: candidate.brand,
+                distanceKm: candidate.distanceKm,
+                brandHit: candidate.brandHit,
+                nameHit: candidate.nameHit,
+              })),
+            }),
+          },
+        ],
+      },
+    ],
+    text: {
+      format: {
+        type: 'json_schema',
+        name: 'tank_id_ai_review',
+        strict: true,
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            recommendedPriceStationId: { type: ['string', 'null'] },
+            confidence: { type: 'number', minimum: 0, maximum: 1 },
+            verdict: { type: 'string', enum: ['strong', 'review', 'uncertain', 'reject'] },
+            reason: { type: 'string' },
+          },
+          required: ['recommendedPriceStationId', 'confidence', 'verdict', 'reason'],
+        },
+      },
+    },
+  };
+
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${key}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(45000),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return sendJson(res, { error: data.error?.message || 'KI-Pruefung fehlgeschlagen.' }, 502);
+  }
+  const text = data.output_text
+    || data.output?.flatMap((item) => item.content || []).map((item) => item.text || '').join('\n')
+    || '';
+  const review = parseOpenAiJsonText(text);
+  return sendJson(res, { ok: true, review });
+}
+
 async function handleAutohofStations(req, res) {
   const highway = String(req.query.highway || '').trim().toUpperCase().replace(/\s+/g, '');
   const hasFuel = String(req.query.hasFuel || '') === '1';
@@ -6185,7 +6298,7 @@ async function handleAddressConsolidate(req, res) {
 
 export const api = onRequest({
   region: 'europe-west3',
-  secrets: [tankerkoenigApiKey],
+  secrets: [tankerkoenigApiKey, openaiApiKey],
   invoker: 'public',
   cors: false,
   timeoutSeconds: 540,
@@ -6219,6 +6332,7 @@ export const api = onRequest({
     if (endpoint === 'autohofTankerkoenigImport') return await handleAutohofTankerkoenigImport(req, res);
     if (endpoint === 'tankIdMatch') return await handleTankIdMatch(req, res);
     if (endpoint === 'tankIdCandidates') return await handleTankIdCandidates(req, res);
+    if (endpoint === 'tankIdAi') return await handleTankIdAi(req, res);
     if (endpoint === 'autohofStations') return await handleAutohofStations(req, res);
     return sendJson(res, { error: 'Unknown API endpoint.' }, 404);
   } catch (error) {

@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-tank-id-admin';
+const appVersion = '20260701-tank-id-ai';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -107,6 +107,7 @@ const state = {
     tankIdAdminUnlocked: false,
     tankIdAdminPin: '',
     tankIdCandidates: [],
+    tankIdAiReviews: new Map(),
     autobahnStations: [],
     selectedHighway: 'all',
     autobahnPriceLoadingId: null,
@@ -8802,10 +8803,22 @@ function renderTankIdCandidates(data = {}) {
     }
     els.tankIdAdminList.innerHTML = state.tankIdCandidates.map((item) => {
         const candidates = Array.isArray(item.candidates) ? item.candidates : [];
+        const review = state.tankIdAiReviews.get(String(item.stationId));
+        const reviewCandidate = review?.recommendedPriceStationId
+            ? candidates.find((candidate) => String(candidate.stationId) === String(review.recommendedPriceStationId))
+            : null;
         return `
             <article class="tank-id-card">
                 <strong>${escapeHtml(item.name || item.stationId || 'Standort')}</strong>
                 <small>${escapeHtml(item.stationId || '')} · ${escapeHtml(tankIdCandidateCategoryLabel(item.category))}</small>
+                <button class="tank-id-ai-button" type="button" data-tank-id-ai="${escapeHtml(item.stationId)}"${candidates.length ? '' : ' disabled'}>KI pruefen</button>
+                ${review ? `
+                    <div class="tank-id-ai-result ${escapeHtml(review.verdict || 'review')}">
+                        <b>KI: ${escapeHtml(review.verdict || 'review')} · ${Math.round(Number(review.confidence || 0) * 100)}%</b>
+                        <span>${escapeHtml(review.reason || 'Keine Begruendung')}</span>
+                        ${reviewCandidate ? `<small>Vorschlag: ${escapeHtml(reviewCandidate.brand || reviewCandidate.name || review.recommendedPriceStationId)} · ${escapeHtml(review.recommendedPriceStationId)}</small>` : '<small>Kein sicherer Vorschlag.</small>'}
+                    </div>
+                ` : ''}
                 <div class="tank-id-candidates">
                     ${candidates.length ? candidates.map((candidate) => `
                         <button class="tank-id-candidate" type="button"
@@ -8822,6 +8835,31 @@ function renderTankIdCandidates(data = {}) {
             </article>
         `;
     }).join('');
+}
+
+async function reviewTankIdCandidateWithAi(stationId) {
+    const item = state.tankIdCandidates.find((entry) => String(entry.stationId) === String(stationId));
+    if (!item || !item.candidates?.length) return;
+    if (els.tankIdAdminStatus) els.tankIdAdminStatus.textContent = 'KI prueft Zuordnung ...';
+    try {
+        const data = await fetchJson('/api/admin/tank-id/ai.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Tankprofi-Admin-Pin': state.tankIdAdminPin,
+            },
+            body: JSON.stringify({
+                station: item,
+                candidates: item.candidates,
+            }),
+            timeoutMs: 70000,
+        });
+        state.tankIdAiReviews.set(String(stationId), data.review || {});
+        renderTankIdCandidates({ items: state.tankIdCandidates });
+        if (els.tankIdAdminStatus) els.tankIdAdminStatus.textContent = 'KI-Vorschlag ist eingetragen.';
+    } catch (error) {
+        if (els.tankIdAdminStatus) els.tankIdAdminStatus.textContent = error.message || 'KI-Pruefung nicht moeglich.';
+    }
 }
 
 async function loadTankIdCandidates() {
@@ -9563,6 +9601,11 @@ function bindEvents() {
     });
     els.tankIdLoad?.addEventListener('click', loadTankIdCandidates);
     els.tankIdAdminList?.addEventListener('click', (event) => {
+        const aiButton = event.target.closest('[data-tank-id-ai]');
+        if (aiButton) {
+            reviewTankIdCandidateWithAi(aiButton.dataset.tankIdAi);
+            return;
+        }
         const button = event.target.closest('[data-tank-id-station][data-tank-id-price]');
         if (!button) return;
         confirmTankIdCandidate(button.dataset.tankIdStation, button.dataset.tankIdPrice);
