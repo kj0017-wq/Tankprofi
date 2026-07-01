@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-ev-autobahn-mode';
+const appVersion = '20260701-vehicle-start-choice';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -3282,14 +3282,13 @@ function prepareNormalSearch(clearLocation = false) {
 }
 
 function isElectricMode() {
-    return state.vehicleMode === 'electric'
-        || els.vehicleMode?.value === 'electric'
-        || els.appShell?.classList.contains('vehicle-electric');
+    return state.vehicleMode === 'electric';
 }
 
 function syncEffectiveVehicleMode() {
-    if (isElectricMode() && state.vehicleMode !== 'electric') {
-        setVehicleMode('electric', { persist: false, silent: true });
+    const selectedMode = els.vehicleMode?.value === 'electric' ? 'electric' : DEFAULT_VEHICLE_MODE;
+    if (selectedMode !== state.vehicleMode) {
+        setVehicleMode(selectedMode, { persist: false, silent: true });
     }
 }
 
@@ -7832,7 +7831,14 @@ function restoreUserSettings() {
 
 function setVehicleMode(mode, options = {}) {
     const nextMode = mode === 'electric' ? 'electric' : DEFAULT_VEHICLE_MODE;
+    const modeChanged = state.vehicleMode !== nextMode;
     state.vehicleMode = nextMode;
+    if (modeChanged) {
+        beginNavigation();
+        state.chargingLoadKey = null;
+        state.chargingDistributionLoadKey = null;
+        state.chargingOperatorsLoadKey = null;
+    }
     if (els.vehicleMode) els.vehicleMode.value = nextMode;
     els.appShell?.classList.toggle('vehicle-electric', nextMode === 'electric');
     els.appShell?.classList.toggle('vehicle-combustion', nextMode !== 'electric');
@@ -7853,10 +7859,10 @@ function setVehicleMode(mode, options = {}) {
 function chooseVehicleMode(mode) {
     setVehicleMode(mode);
     if (els.vehicleChoice) els.vehicleChoice.hidden = true;
-    if (isElectricMode() && state.selectedLocation) {
+    if (state.vehicleMode === 'electric' && state.selectedLocation) {
         prepareChargingSearch(false);
         loadChargingStations(beginNavigation());
-    } else if (!isElectricMode() && state.listMode === 'charging') {
+    } else if (state.vehicleMode !== 'electric' && state.listMode === 'charging') {
         prepareNormalSearch(false);
         if (state.selectedLocation) loadStations({ force: true });
     }
