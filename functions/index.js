@@ -5589,6 +5589,39 @@ async function loadChargingDocsWithSupplemental(limit = 30000) {
   return [...byId.values()];
 }
 
+async function loadChargingDocsAroundOrigin(lat, lng, radiusKm) {
+  const latDelta = kmToLat(radiusKm);
+  const lngDelta = kmToLon(radiusKm, lat);
+  const minLat = lat - latDelta;
+  const maxLat = lat + latDelta;
+  const minLng = lng - lngDelta;
+  const maxLng = lng + lngDelta;
+  const pageSize = 1200;
+  const maxDocs = radiusKm <= 20 ? 9000 : 22000;
+  const docs = [];
+  let lastDoc = null;
+
+  while (docs.length < maxDocs) {
+    let query = db.collection('charging_stations')
+      .where('lat', '>=', minLat)
+      .where('lat', '<=', maxLat)
+      .orderBy('lat')
+      .limit(pageSize);
+    if (lastDoc) query = query.startAfter(lastDoc);
+    const snapshot = await query.get();
+    if (snapshot.empty) break;
+    snapshot.docs.forEach((doc) => {
+      const data = doc.data() || {};
+      const docLng = Number(data.lng);
+      if (Number.isFinite(docLng) && docLng >= minLng && docLng <= maxLng) docs.push(doc);
+    });
+    lastDoc = snapshot.docs[snapshot.docs.length - 1];
+    if (snapshot.size < pageSize) break;
+  }
+
+  return docs;
+}
+
 async function handleChargingStations(req, res) {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
@@ -5606,13 +5639,7 @@ async function handleChargingStations(req, res) {
   if (cityMode) {
     docs = await loadChargingDocsWithSupplemental(30000);
   } else if (hasOrigin) {
-    const latDelta = radiusKm / 111;
-    const snapshot = await db.collection('charging_stations')
-      .where('lat', '>=', lat - latDelta)
-      .where('lat', '<=', lat + latDelta)
-      .limit(1200)
-      .get();
-    docs = snapshot.docs;
+    docs = await loadChargingDocsAroundOrigin(lat, lng, radiusKm);
   } else {
     docs = distributionMode ? await loadChargingDocsWithSupplemental(30000) : (await db.collection('charging_stations').orderBy('sourceId').limit(limit).get()).docs;
   }
