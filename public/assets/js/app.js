@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260702-drive-map-ready';
+const appVersion = '20260702-drive-speed-responsive';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -17,8 +17,8 @@ const ELECTRIC_ROUTE_CORRIDOR_KM = 8;
 const DRIVE_HIGHWAY_PRICE_MAX_AGE_MS = 15 * 60 * 1000;
 const USAGE_PRICE_MAX_AGE_MS = 30 * 60 * 1000;
 const DRIVE_UPDATE_INTERVAL_MS = 5000;
-const DRIVE_SPEED_STALE_MS = 4000;
-const DRIVE_SPEED_RESET_DELAY_MS = DRIVE_SPEED_STALE_MS + 300;
+const DRIVE_SPEED_STALE_MS = 2800;
+const DRIVE_SPEED_RESET_DELAY_MS = DRIVE_SPEED_STALE_MS + 250;
 const NORMAL_SEARCH_REFRESH_MS = 60 * 1000;
 const CITY_DRIVE_PRICE_REFRESH_MS = 60 * 1000;
 const DRIVE_HIGHWAY_LIVE_PRICE_LIMIT = 24;
@@ -4429,13 +4429,14 @@ function isDrivingRestMode(samples = state.drivingSamples) {
 function estimateDrivingSpeedKmh(samples = state.drivingSamples) {
     const usable = samples
         .filter((sample) => Number.isFinite(sample.lat) && Number.isFinite(sample.lng) && Number.isFinite(sample.timestamp))
-        .slice(-6);
+        .slice(-5);
     const last = usable.at(-1);
     if (!last) return null;
     if (Number(last.accuracy) > 100) return Number.isFinite(state.drivingSpeedKmh) ? state.drivingSpeedKmh : 0;
     if (Number.isFinite(last.speedKmh) && last.speedKmh < 2) return 0;
 
-    const recent = usable.filter((sample) => last.timestamp - sample.timestamp <= 10000);
+    const recent = usable.filter((sample) => last.timestamp - sample.timestamp <= 6500);
+    const nativeSpeed = Number(last.speedKmh);
     const movedKm = recent.length >= 2
         ? routeDistanceKm(recent[0].lat, recent[0].lng, last.lat, last.lng)
         : 0;
@@ -4444,9 +4445,10 @@ function estimateDrivingSpeedKmh(samples = state.drivingSamples) {
     if (isResting) return 0;
 
     const candidates = [];
-    recent.forEach((sample) => {
+    recent.slice(-3).forEach((sample, index, list) => {
         if (Number.isFinite(sample.speedKmh) && sample.speedKmh >= 0 && Number(sample.accuracy) <= 80) {
-            candidates.push(Math.max(0, sample.speedKmh));
+            const weight = index === list.length - 1 ? 3 : 1;
+            for (let count = 0; count < weight; count += 1) candidates.push(Math.max(0, sample.speedKmh));
         }
     });
     for (let index = 1; index < recent.length; index += 1) {
@@ -4456,15 +4458,20 @@ function estimateDrivingSpeedKmh(samples = state.drivingSamples) {
         const segmentKm = routeDistanceKm(previous.lat, previous.lng, current.lat, current.lng);
         if (!Number.isFinite(segmentKm) || elapsedHours <= 0 || Number(current.accuracy) > 80) continue;
         const segmentSpeed = segmentKm / elapsedHours;
-        if (segmentKm >= 0.008 && segmentSpeed >= 0 && segmentSpeed <= 180) candidates.push(segmentSpeed);
+        if (segmentKm >= 0.005 && segmentSpeed >= 0 && segmentSpeed <= 190) candidates.push(segmentSpeed);
     }
     if (!candidates.length) return 0;
     candidates.sort((a, b) => a - b);
     const median = candidates[Math.floor(candidates.length / 2)];
     const previousSpeed = Number(state.drivingSpeedKmh);
-    if (!Number.isFinite(previousSpeed)) return Math.max(0, median);
-    if (median < 3) return 0;
-    return Math.max(0, (previousSpeed * 0.35) + (median * 0.65));
+    const targetSpeed = Number.isFinite(nativeSpeed) && nativeSpeed >= 0 && Number(last.accuracy) <= 80
+        ? (nativeSpeed * 0.7) + (median * 0.3)
+        : median;
+    if (!Number.isFinite(previousSpeed)) return Math.max(0, targetSpeed);
+    if (targetSpeed < 3) return 0;
+    const delta = Math.abs(targetSpeed - previousSpeed);
+    const newWeight = delta >= 18 ? 0.9 : delta >= 8 ? 0.82 : 0.74;
+    return Math.max(0, (previousSpeed * (1 - newWeight)) + (targetSpeed * newWeight));
 }
 
 function visualDrivingBearing(samples = state.drivingSamples) {
@@ -6796,7 +6803,7 @@ function rememberDrivingPosition(position, { triggerInitialUpdate = true } = {})
     if (!Number.isFinite(sample.lat) || !Number.isFinite(sample.lng)) return;
     const previousCount = state.drivingSamples.length;
     state.drivingSamples.push(sample);
-    state.drivingSamples = state.drivingSamples.slice(-6);
+    state.drivingSamples = state.drivingSamples.slice(-5);
     state.drivingAccuracy = sample.accuracy;
     const speedKmh = estimateDrivingSpeedKmh();
     if (Number.isFinite(speedKmh)) {
