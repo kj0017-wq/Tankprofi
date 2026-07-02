@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260702-settings-vehicle-switch';
+const appVersion = '20260702-admin-stats-locked';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -257,6 +257,7 @@ const els = {
     tankprofiElectricBnetzaCount: document.querySelector('#tankprofiElectricBnetzaCount'),
     tankprofiElectricTeslaCount: document.querySelector('#tankprofiElectricTeslaCount'),
     tankprofiElectricFastCount: document.querySelector('#tankprofiElectricFastCount'),
+    tankprofiStatsPanel: document.querySelector('.tankprofi-stats-panel'),
     tankprofiKoenigSearchCount: document.querySelector('#tankprofiKoenigSearchCount'),
     tankprofiBerlinKoenigCount: document.querySelector('#tankprofiBerlinKoenigCount'),
     tankprofiKoenigAuditStats: document.querySelector('#tankprofiKoenigAuditStats'),
@@ -8722,7 +8723,6 @@ function setAdminOpen(open) {
     }
     els.settingsBackdrop?.classList.toggle('visible', open || els.settingsSheet?.classList.contains('open'));
     updateBottomNav();
-    if (open) loadTankprofiStats();
 }
 
 function setHelpOpen(open) {
@@ -8801,11 +8801,13 @@ function setTankIdAdminUnlocked(unlocked) {
     if (!unlocked) state.tankIdAdminPin = '';
     if (els.tankIdUnlock) els.tankIdUnlock.hidden = unlocked;
     if (els.tankIdAdminContent) els.tankIdAdminContent.hidden = !unlocked;
+    if (els.tankprofiStatsPanel) els.tankprofiStatsPanel.hidden = !unlocked;
     if (els.tankIdAdminStatus) {
         els.tankIdAdminStatus.textContent = unlocked
             ? 'Freigeschaltet. Kandidaten koennen geladen und manuell bestaetigt werden.'
             : 'Manuelle Zuordnung erst nach Codefreigabe.';
     }
+    if (unlocked) loadTankprofiStats();
 }
 
 async function unlockTankIdAdmin() {
@@ -9378,6 +9380,7 @@ function moveAdminContentIntoAdminSheet() {
     if (statsPanel && els.adminBody && statsPanel.parentElement !== els.adminBody) {
         els.adminBody.insertBefore(statsPanel, tankIdPanel || null);
     }
+    if (statsPanel) statsPanel.hidden = !state.tankIdAdminUnlocked;
 }
 
 function bindEvents() {
