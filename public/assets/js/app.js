@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260702-admin-stats-locked';
+const appVersion = '20260702-autobahn-route-spines';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -59,6 +59,32 @@ const DRIVE_ROUTE_TEMPLATES = [
     { id: 'a9-berlin', label: 'A9 Richtung Berlin', routeIds: ['A9'], direction: 'Berlin' },
     { id: 'berlin-salzburg', label: 'Berlin -> Salzburg', routeIds: ['A10', 'A9', 'A8'], direction: 'Muenchen' },
 ];
+const AUTOBAHN_ROUTE_CORRIDOR_KM = 16;
+const AUTOBAHN_ROUTE_SPINES = {
+    A1: [[49.7499, 6.6371], [50.9375, 6.9603], [51.4556, 7.0116], [51.9607, 7.6261], [53.0793, 8.8017], [53.5511, 9.9937]],
+    A2: [[51.4963, 6.8638], [51.5136, 7.4653], [52.0302, 8.5325], [52.3759, 9.7320], [52.2689, 10.5268], [52.1205, 11.6276], [52.4125, 12.5316], [52.3918, 13.0645]],
+    A3: [[51.8309, 6.2428], [51.4344, 6.7623], [50.9375, 6.9603], [50.3836, 8.0503], [50.1109, 8.6821], [49.7913, 9.9534], [49.4521, 11.0767], [49.0134, 12.1016], [48.5667, 13.4319]],
+    A4: [[50.7766, 6.0834], [50.9375, 6.9603], [50.8323, 8.7659], [50.9795, 11.3235], [50.9271, 11.5892], [50.8278, 12.9214], [51.0504, 13.7373], [51.1518, 14.9868]],
+    A5: [[50.8480, 9.7280], [50.1109, 8.6821], [49.8728, 8.6512], [49.3988, 8.6724], [49.0069, 8.4037], [48.4729, 7.9424], [48.0000, 7.8421], [47.5934, 7.6198]],
+    A6: [[49.7499, 6.6371], [49.2402, 6.9969], [49.4875, 8.4660], [49.1427, 9.2109], [49.4521, 11.0767], [49.0134, 12.1016], [49.4019, 12.5160]],
+    A7: [[54.7937, 9.4469], [53.5511, 9.9937], [52.3759, 9.7320], [51.3127, 9.4797], [50.5542, 9.6808], [49.7913, 9.9534], [49.4521, 11.0767], [48.3715, 10.8985], [47.5696, 10.7004]],
+    A8: [[49.0069, 8.4037], [48.7758, 9.1829], [48.3984, 9.9916], [48.1372, 11.5755], [47.8564, 12.1225], [47.8095, 12.9902]],
+    A9: [[52.2737, 12.9861], [51.8286, 12.2583], [51.3402, 12.3747], [50.8957, 11.8536], [50.3135, 11.9128], [49.9456, 11.5713], [49.4521, 11.0767], [48.7665, 11.4258], [48.1372, 11.5755]],
+    A10: [[52.3918, 13.0645], [52.6542, 13.5064], [52.5600, 13.7500], [52.3183, 13.4958], [52.3200, 13.1000], [52.3918, 13.0645]],
+    A11: [[52.6542, 13.5064], [52.8432, 13.6935], [52.9794, 13.7447], [53.3167, 13.8667], [53.3422, 14.3900]],
+    A12: [[52.3183, 13.4958], [52.3607, 14.0619], [52.3415, 14.5506], [52.3094, 14.6093]],
+    A14: [[53.8970, 11.4649], [53.6294, 11.4132], [53.3250, 11.4970], [52.1205, 11.6276], [51.4825, 11.9705], [51.3402, 12.3747], [51.0504, 13.7373]],
+    A20: [[53.8950, 10.7000], [53.8689, 11.1647], [53.6294, 11.4132], [53.5572, 13.2618], [53.8535, 14.0162], [53.3422, 14.3900]],
+    A24: [[53.5565, 10.0981], [53.5468, 10.2504], [53.5210, 10.8065], [53.5017, 11.0892], [53.3808, 11.6282], [53.3673, 11.7294], [53.1590, 12.4630], [53.0685, 12.5328], [52.9062, 12.7505], [52.8058, 12.7860], [52.7540, 12.8540], [52.7520, 13.0300], [52.6542, 13.5064]],
+    A30: [[52.2873, 7.5990], [52.2799, 8.0472], [52.2035, 8.8034], [52.0302, 8.5325], [52.2789, 9.0497]],
+    A44: [[50.7766, 6.0834], [51.2277, 6.7735], [51.4556, 7.0116], [51.5136, 7.4653], [51.3127, 9.4797]],
+    A45: [[51.5136, 7.4653], [51.1652, 7.0671], [50.8758, 8.0243], [50.1109, 8.6821]],
+    A61: [[50.3569, 7.5890], [50.9375, 6.9603], [50.5642, 7.3086], [49.9929, 8.2473], [49.0069, 8.4037]],
+    A81: [[49.1427, 9.2109], [48.7758, 9.1829], [48.0594, 8.4641], [47.6779, 8.6150]],
+    A93: [[50.3135, 11.9128], [50.0044, 12.0859], [49.6744, 12.1489], [49.3263, 12.1098], [49.0134, 12.1016], [48.8164, 11.8494], [48.6052, 11.5960], [47.8564, 12.1225], [47.6148, 12.1907]],
+    A94: [[48.1372, 11.7030], [48.1682, 11.9124], [48.1891, 11.8694], [48.2706, 12.1528], [48.2465, 12.5217], [48.2256, 12.6760], [48.2640, 13.0237], [48.4014, 13.3135], [48.5667, 13.4319]],
+    A96: [[48.1372, 11.5755], [48.0447, 10.8822], [47.9928, 10.1806], [47.5442, 9.6839]],
+};
 
 const state = {
     map: null,
@@ -1511,15 +1537,57 @@ function hasValidCoordinates(station) {
     return Number.isFinite(Number(station?.lat)) && Number.isFinite(Number(station?.lng));
 }
 
+function normalizedHighwayId(value) {
+    return String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+}
+
+function autobahnRouteSpinePoints(highway) {
+    return (AUTOBAHN_ROUTE_SPINES[normalizedHighwayId(highway)] || [])
+        .map(([lat, lng]) => [Number(lat), Number(lng)])
+        .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+}
+
+function distanceToPolylineKm(point, linePoints) {
+    const lat = Number(point?.lat);
+    const lng = Number(point?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !linePoints.length) return Number.POSITIVE_INFINITY;
+    const segments = linePoints
+        .map(([pointLat, pointLng]) => ({ lat: pointLat, lng: pointLng }))
+        .filter(hasValidCoordinates);
+    if (segments.length === 1) return routeDistanceKm(lat, lng, segments[0].lat, segments[0].lng);
+    let best = Number.POSITIVE_INFINITY;
+    for (let index = 1; index < segments.length; index += 1) {
+        best = Math.min(best, distanceToSegmentKm({ lat, lng }, segments[index - 1], segments[index]));
+    }
+    return best;
+}
+
+function autobahnStationCorridorKm(station, highway = state.selectedHighway) {
+    const spinePoints = autobahnRouteSpinePoints(highway);
+    if (spinePoints.length < 2) return 0;
+    return distanceToPolylineKm(station, spinePoints);
+}
+
+function isStationInAutobahnCorridor(station, highway = state.selectedHighway) {
+    const spinePoints = autobahnRouteSpinePoints(highway);
+    if (spinePoints.length < 2) return true;
+    const distanceKm = autobahnStationCorridorKm(station, highway);
+    return Number.isFinite(distanceKm) && distanceKm <= AUTOBAHN_ROUTE_CORRIDOR_KM;
+}
+
 function autobahnMapDebug(stations, markerCount = 0, activeTab = state.view) {
     if (state.listMode !== 'autobahn') return;
     const total = stations.length;
     const withCoordinates = stations.filter(hasValidCoordinates).length;
     const withoutCoordinates = total - withCoordinates;
+    const offCorridor = state.selectedHighway !== 'all'
+        ? stations.filter((station) => hasValidCoordinates(station) && !isStationInAutobahnCorridor(station)).length
+        : 0;
     console.info('[Tankprofi Autobahn]', {
         total,
         withCoordinates,
         withoutCoordinates,
+        offCorridor,
         markerCount,
         selectedHighway: state.selectedHighway,
         activeTab,
@@ -1530,6 +1598,15 @@ function autobahnStationsWithCoordinates(stations) {
     const valid = [];
     stations.forEach((station) => {
         if (hasValidCoordinates(station)) {
+            if (state.listMode === 'autobahn' && state.selectedHighway !== 'all' && !isStationInAutobahnCorridor(station)) {
+                console.debug('[Tankprofi Autobahn] Standort ausserhalb Streckenkorridor', {
+                    name: station?.name || 'Autobahn-Tankstelle',
+                    autobahn: station?.highway || state.selectedHighway,
+                    distanceKm: autobahnStationCorridorKm(station).toFixed(1),
+                    reason: 'ausserhalb Autobahn-Korridor',
+                });
+                return;
+            }
             valid.push(station);
             return;
         }
@@ -2173,6 +2250,16 @@ function autobahnRouteGeometryCacheKey(highway, points) {
     return `${highway}:${coordKey}`;
 }
 
+function autobahnRouteLineSourcePoints(highway, stations) {
+    const spinePoints = autobahnRouteSpinePoints(highway);
+    if (spinePoints.length >= 2) return spinePoints;
+    return stations
+        .filter((station) => station.autobahnMode && station.highway === highway)
+        .filter((station) => Number.isFinite(Number(station.lat)) && Number.isFinite(Number(station.lng)))
+        .sort(sortAutobahnStationsByGps)
+        .map((station) => [Number(station.lat), Number(station.lng)]);
+}
+
 async function loadAutobahnRouteGeometry(points) {
     const waypoints = sampledAutobahnRouteWaypoints(points);
     if (waypoints.length < 2) return [];
@@ -2246,11 +2333,7 @@ function renderAutobahnRouteOverlay() {
     if (state.listMode !== 'autobahn' || state.selectedHighway === 'all') return;
 
     syncAutobahnVisibleStations();
-    const routePoints = state.autobahnStations
-        .filter((station) => station.autobahnMode && station.highway === state.selectedHighway)
-        .filter((station) => Number.isFinite(Number(station.lat)) && Number.isFinite(Number(station.lng)))
-        .sort(sortAutobahnStationsByGps)
-        .map((station) => [Number(station.lat), Number(station.lng)]);
+    const routePoints = autobahnRouteLineSourcePoints(state.selectedHighway, state.autobahnStations);
     if (routePoints.length < 2) return;
     const cacheKey = autobahnRouteGeometryCacheKey(state.selectedHighway, routePoints);
     const cachedGeometry = state.autobahnRouteGeometryCache.get(cacheKey);
@@ -2265,7 +2348,9 @@ function renderAutobahnRouteOverlay() {
     }).addTo(state.map);
     state.autobahnRouteLayer.bringToBack();
 
-    const bounds = L.latLngBounds([...linePoints, ...routePoints]);
+    const markerPoints = autobahnStationsWithCoordinates(state.stations)
+        .map((station) => [Number(station.lat), Number(station.lng)]);
+    const bounds = L.latLngBounds([...linePoints, ...routePoints, ...markerPoints]);
     if (bounds.isValid()) {
         state.map.fitBounds(bounds.pad(0.2), { maxZoom: 12, animate: true });
     }
