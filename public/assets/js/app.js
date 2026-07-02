@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260701-tank-id-autohof-google';
+const appVersion = '20260702-drive-portrait-lock';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -192,6 +192,7 @@ const state = {
     detailImportAttemptAt: new Map(),
     detailReturnView: null,
     wakeLock: null,
+    drivingOrientationLocked: false,
     drivingMessage: 'Fahrmodus starten.',
     favoriteRefreshId: 0,
     navRequestId: 0,
@@ -6689,8 +6690,22 @@ async function requestPortraitOrientationLock() {
     if (!orientation || typeof orientation.lock !== 'function') return;
     try {
         await orientation.lock('portrait');
+        state.drivingOrientationLocked = true;
     } catch {
+        state.drivingOrientationLocked = false;
         // Browser may allow orientation lock only in installed PWA/fullscreen mode.
+    }
+}
+
+function releasePortraitOrientationLock() {
+    const orientation = screen?.orientation;
+    if (!state.drivingOrientationLocked || !orientation || typeof orientation.unlock !== 'function') return;
+    try {
+        orientation.unlock();
+    } catch {
+        // Browser may already have unlocked the orientation.
+    } finally {
+        state.drivingOrientationLocked = false;
     }
 }
 
@@ -6708,6 +6723,7 @@ async function releaseDriveWakeLock() {
 function handleDriveWakeLockVisibility() {
     if (document.visibilityState === 'visible' && state.drivingActive) {
         requestDriveWakeLock();
+        requestPortraitOrientationLock();
     }
 }
 
@@ -6835,6 +6851,7 @@ async function startDrivingMode(routeId = 'ALL', options = {}) {
 }
 
 function stopDrivingMode(restore = true) {
+    releasePortraitOrientationLock();
     releaseDriveWakeLock();
     stopDrivingCompass();
     if (state.drivingWatchId !== null && navigator.geolocation) {
