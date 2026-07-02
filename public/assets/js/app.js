@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260702-admin-area';
+const appVersion = '20260702-admin-from-settings';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -235,7 +235,9 @@ const els = {
     settingsBackdrop: document.querySelector('#settingsBackdrop'),
     settingsClose: document.querySelector('#settingsCloseButton'),
     adminSheet: document.querySelector('#adminSheet'),
+    adminBody: document.querySelector('#adminBody'),
     adminClose: document.querySelector('#adminCloseButton'),
+    adminOpen: document.querySelector('#adminOpenButton'),
     shareToggle: document.querySelector('#shareToggleButton'),
     shareContent: document.querySelector('#shareContent'),
     shareLink: document.querySelector('#shareLinkInput'),
@@ -8710,7 +8712,6 @@ function setSettingsOpen(open) {
     }
     els.settingsBackdrop.classList.toggle('visible', open || els.adminSheet?.classList.contains('open'));
     updateBottomNav();
-    if (open) loadTankprofiStats();
 }
 
 function setAdminOpen(open) {
@@ -8721,6 +8722,7 @@ function setAdminOpen(open) {
     }
     els.settingsBackdrop?.classList.toggle('visible', open || els.settingsSheet?.classList.contains('open'));
     updateBottomNav();
+    if (open) loadTankprofiStats();
 }
 
 function setHelpOpen(open) {
@@ -9370,7 +9372,16 @@ function restoreStartState() {
     }, lastLocation ? 7000 : 7600);
 }
 
+function moveAdminContentIntoAdminSheet() {
+    const statsPanel = document.querySelector('.tankprofi-stats-panel');
+    const tankIdPanel = document.querySelector('.tank-id-admin-panel');
+    if (statsPanel && els.adminBody && statsPanel.parentElement !== els.adminBody) {
+        els.adminBody.insertBefore(statsPanel, tankIdPanel || null);
+    }
+}
+
 function bindEvents() {
+    moveAdminContentIntoAdminSheet();
     updateViewportHeightVar();
     window.addEventListener('resize', updateViewportHeightVar);
     window.visualViewport?.addEventListener('resize', updateViewportHeightVar);
@@ -9626,6 +9637,7 @@ function bindEvents() {
         setHelpOpen(false);
     });
     els.settingsClose.addEventListener('click', () => setSettingsOpen(false));
+    els.adminOpen?.addEventListener('click', () => setAdminOpen(true));
     els.adminClose?.addEventListener('click', () => setAdminOpen(false));
     els.help?.addEventListener('click', () => {
         setSettingsOpen(false);

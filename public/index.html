@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
-    <link rel="stylesheet" href="assets/css/app.css?v=20260702-admin-area">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260702-admin-from-settings">
 </head>
 <body>
     <section class="splash-screen" id="splashScreen" aria-label="Tankprofi wird geladen">
@@ -148,10 +148,6 @@
                 <button class="bottom-nav-button" type="button" data-action="settings">
                     <span class="tab-icon" aria-hidden="true">⚙</span>
                     <span>Einstellungen</span>
-                </button>
-                <button class="bottom-nav-button" type="button" data-action="admin">
-                    <span class="tab-icon" aria-hidden="true">!</span>
-                    <span>Admin</span>
                 </button>
             </nav>
 
@@ -324,6 +320,12 @@
                         </div>
                     </section>
 
+                    <section class="share-panel admin-entry-panel" aria-label="Administration">
+                        <strong>Administration</strong>
+                        <span>Datenbestand, Preis-Updates und Tank-ID-Zuordnungen sind im geschuetzten Admin-Bereich.</span>
+                        <button class="text-button" id="adminOpenButton" type="button">Administration oeffnen</button>
+                    </section>
+
                     <section class="share-panel tankprofi-stats-panel" aria-label="Tankprofi Datenbestand">
                         <strong>Gesammelte Daten</strong>
                         <details class="settings-data-section" open>
@@ -451,7 +453,7 @@
     <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script type="module" src="assets/js/firebase-app.js?v=20260701-city-speed-display-plus3"></script>
-    <script src="assets/js/app.js?v=20260702-admin-area" defer></script>
+    <script src="assets/js/app.js?v=20260702-admin-from-settings" defer></script>
 </body>
 </html>
 

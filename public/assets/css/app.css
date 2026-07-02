@@ -1563,7 +1563,7 @@ select:focus {
 .bottom-nav {
     flex: 0 0 auto;
     display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 4px;
     min-height: calc(54px + env(safe-area-inset-bottom));
     padding: 3px 10px 0;
@@ -1578,7 +1578,7 @@ select:focus {
 }
 
 .vehicle-electric .bottom-nav {
-    grid-template-columns: repeat(8, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
 .vehicle-electric .bottom-nav [data-action="charging"] {
