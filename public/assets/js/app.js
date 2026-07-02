@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260702-drive-portrait-lock';
+const appVersion = '20260702-drive-portrait-manifest';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -6688,13 +6688,17 @@ async function requestDriveWakeLock() {
 async function requestPortraitOrientationLock() {
     const orientation = screen?.orientation;
     if (!orientation || typeof orientation.lock !== 'function') return;
-    try {
-        await orientation.lock('portrait');
-        state.drivingOrientationLocked = true;
-    } catch {
-        state.drivingOrientationLocked = false;
-        // Browser may allow orientation lock only in installed PWA/fullscreen mode.
+    for (const lockType of ['portrait-primary', 'portrait']) {
+        try {
+            await orientation.lock(lockType);
+            state.drivingOrientationLocked = true;
+            return;
+        } catch {
+            // Try the next supported portrait lock value.
+        }
     }
+    state.drivingOrientationLocked = false;
+    // Browser may allow orientation lock only in installed PWA/fullscreen mode.
 }
 
 function releasePortraitOrientationLock() {
