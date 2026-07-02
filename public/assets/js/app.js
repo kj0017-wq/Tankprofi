@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260702-drive-portrait-manifest';
+const appVersion = '20260702-admin-area';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -234,6 +234,8 @@ const els = {
     settingsSheet: document.querySelector('#settingsSheet'),
     settingsBackdrop: document.querySelector('#settingsBackdrop'),
     settingsClose: document.querySelector('#settingsCloseButton'),
+    adminSheet: document.querySelector('#adminSheet'),
+    adminClose: document.querySelector('#adminCloseButton'),
     shareToggle: document.querySelector('#shareToggleButton'),
     shareContent: document.querySelector('#shareContent'),
     shareLink: document.querySelector('#shareLinkInput'),
@@ -8687,7 +8689,12 @@ function updateBottomNav() {
             || (action === 'autobahn' && state.view === 'list' && state.listMode === 'autobahn')
             || (action === 'charging' && state.listMode === 'charging' && state.chargingShowOperators)
             || (action === 'settings' && els.settingsSheet?.classList.contains('open'))
-            || (action === 'list' && state.view === 'list' && !els.detail.classList.contains('visible') && (
+            || (action === 'admin' && els.adminSheet?.classList.contains('open'))
+            || (action === 'list' && state.view === 'list'
+                && !els.detail.classList.contains('visible')
+                && !els.settingsSheet?.classList.contains('open')
+                && !els.adminSheet?.classList.contains('open')
+                && (
                 state.listMode === 'results'
                 || (state.listMode === 'charging' && !state.chargingShowOperators)
             ));
@@ -8697,14 +8704,28 @@ function updateBottomNav() {
 
 function setSettingsOpen(open) {
     els.settingsSheet.classList.toggle('open', open);
-    els.settingsBackdrop.classList.toggle('visible', open);
+    if (open) {
+        els.adminSheet?.classList.remove('open');
+        setHelpOpen(false);
+    }
+    els.settingsBackdrop.classList.toggle('visible', open || els.adminSheet?.classList.contains('open'));
     updateBottomNav();
     if (open) loadTankprofiStats();
 }
 
+function setAdminOpen(open) {
+    els.adminSheet?.classList.toggle('open', open);
+    if (open) {
+        els.settingsSheet?.classList.remove('open');
+        setHelpOpen(false);
+    }
+    els.settingsBackdrop?.classList.toggle('visible', open || els.settingsSheet?.classList.contains('open'));
+    updateBottomNav();
+}
+
 function setHelpOpen(open) {
     els.helpSheet?.classList.toggle('open', open);
-    els.settingsBackdrop?.classList.toggle('visible', open || els.settingsSheet?.classList.contains('open'));
+    els.settingsBackdrop?.classList.toggle('visible', open || els.settingsSheet?.classList.contains('open') || els.adminSheet?.classList.contains('open'));
 }
 
 function setShareOpen(open) {
@@ -9389,6 +9410,9 @@ function bindEvents() {
         if (event.key === 'Escape' && els.settingsSheet.classList.contains('open')) {
             setSettingsOpen(false);
         }
+        if (event.key === 'Escape' && els.adminSheet?.classList.contains('open')) {
+            setAdminOpen(false);
+        }
         if (event.key === 'Escape' && els.helpSheet?.classList.contains('open')) {
             setHelpOpen(false);
         }
@@ -9455,6 +9479,11 @@ function bindEvents() {
 
             if (action === 'settings') {
                 setSettingsOpen(!els.settingsSheet.classList.contains('open'));
+                return;
+            }
+
+            if (action === 'admin') {
+                setAdminOpen(!els.adminSheet?.classList.contains('open'));
                 return;
             }
 
@@ -9593,9 +9622,11 @@ function bindEvents() {
     });
     els.settingsBackdrop.addEventListener('click', () => {
         setSettingsOpen(false);
+        setAdminOpen(false);
         setHelpOpen(false);
     });
     els.settingsClose.addEventListener('click', () => setSettingsOpen(false));
+    els.adminClose?.addEventListener('click', () => setAdminOpen(false));
     els.help?.addEventListener('click', () => {
         setSettingsOpen(false);
         setHelpOpen(!els.helpSheet?.classList.contains('open'));

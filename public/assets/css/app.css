@@ -731,6 +731,20 @@ select:focus {
     transform: translateY(0);
 }
 
+.admin-box {
+    top: calc(92px + env(safe-area-inset-top));
+    max-height: calc(var(--app-viewport-height) - 92px - env(safe-area-inset-top));
+    background: #f4f8ff;
+}
+
+.admin-body {
+    padding-bottom: max(28px, env(safe-area-inset-bottom));
+}
+
+.admin-box .tank-id-admin-list {
+    max-height: calc(var(--app-viewport-height) - 330px);
+}
+
 .settings-backdrop {
     position: fixed;
     inset: 0;
@@ -1549,7 +1563,7 @@ select:focus {
 .bottom-nav {
     flex: 0 0 auto;
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 4px;
     min-height: calc(54px + env(safe-area-inset-bottom));
     padding: 3px 10px 0;
@@ -1564,7 +1578,7 @@ select:focus {
 }
 
 .vehicle-electric .bottom-nav {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(8, minmax(0, 1fr));
 }
 
 .vehicle-electric .bottom-nav [data-action="charging"] {
