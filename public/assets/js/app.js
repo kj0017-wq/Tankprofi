@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260702-autobahn-route-spines';
+const appVersion = '20260702-drive-map-ready';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
@@ -40,11 +40,11 @@ const DRIVE_ROUTE_HOLD_MAX_KM = 4;
 const DRIVE_POSITION_STALE_MS = 15 * 1000;
 const DRIVE_COMPASS_REFRESH_MS = 30 * 1000;
 const DRIVE_COMPASS_RENDER_FAST_MS = 1200;
-const DRIVE_MAP_FOLLOW_MIN_MS = 350;
+const DRIVE_MAP_FOLLOW_MIN_MS = 2500;
 const DRIVE_MAP_MANUAL_PAUSE_MS = 15 * 1000;
 const DRIVE_MAP_INITIAL_ZOOM_DELAY_MS = 5 * 1000;
 const DRIVE_MAP_NEAREST_OPEN_DELAY_MS = 1000;
-const DRIVE_MAP_FOLLOW_ZOOM = 17;
+const DRIVE_MAP_FOLLOW_ZOOM = 16;
 const DRIVE_MAP_USER_VERTICAL_OFFSET_RATIO = 0.16;
 const DRIVE_CITY_MAP_RADIUS_KM = 1.5;
 const DRIVE_CONTROL_REVEAL_MS = 10 * 1000;
@@ -105,6 +105,8 @@ const state = {
     drivingMapFollowAt: null,
     drivingMapUserPanUntil: 0,
     drivingMapProgrammaticMove: false,
+    drivingMapReadyPending: false,
+    drivingMapLastAutoFitKey: null,
     drivingControlsVisibleUntil: 0,
     drivingControlsTimer: null,
     drivingListAutoTopTimer: null,
@@ -1477,6 +1479,7 @@ function setView(view) {
         state.drivingMapFocusKey = null;
         state.drivingMapFocusActive = false;
         state.drivingMapFollowAt = null;
+        state.drivingMapLastAutoFitKey = null;
         updateDrivingMapRotation();
         updateDrivingMapNearestBox([]);
     }
@@ -1498,7 +1501,7 @@ function setView(view) {
                 const lng = Number(anchor?.lng);
                 if (Number.isFinite(lat) && Number.isFinite(lng)) {
                     state.drivingMapProgrammaticMove = true;
-                    state.map.setView([lat, lng], Math.min(state.map.getZoom() || 12, 12), { animate: true });
+                    state.map.setView([lat, lng], Math.min(state.map.getZoom() || 12, 12), { animate: false });
                     window.setTimeout(() => {
                         state.drivingMapProgrammaticMove = false;
                     }, 0);
@@ -2003,6 +2006,48 @@ function drivingMapHeading(position) {
     return 0;
 }
 
+function drivingMapHasUsablePosition() {
+    return hasValidCoordinates(state.drivingSamples[state.drivingSamples.length - 1])
+        || hasValidCoordinates(state.selectedLocation);
+}
+
+function drivingMapDataReady() {
+    if (!state.drivingActive || state.listMode !== 'driving') return false;
+    if (!drivingMapHasUsablePosition()) return false;
+    if (['starting', 'waiting', 'loading-prices'].includes(String(state.drivingStatus || ''))) return false;
+    return state.stations.length > 0
+        || state.drivingStatus === 'empty'
+        || state.drivingVehicleMode === 'electric'
+        || Boolean(state.drivingDestination && state.drivingRouteGeometry?.length);
+}
+
+function requestDrivingMapView() {
+    if (state.listMode !== 'driving') {
+        setView('map');
+        return true;
+    }
+    if (!drivingMapDataReady()) {
+        state.drivingMapReadyPending = true;
+        state.drivingMessage = state.drivingStatus === 'loading-prices'
+            ? 'Karte wird vorbereitet - Preise und Tankpunkte werden geladen'
+            : 'Karte wird vorbereitet - Standort und Tankpunkte werden geladen';
+        setStatus('Warten');
+        renderDrivingModeList();
+        evaluateDrivingModeList();
+        return false;
+    }
+    state.drivingMapReadyPending = false;
+    setView('map');
+    updateDrivingModeMapMarkers({ initial: true });
+    return true;
+}
+
+function flushPendingDrivingMapView() {
+    if (!state.drivingMapReadyPending || state.view === 'map') return;
+    if (!drivingMapDataReady()) return;
+    requestDrivingMapView();
+}
+
 function updateDrivingMapRotation() {
     const mapEl = document.querySelector('#map');
     if (!mapEl) return;
@@ -2319,8 +2364,16 @@ function renderDrivingRouteOverlay() {
         ...(state.drivingDestination ? [[state.drivingDestination.lat, state.drivingDestination.lng]] : []),
         ...(selectedStation ? [[selectedStation.lat, selectedStation.lng]] : []),
     ].filter(([lat, lng]) => Number.isFinite(Number(lat)) && Number.isFinite(Number(lng)));
-    if (fitPoints.length && !state.drivingMapFocusActive) {
-        state.map.fitBounds(L.latLngBounds(fitPoints).pad(0.22), { maxZoom: 13 });
+    const fitKey = [
+        state.drivingContext,
+        state.drivingDestination ? 'destination' : 'local',
+        state.drivingRouteGeometry?.length || 0,
+        fitPoints.length,
+        state.stations.slice(0, 3).map((station) => drivingPointId(station)).join(','),
+    ].join('|');
+    if (fitPoints.length && !state.drivingMapFocusActive && state.drivingMapLastAutoFitKey !== fitKey) {
+        state.drivingMapLastAutoFitKey = fitKey;
+        state.map.fitBounds(L.latLngBounds(fitPoints).pad(0.22), { maxZoom: 13, animate: false });
     }
 }
 
@@ -4821,10 +4874,10 @@ function openDrivingDestinationMap() {
     state.drivingDestinationEdited = false;
     state.drivingDestinationConfirmedOpen = false;
     state.drivingRouteInfoVisible = false;
-    setView('map');
+    if (!requestDrivingMapView()) return;
     window.requestAnimationFrame(() => {
         refreshMapLayout();
-        updateDrivingModeMapMarkers();
+        updateDrivingModeMapMarkers({ initial: true });
     });
 }
 
@@ -6242,6 +6295,17 @@ function drivingCalibrationOverlayHtml() {
     `;
 }
 
+function drivingMapPendingNoticeHtml() {
+    if (!state.drivingMapReadyPending) return '';
+    return `
+        <div class="driving-calibration-overlay driving-map-pending-notice" role="status" aria-live="polite">
+            <span class="driving-calibration-spinner" aria-hidden="true"></span>
+            <strong>Karte wird vorbereitet</strong>
+            <small>${escapeHtml(state.drivingMessage || 'Standort und Tankpunkte werden geladen.')}</small>
+        </div>
+    `;
+}
+
 function drivingEmptyStateMessage() {
     const status = String(state.drivingStatus || '');
     if (state.drivingUpdateInProgress || ['starting', 'waiting', 'direction-pending', 'loading-prices'].includes(status)) {
@@ -6333,6 +6397,7 @@ function renderDrivingModeList() {
         <section class="driving-dashboard">
             ${drivingRouteInfoOverlayHtml()}
             ${drivingCalibrationOverlayHtml()}
+            ${drivingMapPendingNoticeHtml()}
             <div class="driving-control-drawer">
                 ${drivingDestinationFormHtml()}
                 ${drivingRefreshVisualizationHtml(visibleStations)}
@@ -6351,7 +6416,7 @@ function renderDrivingModeList() {
     els.resultCount.querySelector('[data-driving-header-view]')?.addEventListener('click', (event) => {
         const targetView = event.currentTarget.dataset.drivingHeaderView;
         if (targetView === 'map') {
-            openDrivingDestinationMap();
+            requestDrivingMapView();
             return;
         }
         setView('list');
@@ -6469,9 +6534,10 @@ function renderDrivingModeList() {
     });
 }
 
-function updateDrivingModeMapMarkers() {
+function updateDrivingModeMapMarkers(options = {}) {
     if (state.view !== 'map') return;
     renderMarkers();
+    if (!options.initial) return;
     const routePoints = Array.isArray(state.drivingRouteGeometry) ? state.drivingRouteGeometry : [];
     const fallbackPoints = [
         ...routePoints,
@@ -6480,14 +6546,14 @@ function updateDrivingModeMapMarkers() {
     ].filter(([lat, lng]) => Number.isFinite(Number(lat)) && Number.isFinite(Number(lng)));
     if (!state.stations.length && fallbackPoints.length && state.map?.type !== 'fallback') {
         if (fallbackPoints.length === 1) {
-            state.map.setView(fallbackPoints[0], 13, { animate: true });
+            state.map.setView(fallbackPoints[0], 13, { animate: false });
         } else {
-            state.map.fitBounds(L.latLngBounds(fallbackPoints).pad(0.22), { maxZoom: 13, animate: true });
+            state.map.fitBounds(L.latLngBounds(fallbackPoints).pad(0.22), { maxZoom: 13, animate: false });
         }
         return;
     }
     if (!state.stations.length && state.selectedLocation && state.map?.type !== 'fallback') {
-        state.map.setView([state.selectedLocation.lat, state.selectedLocation.lng], 13, { animate: true });
+        state.map.setView([state.selectedLocation.lat, state.selectedLocation.lng], 13, { animate: false });
     }
 }
 
@@ -6570,6 +6636,7 @@ async function updateElectricDrivingMode(position) {
             ? 'Keine Ladeanlagen entlang des Korridors gefunden'
             : `Keine Ladeanlagen im ${localContextLabel} bis ${localRadius} km gefunden`);
     if (state.view === 'map') updateDrivingModeMapMarkers();
+    flushPendingDrivingMapView();
     if (!isDrivingDestinationInputActive()) renderDrivingModeList();
 }
 
@@ -6890,6 +6957,10 @@ async function startDrivingMode(routeId = 'ALL', options = {}) {
     state.drivingSamples = [];
     state.drivingSpeedKmh = null;
     state.drivingSpeedUpdatedAt = null;
+    state.drivingMapReadyPending = false;
+    state.drivingMapLastAutoFitKey = null;
+    state.drivingMapFocusKey = null;
+    state.drivingMapFocusActive = false;
     clearDrivingSpeedResetTimer();
     state.drivingAccuracy = null;
     state.drivingRouteGeometry = [];
@@ -6958,6 +7029,10 @@ function stopDrivingMode(restore = true) {
     state.drivingUpdateInProgress = false;
     state.drivingActive = false;
     state.drivingVehicleMode = DEFAULT_VEHICLE_MODE;
+    state.drivingMapReadyPending = false;
+    state.drivingMapLastAutoFitKey = null;
+    state.drivingMapFocusKey = null;
+    state.drivingMapFocusActive = false;
     clearDrivingControlsTimer();
     state.drivingControlsVisibleUntil = 0;
     state.drivingSamples = [];
@@ -9524,7 +9599,13 @@ function bindEvents() {
         if (els.results.scrollTop > 4) scheduleDrivingListAutoTop();
     }, { passive: true });
     els.viewButtons.forEach((button) => {
-        button.addEventListener('click', () => setView(button.dataset.view));
+        button.addEventListener('click', () => {
+            if (state.listMode === 'driving' && button.dataset.view === 'map') {
+                requestDrivingMapView();
+                return;
+            }
+            setView(button.dataset.view);
+        });
     });
     els.resultCount.addEventListener('click', (event) => {
         if (!event.target.closest('[data-driving-header-view="list"]')) return;
@@ -9568,8 +9649,7 @@ function bindEvents() {
                     return;
                 }
                 if (state.listMode === 'driving') {
-                    setView('map');
-                    updateDrivingModeMapMarkers();
+                    requestDrivingMapView();
                     return;
                 }
                 setView('map');
