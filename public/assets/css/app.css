@@ -7964,3 +7964,34 @@ button.city-row:focus {
         font-size: 0.68rem !important;
     }
 }
+
+@media (orientation: landscape) and (max-height: 560px) {
+    .app-shell.driving-mode::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: 12000;
+        background: linear-gradient(180deg, #ffd230 0%, #fff7df 100%);
+    }
+
+    .app-shell.driving-mode::after {
+        content: "Drive Mode\A Bitte Handy hochkant drehen";
+        white-space: pre-line;
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        z-index: 12001;
+        width: min(420px, calc(100vw - 44px));
+        transform: translate(-50%, -50%);
+        padding: 22px 18px;
+        border: 4px solid var(--ink);
+        border-radius: 12px;
+        color: var(--ink);
+        background: var(--green-100);
+        box-shadow: 8px 8px 0 rgba(16, 20, 25, 0.22);
+        font-size: clamp(1.2rem, 4.8vw, 2rem);
+        font-weight: 950;
+        line-height: 1.18;
+        text-align: center;
+    }
+}
