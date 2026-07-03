@@ -2,9 +2,11 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260702-drive-speed-responsive';
+const appVersion = '20260703-ev-detail-singlemap';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
+const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
+const CHARGING_AUTOBAHN_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const COMBUSTION_RADIUS_OPTIONS = ['2', '5', '10', '15', '20', '25'];
 const ELECTRIC_RADIUS_OPTIONS = ['5', '10', '25'];
 const COMBUSTION_LIMIT_OPTIONS = ['10', '25', '50', '100'];
@@ -84,6 +86,128 @@ const AUTOBAHN_ROUTE_SPINES = {
     A93: [[50.3135, 11.9128], [50.0044, 12.0859], [49.6744, 12.1489], [49.3263, 12.1098], [49.0134, 12.1016], [48.8164, 11.8494], [48.6052, 11.5960], [47.8564, 12.1225], [47.6148, 12.1907]],
     A94: [[48.1372, 11.7030], [48.1682, 11.9124], [48.1891, 11.8694], [48.2706, 12.1528], [48.2465, 12.5217], [48.2256, 12.6760], [48.2640, 13.0237], [48.4014, 13.3135], [48.5667, 13.4319]],
     A96: [[48.1372, 11.5755], [48.0447, 10.8822], [47.9928, 10.1806], [47.5442, 9.6839]],
+};
+
+const AUTOBAHN_ROUTE_META = {
+    A1: { start: 'Heiligenhafen', end: 'Saarbruecken', lengthKm: 748 },
+    A2: { start: 'Oberhausen', end: 'AD Werder', lengthKm: 473 },
+    A3: { start: 'Emmerich', end: 'Passau', lengthKm: 769 },
+    A4: { start: 'Aachen', end: 'Goerlitz', lengthKm: 583 },
+    A5: { start: 'Hattenbacher Dreieck', end: 'Weil am Rhein', lengthKm: 440 },
+    A6: { start: 'Saarbruecken', end: 'Waidhaus', lengthKm: 484 },
+    A7: { start: 'Flensburg', end: 'Fuessen', lengthKm: 962 },
+    A8: { start: 'Perl', end: 'Bad Reichenhall', lengthKm: 505 },
+    A9: { start: 'AD Potsdam', end: 'Muenchen', lengthKm: 530 },
+    A10: { start: 'Berliner Ring', end: 'Berliner Ring', lengthKm: 196 },
+    A11: { start: 'Pomellen', end: 'AD Barnim', lengthKm: 110 },
+    A12: { start: 'AD Spreeau', end: 'Frankfurt Oder', lengthKm: 58 },
+    A13: { start: 'Schoenefelder Kreuz', end: 'Dresden', lengthKm: 151 },
+    A14: { start: 'Wismar', end: 'Noessen', lengthKm: 333 },
+    A15: { start: 'Luebbenau', end: 'Forst', lengthKm: 64 },
+    A17: { start: 'Dresden', end: 'Bad Gottleuba', lengthKm: 45 },
+    A19: { start: 'Rostock', end: 'AD Wittstock', lengthKm: 123 },
+    A20: { start: 'Bad Segeberg', end: 'Kreuz Uckermark', lengthKm: 345 },
+    A21: { start: 'Klein Barkau', end: 'AK Bargteheide', lengthKm: 64 },
+    A23: { start: 'Heide', end: 'Hamburg', lengthKm: 96 },
+    A24: { start: 'Hamburg', end: 'AD Havelland', lengthKm: 237 },
+    A25: { start: 'Hamburg', end: 'Geesthacht', lengthKm: 18 },
+    A26: { start: 'Stade', end: 'Neu Wulmstorf', lengthKm: 24 },
+    A27: { start: 'Cuxhaven', end: 'Walsrode', lengthKm: 162 },
+    A28: { start: 'Leer', end: 'Stuhr', lengthKm: 97 },
+    A29: { start: 'Wilhelmshaven', end: 'Ahlhorner Heide', lengthKm: 95 },
+    A30: { start: 'Bad Bentheim', end: 'Bad Oeynhausen', lengthKm: 136 },
+    A31: { start: 'Emden', end: 'Bottrop', lengthKm: 241 },
+    A33: { start: 'Osnabrueck', end: 'AK Wuenenberg-Haaren', lengthKm: 104 },
+    A36: { start: 'Braunschweig', end: 'Bernburg', lengthKm: 120 },
+    A37: { start: 'Burgdorf', end: 'Hannover-Misburg', lengthKm: 14 },
+    A38: { start: 'AD Drammetal', end: 'AD Parthenaue', lengthKm: 219 },
+    A39: { start: 'Maschener Kreuz', end: 'Lueneburg', lengthKm: 99 },
+    A40: { start: 'Moers', end: 'Dortmund', lengthKm: 95 },
+    A42: { start: 'Kamp-Lintfort', end: 'Dortmund', lengthKm: 58 },
+    A43: { start: 'Muenster', end: 'Wuppertal', lengthKm: 93 },
+    A44: { start: 'Aachen', end: 'AD Wommen', lengthKm: 303 },
+    A45: { start: 'Dortmund', end: 'Aschaffenburg', lengthKm: 257 },
+    A46: { start: 'Heinsberg', end: 'Olsberg', lengthKm: 149 },
+    A48: { start: 'AD Vulkaneifel', end: 'AD Dernbach', lengthKm: 78 },
+    A49: { start: 'Kassel', end: 'AD Ohmtal', lengthKm: 87 },
+    A52: { start: 'Moenchengladbach', end: 'Marl', lengthKm: 97 },
+    A57: { start: 'Goch', end: 'Koeln', lengthKm: 119 },
+    A59: { start: 'Dinslaken', end: 'Bonn', lengthKm: 69 },
+    A60: { start: 'Winterspelt', end: 'Ruesselsheim', lengthKm: 113 },
+    A61: { start: 'Kaldenkirchen', end: 'Hockenheim', lengthKm: 313 },
+    A62: { start: 'Nonnweiler', end: 'Pirmasens', lengthKm: 79 },
+    A63: { start: 'Mainz', end: 'Kaiserslautern', lengthKm: 70 },
+    A64: { start: 'Wasserbillig', end: 'Trier', lengthKm: 18 },
+    A65: { start: 'Ludwigshafen', end: 'Woerth', lengthKm: 59 },
+    A66: { start: 'Wiesbaden', end: 'Fulda', lengthKm: 125 },
+    A67: { start: 'Ruesselsheim', end: 'Viernheim', lengthKm: 58 },
+    A70: { start: 'Schweinfurt', end: 'Bayreuth', lengthKm: 120 },
+    A71: { start: 'Sangerhausen', end: 'Schweinfurt', lengthKm: 220 },
+    A72: { start: 'Hof', end: 'Leipzig', lengthKm: 170 },
+    A73: { start: 'Suhl', end: 'Nuernberg', lengthKm: 167 },
+    A81: { start: 'Wuerzburg', end: 'Gottmadingen', lengthKm: 276 },
+    A92: { start: 'Muenchen-Feldmoching', end: 'Deggendorf', lengthKm: 134 },
+    A93: { start: 'Hof', end: 'Kiefersfelden', lengthKm: 268 },
+    A94: { start: 'Muenchen', end: 'Burghausen', lengthKm: 109 },
+    A95: { start: 'Muenchen', end: 'Garmisch-Partenkirchen', lengthKm: 69 },
+    A96: { start: 'Lindau', end: 'Muenchen', lengthKm: 173 },
+    A98: { start: 'Weil am Rhein', end: 'Rheinfelden-Ost', lengthKm: 47 },
+    A99: { start: 'Muenchen-Suedwest', end: 'Muenchen-Sued', lengthKm: 58 },
+    A100: { start: 'Seestrasse', end: 'Treptower Park', lengthKm: 24 },
+    A103: { start: 'Sachsendamm', end: 'Schlossstrasse', lengthKm: 4 },
+    A111: { start: 'Kreuz Oranienburg', end: 'Charlottenburg', lengthKm: 23 },
+    A113: { start: 'Neukoelln', end: 'Schoenefelder Kreuz', lengthKm: 19 },
+    A114: { start: 'AD Pankow', end: 'Prenzlauer Promenade', lengthKm: 9 },
+    A115: { start: 'AD Funkturm', end: 'AD Nuthetal', lengthKm: 28 },
+    A117: { start: 'AD Treptow', end: 'AD Waltersdorf', lengthKm: 5 },
+    A143: { start: 'Halle-Neustadt', end: 'AD Halle-Sued', lengthKm: 9 },
+    A210: { start: 'Rendsburg', end: 'AK Kiel-West', lengthKm: 25 },
+    A215: { start: 'Kiel', end: 'AD Bordesholm', lengthKm: 21 },
+    A226: { start: 'AD Bad Schwartau', end: 'Luebeck-Siems', lengthKm: 5 },
+    A255: { start: 'Hamburg-Veddel', end: 'AK Hamburg Sued', lengthKm: 2 },
+    A261: { start: 'Hamburg-Suedwest', end: 'Buchholzer Dreieck', lengthKm: 9 },
+    A270: { start: 'Bremen-Blumenthal', end: 'Ritterhude', lengthKm: 11 },
+    A280: { start: 'AD Bunde', end: 'Grenze Niederlande', lengthKm: 5 },
+    A281: { start: 'Bremen-Industriehaefen', end: 'Flughafen Bremen', lengthKm: 11 },
+    A293: { start: 'Oldenburg-Nord', end: 'Oldenburg-West', lengthKm: 9 },
+    A352: { start: 'Hannover-Nord', end: 'Hannover-West', lengthKm: 17 },
+    A369: { start: 'AD Nordharz', end: 'Bad Harzburg', lengthKm: 4 },
+    A391: { start: 'Braunschweig-Wenden', end: 'Braunschweig-Suedwest', lengthKm: 12 },
+    A392: { start: 'Watenbuettel', end: 'Siegfriedviertel', lengthKm: 4 },
+    A445: { start: 'Werl-Nord', end: 'Arnsberg-Neheim', lengthKm: 14 },
+    A448: { start: 'Bochum-West', end: 'Dortmund/Witten', lengthKm: 18 },
+    A480: { start: 'Asslar', end: 'Reiskirchener Dreieck', lengthKm: 19 },
+    A485: { start: 'Giessener Nordkreuz', end: 'Langgoens', lengthKm: 19 },
+    A516: { start: 'AK Oberhausen', end: 'Oberhausen-Eisenheim', lengthKm: 5 },
+    A524: { start: 'Duisburg-Huckingen', end: 'AD Breitscheid', lengthKm: 8 },
+    A535: { start: 'Velbert', end: 'Wuppertal', lengthKm: 13 },
+    A542: { start: 'Monheim', end: 'Langenfeld', lengthKm: 6 },
+    A544: { start: 'Aachen-Europaplatz', end: 'AK Aachen', lengthKm: 5 },
+    A553: { start: 'AK Bliesheim', end: 'Bruehl', lengthKm: 13 },
+    A555: { start: 'Koeln', end: 'Bonn', lengthKm: 20 },
+    A559: { start: 'Koeln-Gremberg', end: 'AD Porz', lengthKm: 7 },
+    A560: { start: 'Sankt Augustin', end: 'Hennef', lengthKm: 13 },
+    A562: { start: 'Bad Godesberg', end: 'Bonn-Ost', lengthKm: 4 },
+    A565: { start: 'Bonn-Nordost', end: 'Meckenheim', lengthKm: 27 },
+    A571: { start: 'Ehlingen', end: 'AD Sinzig', lengthKm: 3 },
+    A573: { start: 'Bad Neuenahr-Ahrweiler', end: 'Bad Neuenahr', lengthKm: 3 },
+    A602: { start: 'Trier', end: 'AD Moseltal', lengthKm: 10 },
+    A620: { start: 'Saarlouis', end: 'Saarbruecken', lengthKm: 32 },
+    A623: { start: 'Friedrichsthal', end: 'Saarbruecken', lengthKm: 10 },
+    A643: { start: 'Wiesbaden-Dotzheim', end: 'AD Mainz', lengthKm: 8 },
+    A648: { start: 'Eschborner Dreieck', end: 'Messe Frankfurt', lengthKm: 5 },
+    A650: { start: 'Bad Duerkheim', end: 'Ludwigshafen', lengthKm: 14 },
+    A656: { start: 'Mannheim', end: 'Heidelberg', lengthKm: 12 },
+    A659: { start: 'Weinheim', end: 'Viernheim', lengthKm: 7 },
+    A661: { start: 'Oberursel', end: 'Egelsbach', lengthKm: 37 },
+    A671: { start: 'Wiesbaden', end: 'Mainspitz-Dreieck', lengthKm: 12 },
+    A672: { start: 'Griesheim', end: 'Darmstadt', lengthKm: 2 },
+    A831: { start: 'Stuttgart-Vaihingen', end: 'AK Stuttgart', lengthKm: 2 },
+    A861: { start: 'AD Hochrhein', end: 'Rheinfelden', lengthKm: 4 },
+    A864: { start: 'Donaueschingen', end: 'Bad Duerrheim', lengthKm: 6 },
+    A952: { start: 'AD Starnberg', end: 'Starnberg', lengthKm: 5 },
+    A980: { start: 'AD Allgaeu', end: 'Waltenhofen', lengthKm: 5 },
+    A995: { start: 'Muenchen-Giesing', end: 'AK Muenchen-Sued', lengthKm: 11 },
 };
 
 const state = {
@@ -977,6 +1101,7 @@ function stationBrandKey(station) {
 
 function getVisibleStations() {
     if (state.listMode === 'cities' || state.listMode === 'autobahn' || state.listMode === 'driving') return state.stations;
+    if (state.listMode === 'charging' && state.chargingSearchContext === 'autobahn') return state.stations;
     if (state.listMode === 'favorites') return state.favorites.map(stationForFavorite);
     const selectedBrand = els.brand.value;
     if (selectedBrand === 'all') return state.stations;
@@ -1647,6 +1772,11 @@ function openDetailStationMap(station) {
     if (!station || !hasValidCoordinates(station)) return;
     const stationId = stationMapId(station);
     if (stationId) state.selectedId = stationId;
+    const singleChargingMap = Boolean(station.chargingMode);
+    if (singleChargingMap) {
+        state.listMode = 'charging';
+        state.stations = [station];
+    }
     clearDetailMapZoomTimer();
     renderDetail(null);
     setView('map');
@@ -1655,7 +1785,7 @@ function openDetailStationMap(station) {
         refreshMapLayout();
         if (state.listMode === 'driving') updateDrivingModeMapMarkers();
         else renderMarkers();
-        state.map.setView([station.lat, station.lng], 12, { animate: true });
+        state.map.setView([station.lat, station.lng], singleChargingMap ? 16 : 12, { animate: true });
         state.detailMapZoomTimer = window.setTimeout(() => {
             state.detailMapZoomTimer = null;
             if (state.view !== 'map' || !state.map || state.map.type === 'fallback') return;
@@ -2981,7 +3111,7 @@ function renderDetail(station) {
                     </div>
                     <div class="detail-cell detail-cell-inline detail-updated-cell">
                         <span class="detail-label">Quelle</span>
-                        <span class="detail-value">BNetzA ${escapeHtml(station.sourceUpdatedAt || '')}</span>
+                        <span class="detail-value">${escapeHtml(chargingSourceText(station))}</span>
                     </div>
                     <div class="detail-cell detail-address-cell">
                         <span class="detail-label">Adresse</span>
@@ -2993,13 +3123,17 @@ function renderDetail(station) {
                             <strong>${escapeHtml(station.status || 'unbekannt')}</strong>
                         </span>
                         <span>
-                            <small>Stecker</small>
-                            <strong>${escapeHtml(chargingConnectorText(station))}</strong>
+                            <small>Typ</small>
+                            <strong>${escapeHtml(station.acDc || (station.fastCharging ? 'DC' : 'AC'))}</strong>
                         </span>
-                        <span>
-                            <small>Bezahlung</small>
-                            <strong>${escapeHtml((station.paymentSystems || []).join(', ') || '-')}</strong>
-                        </span>
+                    </div>
+                    <div class="charging-detail-wide-cell">
+                        <small>Stecker</small>
+                        <div class="charging-detail-pill-list">${chargingDetailItemsHtml(chargingDetailConnectorItems(station), 'Stecker unbekannt')}</div>
+                    </div>
+                    <div class="charging-detail-wide-cell">
+                        <small>Bezahlung</small>
+                        <div class="charging-detail-pill-list">${chargingDetailItemsHtml(chargingDetailPaymentItems(station), 'Keine Angabe')}</div>
                     </div>
                 </div>
                 <nav class="detail-footer-nav" aria-label="Detailaktionen">
@@ -7092,9 +7226,45 @@ function chargingConnectorText(station) {
     return types.slice(0, 2).join(' / ');
 }
 
+function chargingDetailItemsHtml(items, emptyLabel = '-') {
+    const values = [...new Set((Array.isArray(items) ? items : [])
+        .map((item) => String(item || '').trim())
+        .filter(Boolean))];
+    if (!values.length) return `<span class="charging-detail-empty">${escapeHtml(emptyLabel)}</span>`;
+    return values
+        .slice(0, 6)
+        .map((item) => `<span>${escapeHtml(item)}</span>`)
+        .join('');
+}
+
+function chargingDetailConnectorItems(station) {
+    return chargingConnectorValues(station).filter((item) => !/^ac\s*\/\s*dc$/i.test(item));
+}
+
+function chargingDetailPaymentItems(station) {
+    return Array.isArray(station.paymentSystems) ? station.paymentSystems : [];
+}
+
+function chargingSourceText(station) {
+    const rawDate = String(station.sourceUpdatedAt || '').trim();
+    const dateMatch = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const date = dateMatch ? `${dateMatch[3]}.${dateMatch[2]}.${dateMatch[1]}` : rawDate;
+    return ['BNetzA', date].filter(Boolean).join(' ');
+}
+
 function chargingPowerText(station) {
     const power = Number(station.maxConnectorPowerKw || station.nominalPowerKw || 0);
     return power > 0 ? `${power.toLocaleString('de-DE')} kW` : 'kW offen';
+}
+
+function chargingAutobahnText(station) {
+    const autobahn = station.nearestAutobahn || (Array.isArray(station.autobahnTags) ? station.autobahnTags[0] : '');
+    if (!autobahn) return '';
+    const exit = [station.autobahnExitNumber, station.autobahnExitName].filter(Boolean).join(' ');
+    const distance = Number.isFinite(Number(station.autobahnDistanceKm))
+        ? `${Number(station.autobahnDistanceKm).toLocaleString('de-DE', { maximumFractionDigits: 1 })} km zur Autobahn`
+        : '';
+    return [autobahn, exit ? `Abfahrt ${exit}` : '', distance].filter(Boolean).join(' · ');
 }
 
 function chargingPowerValue(station) {
@@ -7146,6 +7316,79 @@ function chargingFilterActiveText(filters = state.chargingFilters || {}) {
     if (filters.connector && filters.connector !== 'all') parts.push(filters.connector);
     if (filters.minPower && filters.minPower !== 'all') parts.push(`ab ${filters.minPower} kW`);
     return parts.length ? parts.join(' + ') : 'alle Anlagen';
+}
+
+function normalizeAutobahnChargingStations(stations = []) {
+    return (Array.isArray(stations) ? stations : [])
+        .map(normalizeChargingStation)
+        .filter((station) => {
+            const tags = Array.isArray(station.autobahnTags) ? station.autobahnTags : [];
+            const nearest = station.nearestAutobahn || '';
+            return Boolean(tags.length || nearest);
+        })
+        .sort((a, b) => String(a.nearestAutobahn || '').localeCompare(String(b.nearestAutobahn || ''), 'de')
+            || Number(a.autobahnDistanceKm ?? 999) - Number(b.autobahnDistanceKm ?? 999)
+            || Number(b.chargingPointCount || 0) - Number(a.chargingPointCount || 0));
+}
+
+function readChargingAutobahnCache() {
+    try {
+        const cache = JSON.parse(localStorage.getItem(CHARGING_AUTOBAHN_CACHE_KEY) || 'null');
+        if (!cache || !Array.isArray(cache.stations)) return null;
+        const cachedAt = Number(cache.cachedAt || 0);
+        if (!Number.isFinite(cachedAt) || Date.now() - cachedAt > CHARGING_AUTOBAHN_CACHE_MAX_AGE_MS) return null;
+        return cache;
+    } catch {
+        return null;
+    }
+}
+
+function writeChargingAutobahnCache(stations) {
+    try {
+        localStorage.setItem(CHARGING_AUTOBAHN_CACHE_KEY, JSON.stringify({
+            cachedAt: Date.now(),
+            stations: normalizeAutobahnChargingStations(stations).map((station) => ({
+                id: station.id,
+                stationId: station.stationId,
+                name: station.name,
+                operatorName: station.operatorName,
+                displayName: station.displayName,
+                status: station.status,
+                chargingPointCount: station.chargingPointCount,
+                chargingUnitCount: station.chargingUnitCount,
+                nominalPowerKw: station.nominalPowerKw,
+                maxConnectorPowerKw: station.maxConnectorPowerKw,
+                acDc: station.acDc,
+                fastCharging: station.fastCharging,
+                addressLine: station.addressLine,
+                street: station.street,
+                houseNumber: station.houseNumber,
+                postcode: station.postcode,
+                city: station.city,
+                lat: station.lat,
+                lng: station.lng,
+                paymentSystems: station.paymentSystems,
+                connectorTypes: station.connectorTypes,
+                sourceUpdatedAt: station.sourceUpdatedAt,
+                autobahnTags: station.autobahnTags,
+                nearestAutobahn: station.nearestAutobahn,
+                autobahnDistanceKm: station.autobahnDistanceKm,
+                autobahnExitNumber: station.autobahnExitNumber,
+                autobahnExitName: station.autobahnExitName,
+                autobahnExitDistanceKm: station.autobahnExitDistanceKm,
+                autobahnTaggedAt: station.autobahnTaggedAt,
+            })),
+        }));
+    } catch {
+        // Cache ist nur Komfort; bei vollem Speicher wird normal weitergeladen.
+    }
+}
+
+function applyChargingAutobahnStations(stations) {
+    state.chargingStations = normalizeAutobahnChargingStations(stations);
+    normalizeChargingAutobahnSelection();
+    state.stations = chargingFilteredStations();
+    return state.chargingStations;
 }
 
 function chargingFilterOptionsHtml(stations) {
@@ -7380,6 +7623,7 @@ function chargingRowHtml(station, index) {
         : station.city || '';
     const mode = station.acDc || (station.fastCharging ? 'DC' : 'AC');
     const statusClass = /betrieb/i.test(station.status || '') ? 'live' : 'muted';
+    const autobahnText = chargingAutobahnText(station);
     return `
         <button class="charging-row" type="button" data-charging-id="${escapeHtml(station.stationId || station.id)}">
             <span class="charging-logo branded" aria-hidden="true">${brandLogoHtml(station)}</span>
@@ -7387,6 +7631,7 @@ function chargingRowHtml(station, index) {
                 <strong>${escapeHtml(station.name || station.operatorName || 'Ladeanlage')}</strong>
                 <small>${escapeHtml(station.operatorName || station.displayName || 'Betreiber unbekannt')}</small>
                 <small>${escapeHtml(chargingAddress(station) || 'Adresse offen')}</small>
+                ${autobahnText ? `<small>${escapeHtml(autobahnText)}</small>` : ''}
             </span>
             <span class="charging-power">
                 <b>${escapeHtml(chargingPowerText(station))}</b>
@@ -7473,6 +7718,75 @@ async function loadChargingDistributionStations(requestId = beginNavigation()) {
     return data;
 }
 
+async function loadAutobahnChargingStations(target = 'list', requestId = beginNavigation()) {
+    if (!isElectricMode()) setVehicleMode('electric');
+    const hadAutobahnContext = state.listMode === 'charging' && state.chargingSearchContext === 'autobahn';
+    state.listMode = 'charging';
+    state.chargingCityContext = null;
+    state.chargingFilters = { operator: 'all', connector: 'all', minPower: 'all' };
+    state.chargingShowOperators = false;
+    state.chargingSearchContext = 'autobahn';
+    state.chargingSearchRadiusKm = null;
+    if (!hadAutobahnContext) {
+        state.chargingStations = [];
+        state.stations = [];
+    }
+    setView(target === 'map' ? 'map' : 'list');
+    updateBottomNav();
+    updateSectionHeaderTone();
+    if (!isCurrentNavigation(requestId, 'charging')) return null;
+    const selectedHighway = state.selectedHighway && state.selectedHighway !== 'all' ? state.selectedHighway : 'all';
+    const loadKey = 'charging-autobahn:all';
+    const cached = readChargingAutobahnCache();
+    if (cached?.stations?.length && !state.chargingStations.length) {
+        applyChargingAutobahnStations(cached.stations);
+        renderAutobahnChargingList();
+        if (target === 'map') {
+            setView('map');
+            renderMarkers();
+        }
+    }
+    if (state.chargingLoadKey === loadKey) {
+        if (state.chargingStations.length) renderAutobahnChargingList();
+        return null;
+    }
+    state.chargingLoadKey = loadKey;
+    if (!state.chargingStations.length) {
+        els.resultCount.textContent = selectedHighway === 'all' ? 'EV Autobahn' : `${selectedHighway} EV`;
+        els.resultMeta.textContent = 'Autobahn-Ladeanlagen werden geladen ...';
+        els.results.innerHTML = '<div class="empty-state">EV-Autobahnuebersicht wird geladen.</div>';
+    } else {
+        els.resultMeta.textContent = `${state.stations.length} Ladeanlagen - wird aktualisiert ...`;
+    }
+    try {
+        const data = await fetchJson('/api/charging/stations.php?autobahn=1&limit=30000', { timeoutMs: 45000 });
+        if (!isCurrentNavigation(requestId, 'charging')) return null;
+        applyChargingAutobahnStations(data.stations || []);
+        writeChargingAutobahnCache(data.stations || []);
+        if (target === 'map') {
+            renderAutobahnChargingList();
+            setView('map');
+            renderMarkers();
+        } else {
+            renderAutobahnChargingList();
+        }
+        return data;
+    } catch (error) {
+        if (!isCurrentNavigation(requestId, 'charging')) return null;
+        if (!state.chargingStations.length) {
+            state.chargingStations = [];
+            els.resultCount.textContent = 'Keine EV-Autobahn';
+            els.resultMeta.textContent = error.message || 'Autobahn-Ladeanlagen konnten nicht geladen werden.';
+            els.results.innerHTML = '<div class="empty-state">EV-Autobahn-Ladeanlagen konnten nicht geladen werden.</div>';
+        } else {
+            renderAutobahnChargingList();
+        }
+        return null;
+    } finally {
+        if (state.chargingLoadKey === loadKey) state.chargingLoadKey = null;
+    }
+}
+
 async function applyChargingOperatorFilter(operatorName) {
     const operator = String(operatorName || '').trim();
     if (!operator) return;
@@ -7507,10 +7821,181 @@ function resetChargingOperatorFilter() {
     renderMarkers();
 }
 
+function autobahnChargingHighways() {
+    return chargingPopulatedAutobahns();
+}
+
+function chargingStationAutobahns(station) {
+    return [...new Set([
+        station.nearestAutobahn,
+        ...(Array.isArray(station.autobahnTags) ? station.autobahnTags : []),
+    ].filter(Boolean))];
+}
+
+function chargingPopulatedAutobahns() {
+    return [...new Set(state.chargingStations.flatMap(chargingStationAutobahns))]
+        .sort((a, b) => highwaySortValue(a).localeCompare(highwaySortValue(b), 'de'));
+}
+
+function normalizeChargingAutobahnSelection() {
+    if (state.chargingSearchContext !== 'autobahn') return;
+    if (!state.selectedHighway || state.selectedHighway === 'all') {
+        state.selectedHighway = 'all';
+        return;
+    }
+    const populated = chargingPopulatedAutobahns();
+    if (!populated.includes(state.selectedHighway)) {
+        state.selectedHighway = 'all';
+    }
+}
+
+function autobahnChargingGroups() {
+    normalizeChargingAutobahnSelection();
+    const baseHighways = state.selectedHighway === 'all'
+        ? chargingPopulatedAutobahns()
+        : [state.selectedHighway];
+    const groups = new Map(baseHighways.map((highway) => [highway, []]));
+    state.chargingStations.forEach((station) => {
+        const tags = chargingStationAutobahns(station);
+        tags.forEach((highway) => {
+            if (state.selectedHighway !== 'all' && highway !== state.selectedHighway) return;
+            if (!groups.has(highway)) groups.set(highway, []);
+            groups.get(highway).push(station);
+        });
+    });
+    return [...groups.entries()]
+        .filter(([, stations]) => state.selectedHighway !== 'all' || stations.length)
+        .sort(([a], [b]) => highwaySortValue(a).localeCompare(highwaySortValue(b), 'de'))
+        .map(([highway, stations]) => [
+            highway,
+            stations.sort((a, b) => Number(a.autobahnDistanceKm ?? 999) - Number(b.autobahnDistanceKm ?? 999)
+                || Number(b.chargingPointCount || 0) - Number(a.chargingPointCount || 0)
+                || String(a.name || '').localeCompare(String(b.name || ''), 'de')),
+        ]);
+}
+
+function autobahnChargingRowHtml(station) {
+    const highway = state.selectedHighway && state.selectedHighway !== 'all'
+        ? state.selectedHighway
+        : station.nearestAutobahn || (Array.isArray(station.autobahnTags) ? station.autobahnTags[0] : '') || 'A';
+    const power = chargingPowerText(station);
+    const points = Number(station.chargingPointCount || 0);
+    const distance = Number.isFinite(Number(station.autobahnDistanceKm))
+        ? `${Number(station.autobahnDistanceKm).toLocaleString('de-DE', { maximumFractionDigits: 1 })} km`
+        : '';
+    const exit = [station.autobahnExitNumber, station.autobahnExitName].filter(Boolean).join(' ');
+    const address = chargingAddress(station);
+    const operator = station.operatorName || station.displayName || 'Betreiber unbekannt';
+    const connector = chargingConnectorText(station);
+    const type = station.fastCharging ? 'Schnell' : (station.acDc || 'Laden');
+    const status = station.status || 'Status offen';
+    const meta = [
+        exit ? `Abfahrt ${exit}` : '',
+        distance ? `${distance} zur Autobahn` : '',
+    ].filter(Boolean).join(' - ');
+    return `
+        <button class="autobahn-row autobahn-card charging-autobahn-card" type="button" data-charging-id="${escapeHtml(station.stationId || station.id)}">
+            ${brandLogoHtml(station)}
+            <span class="autobahn-main">
+                <strong class="autobahn-name">${escapeHtml(station.name || station.operatorName || 'Ladeanlage')}</strong>
+                <span class="autobahn-subline">${escapeHtml(operator)}</span>
+                <span class="charging-autobahn-tags" title="${escapeHtml([type, status, connector].filter(Boolean).join(' - '))}">${escapeHtml([type, connector].filter(Boolean).join(' - '))}</span>
+                ${meta ? `<span class="autobahn-direction">${escapeHtml(meta)}</span>` : ''}
+            </span>
+            <span class="charging-autobahn-side">
+                <span class="rank charging-rank">${escapeHtml(highway)}</span>
+                <span class="charging-autobahn-power">
+                    <strong>${escapeHtml(power)}</strong>
+                    <small>${points.toLocaleString('de-DE')} Ladepunkte</small>
+                </span>
+            </span>
+        </button>
+    `;
+}
+
+function autobahnChargingSummaryHtml(highway, stations) {
+    const pointCount = stations.reduce((sum, station) => sum + Number(station.chargingPointCount || 0), 0);
+    const fastCount = stations.filter((station) => station.fastCharging === true || chargingPowerValue(station) >= 50).length;
+    const maxPower = stations.reduce((max, station) => Math.max(max, chargingPowerValue(station)), 0);
+    return `
+        <button class="autobahn-group-title charging-autobahn-summary" type="button" data-autobahn-charging-highway="${escapeHtml(highway)}">
+            <strong>${escapeHtml(highway)}</strong>
+            <span>${escapeHtml(autobahnRouteMetaText(highway) || `${stations.length} Ladeanlagen`)}</span>
+            <em>${stations.length} Anlagen</em>
+            <small>${pointCount.toLocaleString('de-DE')} Ladepunkte</small>
+            <small>${fastCount.toLocaleString('de-DE')} schnell</small>
+            <small>${maxPower > 0 ? `${maxPower.toLocaleString('de-DE')} kW max` : 'kW offen'}</small>
+        </button>
+    `;
+}
+
+function renderAutobahnChargingList() {
+    updateSectionHeaderTone();
+    updateBottomNav();
+    normalizeChargingAutobahnSelection();
+    const highways = autobahnChargingHighways();
+    const groups = autobahnChargingGroups();
+    const visibleStations = groups.flatMap(([, stations]) => stations);
+    state.stations = visibleStations;
+    const pointCount = visibleStations.reduce((sum, station) => sum + Number(station.chargingPointCount || 0), 0);
+    const hasGroups = groups.some(([, stations]) => stations.length);
+    const allHighwaysMode = state.selectedHighway === 'all';
+    els.resultCount.textContent = state.selectedHighway === 'all' ? 'EV Autobahn' : `${state.selectedHighway} EV`;
+    els.resultMeta.textContent = `${visibleStations.length} Ladeanlagen - ${pointCount.toLocaleString('de-DE')} Ladepunkte`;
+    els.results.innerHTML = `
+        <section class="autobahn-dashboard charging-autobahn-dashboard">
+            <div class="autobahn-compact-toolbar">
+                <label class="autobahn-filter">
+                    <select data-autobahn-charging-filter>
+                        <option value="all"${state.selectedHighway === 'all' ? ' selected' : ''}>Alle Autobahnen</option>
+                        ${highways.map((highway) => `<option value="${escapeHtml(highway)}"${state.selectedHighway === highway ? ' selected' : ''}>${escapeHtml(autobahnRouteLabel(highway))}</option>`).join('')}
+                    </select>
+                </label>
+                <span class="autobahn-toolbar-count">${visibleStations.length} Ladeanlagen</span>
+            </div>
+            <div class="autobahn-list">
+                ${hasGroups ? groups.map(([highway, stations]) => allHighwaysMode
+                    ? autobahnChargingSummaryHtml(highway, stations)
+                    : `
+                        <section class="autobahn-group">
+                            <div class="city-station-list">
+                                ${stations.length
+                                    ? stations.map(autobahnChargingRowHtml).join('')
+                                    : `<div class="empty-state compact-empty-state">${escapeHtml(highway)} ist angelegt, aber es sind noch keine EV-Ladeanlagen an dieser Autobahn markiert.</div>`}
+                            </div>
+                        </section>
+                    `).join('') : '<div class="empty-state compact-empty-state">Fuer diese Autobahn sind noch keine EV-Ladeanlagen markiert.</div>'}
+            </div>
+        </section>
+    `;
+    els.results.querySelector('[data-autobahn-charging-filter]')?.addEventListener('change', (event) => {
+        state.selectedHighway = event.target.value;
+        renderAutobahnChargingList();
+        if (state.view === 'map') renderMarkers();
+    });
+    els.results.querySelectorAll('[data-autobahn-charging-highway]').forEach((button) => {
+        button.addEventListener('click', () => {
+            state.selectedHighway = button.dataset.autobahnChargingHighway;
+            renderAutobahnChargingList();
+            if (state.view === 'map') renderMarkers();
+        });
+    });
+    els.results.querySelectorAll('[data-charging-id]').forEach((button) => {
+        button.addEventListener('click', () => selectChargingStation(button.dataset.chargingId, true));
+    });
+}
+
 function renderChargingList() {
     updateSectionHeaderTone();
     updateBottomNav();
     if (!state.chargingStations.length) {
+        if (state.chargingSearchContext === 'autobahn') {
+            const highwayLabel = state.selectedHighway && state.selectedHighway !== 'all' ? state.selectedHighway : 'Autobahn';
+            els.resultCount.textContent = `${highwayLabel} EV`;
+            els.resultMeta.textContent = 'Noch keine EV-Autobahn-Tags vorhanden.';
+            els.results.innerHTML = '<div class="empty-state">EV-Ladeanlagen an Autobahnen muessen noch markiert werden. Die Ansicht ist vorbereitet, aber der Tagging-Lauf hat noch keine passenden Anlagen gespeichert.</div>';
+            return;
+        }
         els.resultCount.textContent = 'Laden';
         els.resultMeta.textContent = 'Noch keine Ladeanlagen geladen.';
         els.results.innerHTML = '<div class="empty-state">Ladeanlagen werden geladen oder sind noch nicht importiert.</div>';
@@ -7526,6 +8011,8 @@ function renderChargingList() {
         : '';
     const chargingRangeLabel = !state.chargingCityContext && Number.isFinite(Number(state.chargingSearchRadiusKm))
         ? `${state.chargingSearchContext === 'rural' ? 'Landmodus' : 'Stadtmodus'} - ${state.chargingSearchRadiusKm} km - `
+        : state.chargingSearchContext === 'autobahn'
+            ? `${state.selectedHighway && state.selectedHighway !== 'all' ? state.selectedHighway : 'Autobahn'} - `
         : '';
     els.resultCount.textContent = `${contextLabel}${visibleChargingStations.length}/${state.chargingStations.length} Ladeanlagen`;
     els.resultMeta.textContent = `${chargingRangeLabel}${pointCount} Ladepunkte - ${unitCount} Ladeeinrichtungen - Quelle Bundesnetzagentur, CC BY 4.0`;
@@ -7725,10 +8212,27 @@ function highwaySortValue(highway) {
     return `${String(number).padStart(4, '0')}-${value}`;
 }
 
+function autobahnRouteMeta(highway) {
+    return AUTOBAHN_ROUTE_META[String(highway || '').trim().toUpperCase().replace(/\s+/g, '')] || null;
+}
+
+function autobahnRouteLabel(highway) {
+    const meta = autobahnRouteMeta(highway);
+    if (!meta) return highway;
+    return `${highway} ${meta.start} - ${meta.end}`;
+}
+
+function autobahnRouteMetaText(highway) {
+    const meta = autobahnRouteMeta(highway);
+    if (!meta) return '';
+    return `${meta.start} - ${meta.end} · ${meta.lengthKm} km`;
+}
+
 function autobahnHighways() {
-    return [...new Set(state.autobahnStations
-        .map((station) => station.highway)
-        .filter(Boolean))]
+    return [...new Set([
+        ...Object.keys(AUTOBAHN_ROUTE_META),
+        ...state.autobahnStations.map((station) => station.highway).filter(Boolean),
+    ])]
         .sort((a, b) => highwaySortValue(a).localeCompare(highwaySortValue(b), 'de'));
 }
 
@@ -8027,7 +8531,8 @@ async function refreshAutobahnStationPrices(id) {
 }
 
 function autobahnGroups() {
-    const groups = new Map();
+    const baseHighways = state.selectedHighway === 'all' ? autobahnHighways() : [state.selectedHighway];
+    const groups = new Map(baseHighways.map((highway) => [highway, []]));
     state.stations
         .filter((station) => station.autobahnMode)
         .forEach((station) => {
@@ -8153,7 +8658,7 @@ function renderAutobahnList() {
                 <label class="autobahn-filter">
                     <select data-autobahn-filter>
                         <option value="all"${state.selectedHighway === 'all' ? ' selected' : ''}>Alle Autobahnen</option>
-                        ${highways.map((highway) => `<option value="${escapeHtml(highway)}"${state.selectedHighway === highway ? ' selected' : ''}>${escapeHtml(highway)}</option>`).join('')}
+                        ${highways.map((highway) => `<option value="${escapeHtml(highway)}"${state.selectedHighway === highway ? ' selected' : ''}>${escapeHtml(autobahnRouteLabel(highway))}</option>`).join('')}
                     </select>
                 </label>
                 <span class="autobahn-toolbar-count">${state.stations.length} Standorte</span>
@@ -8164,11 +8669,14 @@ function renderAutobahnList() {
                         ${state.selectedHighway === 'all' ? `
                             <button class="autobahn-group-title" type="button" data-autobahn-highway="${escapeHtml(highway)}">
                                 <strong>${escapeHtml(highway)}</strong>
-                                <span>${stations.length} Standorte</span>
+                                <span>${escapeHtml(autobahnRouteMetaText(highway) || `${stations.length} Standorte`)}</span>
+                                <em>${stations.length} Standorte</em>
                             </button>
                         ` : ''}
                         <div class="city-station-list">
-                            ${stations.map((station) => autobahnRowHtmlDetailed(station, priceThresholds)).join('')}
+                            ${stations.length
+                                ? stations.map((station) => autobahnRowHtmlDetailed(station, priceThresholds)).join('')
+                                : `<div class="empty-state compact-empty-state">${escapeHtml(highway)} ist angelegt, aber es sind noch keine Tankpunkte importiert.</div>`}
                         </div>
                     </section>
                 `).join('')}
@@ -8479,7 +8987,26 @@ function resetCombustionSearchBeforeReload() {
 
 async function reloadListAfterVehicleSwitch(nextMode) {
     if (nextMode === 'electric') {
-        loadNearestChargingStationsFromCurrentLocation().catch(() => null);
+        prepareChargingSearch(false);
+        const hasLocation = await resolveVehicleSwitchSearchLocation();
+        if (!hasLocation) {
+            els.resultCount.textContent = 'Standort';
+            els.resultMeta.textContent = 'Aktueller Standort wird ermittelt ...';
+            els.results.innerHTML = '<div class="empty-state">Standort wird ermittelt, dann werden Ladeanlagen geladen.</div>';
+            await useCurrentLocation({
+                timeoutMs: 12000,
+                onFail: () => {
+                    els.resultCount.textContent = 'Standort offen';
+                    els.resultMeta.textContent = 'Standort konnte nicht ermittelt werden.';
+                    els.results.innerHTML = '<div class="empty-state">Bitte Standortfreigabe erlauben oder eine PLZ eingeben.</div>';
+                },
+            });
+            return;
+        }
+        els.resultCount.textContent = 'Laden';
+        els.resultMeta.textContent = 'Ladeanlagen werden geladen ...';
+        els.results.innerHTML = '<div class="empty-state">Elektro-Ladeanlagen werden geladen.</div>';
+        await loadChargingStations(beginNavigation());
         return;
     }
     resetCombustionSearchBeforeReload();
@@ -8825,7 +9352,8 @@ function updateFavoritesButton() {
 
 function updateBottomNav() {
     setCityMode(state.listMode === 'cities');
-    setDirectoryMode(state.listMode === 'autobahn');
+    const isElectricAutobahn = state.listMode === 'charging' && state.chargingSearchContext === 'autobahn';
+    setDirectoryMode(state.listMode === 'autobahn' || isElectricAutobahn);
     els.appShell.classList.toggle('driving-mode', state.listMode === 'driving');
     els.appShell.classList.toggle('favorites-mode', state.listMode === 'favorites');
     els.appShell.classList.toggle('charging-mode', state.listMode === 'charging');
@@ -8856,7 +9384,7 @@ function updateBottomNav() {
         const active = (action === 'map' && state.view === 'map')
             || (action === 'favorites' && state.view === 'list' && state.listMode === 'favorites')
             || (action === 'cities' && state.listMode === 'cities')
-            || (action === 'autobahn' && state.view === 'list' && state.listMode === 'autobahn')
+            || (action === 'autobahn' && state.view === 'list' && (state.listMode === 'autobahn' || isElectricAutobahn))
             || (action === 'charging' && state.listMode === 'charging' && state.chargingShowOperators)
             || (action === 'settings' && els.settingsSheet?.classList.contains('open'))
             || (action === 'admin' && els.adminSheet?.classList.contains('open'))
@@ -8866,7 +9394,7 @@ function updateBottomNav() {
                 && !els.adminSheet?.classList.contains('open')
                 && (
                 state.listMode === 'results'
-                || (state.listMode === 'charging' && !state.chargingShowOperators)
+                || (state.listMode === 'charging' && !state.chargingShowOperators && state.chargingSearchContext !== 'autobahn')
             ));
         button.classList.toggle('active', active);
     });
@@ -9628,6 +10156,16 @@ function bindEvents() {
             syncEffectiveVehicleMode();
             renderDetail(null);
             if (action === 'map') {
+                if (isElectricMode() && state.listMode === 'charging' && state.chargingSearchContext === 'autobahn') {
+                    if (!state.chargingStations.length) {
+                        loadAutobahnChargingStations('map', navRequestId);
+                        return;
+                    }
+                    state.stations = chargingFilteredStations();
+                    setView('map');
+                    renderMarkers();
+                    return;
+                }
                 if (isElectricMode() && state.listMode !== 'driving' && state.listMode !== 'cities' && state.listMode !== 'autobahn') {
                     const operatorSearch = chargingSearchTextOperatorFilter();
                     if (operatorSearch) {
@@ -9697,6 +10235,15 @@ function bindEvents() {
                 if (state.drivingActive) stopDrivingMode(false);
                 captureNormalSearchBeforeSection();
                 inferSelectedAutobahnFromSearch();
+                if (isElectricMode()) {
+                    state.selectedHighway = 'all';
+                    state.cityMapMode = 'overview';
+                    renderDetail(null);
+                    setView('list');
+                    updateBottomNav();
+                    loadAutobahnChargingStations('list', navRequestId);
+                    return;
+                }
                 state.listMode = 'autobahn';
                 state.cityMapMode = 'overview';
                 renderDetail(null);

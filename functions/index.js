@@ -60,6 +60,21 @@ const autohofKeywords = /autohof|euro rastpark|svg autohof|24[- ]?autohof|trucks
 const highwayCandidateHints = {
   A9: /\bA\s?9\b|BAB\s?9|Coswig|Droy[sß]ig|Osterfeld|Gro[ßs]kugel|Schkeuditz|M[üu]nchberg|Koesching|K[öo]sching|Marktschorgast|Niemegk|Triptis|Berg|Leupoldsgr[üu]n|Allersberg|Langenbruck|Himmelkron|Dittersdorf|Pegnitz/i,
 };
+const operationalHighwayIds = [
+  'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9',
+  'A10', 'A11', 'A12', 'A13', 'A14', 'A15', 'A17', 'A19',
+  'A20', 'A21', 'A23', 'A24', 'A25', 'A26', 'A27', 'A28', 'A29',
+  'A30', 'A31', 'A33', 'A36', 'A37', 'A38', 'A39',
+  'A40', 'A42', 'A43', 'A44', 'A45', 'A46', 'A48', 'A49',
+  'A52', 'A57', 'A59', 'A60', 'A61', 'A62', 'A63', 'A64', 'A65', 'A66', 'A67',
+  'A70', 'A71', 'A72', 'A73', 'A81', 'A92', 'A93', 'A94', 'A95', 'A96', 'A98', 'A99',
+  'A100', 'A103', 'A111', 'A113', 'A114', 'A115', 'A117', 'A143',
+  'A210', 'A215', 'A226', 'A255', 'A261', 'A270', 'A280', 'A281', 'A293',
+  'A352', 'A369', 'A391', 'A392', 'A445', 'A448', 'A480', 'A485',
+  'A516', 'A524', 'A535', 'A542', 'A544', 'A553', 'A555', 'A559', 'A560', 'A562', 'A565', 'A571', 'A573',
+  'A602', 'A620', 'A623', 'A643', 'A648', 'A650', 'A656', 'A659', 'A661', 'A671', 'A672',
+  'A831', 'A861', 'A864', 'A952', 'A980', 'A995',
+];
 const highwaySearchPoints = {
   A1: [
     { id: 'luebeck', label: 'Luebeck', lat: 53.8655, lng: 10.6866 },
@@ -92,6 +107,59 @@ const highwaySearchPoints = {
     { id: 'regensburg', label: 'Regensburg', lat: 49.0134, lng: 12.1016 },
     { id: 'passau', label: 'Passau', lat: 48.5667, lng: 13.4319 },
   ],
+  A4: [
+    { id: 'aachen', label: 'Aachen', lat: 50.7753, lng: 6.0839 },
+    { id: 'koeln', label: 'Koeln', lat: 50.9375, lng: 6.9603 },
+    { id: 'olpe', label: 'Olpe', lat: 51.0280, lng: 7.8510 },
+    { id: 'bad-hersfeld', label: 'Bad Hersfeld', lat: 50.8675, lng: 9.7079 },
+    { id: 'eisenach', label: 'Eisenach', lat: 50.9795, lng: 10.3158 },
+    { id: 'erfurt', label: 'Erfurt', lat: 50.9848, lng: 11.0299 },
+    { id: 'jena', label: 'Jena', lat: 50.9271, lng: 11.5892 },
+    { id: 'gera', label: 'Gera', lat: 50.8772, lng: 12.0797 },
+    { id: 'chemnitz', label: 'Chemnitz', lat: 50.8278, lng: 12.9214 },
+    { id: 'dresden', label: 'Dresden', lat: 51.0504, lng: 13.7373 },
+    { id: 'goerlitz', label: 'Goerlitz', lat: 51.1506, lng: 14.9687 },
+  ],
+  A5: [
+    { id: 'hatterbach', label: 'Hattenbacher Dreieck', lat: 50.7938, lng: 9.5456 },
+    { id: 'giessen', label: 'Giessen', lat: 50.5841, lng: 8.6784 },
+    { id: 'bad-homburg', label: 'Bad Homburg', lat: 50.2268, lng: 8.6199 },
+    { id: 'frankfurt', label: 'Frankfurt', lat: 50.1109, lng: 8.6821 },
+    { id: 'darmstadt', label: 'Darmstadt', lat: 49.8728, lng: 8.6512 },
+    { id: 'heidelberg', label: 'Heidelberg', lat: 49.3988, lng: 8.6724 },
+    { id: 'karlsruhe', label: 'Karlsruhe', lat: 49.0069, lng: 8.4037 },
+    { id: 'offenburg', label: 'Offenburg', lat: 48.4735, lng: 7.9440 },
+    { id: 'freiburg', label: 'Freiburg', lat: 47.9990, lng: 7.8421 },
+    { id: 'weil-am-rhein', label: 'Weil am Rhein', lat: 47.5934, lng: 7.6198 },
+  ],
+  A6: [
+    { id: 'saarbruecken', label: 'Saarbruecken', lat: 49.2402, lng: 6.9969 },
+    { id: 'kaiserslautern', label: 'Kaiserslautern', lat: 49.4401, lng: 7.7491 },
+    { id: 'mannheim', label: 'Mannheim', lat: 49.4875, lng: 8.4660 },
+    { id: 'heilbronn', label: 'Heilbronn', lat: 49.1427, lng: 9.2109 },
+    { id: 'schwaebisch-hall', label: 'Schwaebisch Hall', lat: 49.1124, lng: 9.7373 },
+    { id: 'feuchtwangen', label: 'Feuchtwangen', lat: 49.1629, lng: 10.3314 },
+    { id: 'nuernberg', label: 'Nuernberg', lat: 49.4521, lng: 11.0767 },
+    { id: 'amberg', label: 'Amberg', lat: 49.4403, lng: 11.8633 },
+    { id: 'wernberg', label: 'Wernberg-Koeblitz', lat: 49.5399, lng: 12.1611 },
+  ],
+  A7: [
+    { id: 'flensburg', label: 'Flensburg', lat: 54.7937, lng: 9.4469 },
+    { id: 'schleswig', label: 'Schleswig', lat: 54.5216, lng: 9.5586 },
+    { id: 'neumuenster', label: 'Neumuenster', lat: 54.0729, lng: 9.9840 },
+    { id: 'hamburg', label: 'Hamburg', lat: 53.5511, lng: 9.9937 },
+    { id: 'soltau', label: 'Soltau', lat: 52.9864, lng: 9.8434 },
+    { id: 'hannover', label: 'Hannover', lat: 52.3759, lng: 9.7320 },
+    { id: 'hildesheim', label: 'Hildesheim', lat: 52.1548, lng: 9.9579 },
+    { id: 'goettingen', label: 'Goettingen', lat: 51.5413, lng: 9.9158 },
+    { id: 'kassel', label: 'Kassel', lat: 51.3127, lng: 9.4797 },
+    { id: 'fulda', label: 'Fulda', lat: 50.5558, lng: 9.6808 },
+    { id: 'wuerzburg', label: 'Wuerzburg', lat: 49.7913, lng: 9.9534 },
+    { id: 'ulm', label: 'Ulm', lat: 48.4011, lng: 9.9876 },
+    { id: 'memmingen', label: 'Memmingen', lat: 47.9868, lng: 10.1810 },
+    { id: 'kempten', label: 'Kempten', lat: 47.7286, lng: 10.3150 },
+    { id: 'fuessen', label: 'Fuessen', lat: 47.5696, lng: 10.7004 },
+  ],
   A9: [
     { id: 'potsdam', label: 'Potsdam', lat: 52.2737, lng: 12.9861 },
     { id: 'dessau', label: 'Dessau', lat: 51.8286, lng: 12.2583 },
@@ -102,6 +170,16 @@ const highwaySearchPoints = {
     { id: 'nuernberg', label: 'Nuernberg', lat: 49.4521, lng: 11.0767 },
     { id: 'ingolstadt', label: 'Ingolstadt', lat: 48.7665, lng: 11.4258 },
     { id: 'muenchen', label: 'Muenchen', lat: 48.1372, lng: 11.5755 },
+  ],
+  A10: [
+    { id: 'dreieck-pankow', label: 'Dreieck Pankow', lat: 52.6542, lng: 13.5064 },
+    { id: 'dreieck-spreeau', label: 'Dreieck Spreeau', lat: 52.3183, lng: 13.7204 },
+    { id: 'koenigs-wusterhausen', label: 'Koenigs Wusterhausen', lat: 52.3014, lng: 13.6330 },
+    { id: 'schoenefeld', label: 'Schoenefeld', lat: 52.3888, lng: 13.5037 },
+    { id: 'dreieck-potsdam', label: 'Dreieck Potsdam', lat: 52.2737, lng: 12.9861 },
+    { id: 'werder', label: 'Werder', lat: 52.3788, lng: 12.9340 },
+    { id: 'dreieck-havelland', label: 'Dreieck Havelland', lat: 52.6542, lng: 13.0500 },
+    { id: 'dreieck-oranienburg', label: 'Dreieck Oranienburg', lat: 52.7304, lng: 13.2600 },
   ],
   A11: [
     { id: 'berliner-ring', label: 'Berliner Ring', lat: 52.6542, lng: 13.5064 },
@@ -250,6 +328,7 @@ function endpointFrom(req) {
   if (path.endsWith('/admin/charging/import.php') || path.endsWith('/admin/charging/import')) return 'chargingImport';
   if (path.endsWith('/admin/charging/tesla-import.php') || path.endsWith('/admin/charging/tesla-import')) return 'chargingTeslaImport';
   if (path.endsWith('/admin/charging/cleanup.php') || path.endsWith('/admin/charging/cleanup')) return 'chargingCleanup';
+  if (path.endsWith('/admin/charging/autobahn-tag.php') || path.endsWith('/admin/charging/autobahn-tag')) return 'chargingAutobahnTag';
   if (path.endsWith('/charging/stations.php') || path.endsWith('/charging/stations')) return 'chargingStations';
   if (path.endsWith('/charging/cities.php') || path.endsWith('/charging/cities')) return 'chargingCities';
   if (path.endsWith('/charging/operators.php') || path.endsWith('/charging/operators')) return 'chargingOperators';
@@ -1178,9 +1257,9 @@ function overpassBoxForPoint(point, radiusKm = 35) {
   ].join(',');
 }
 
-function autohofOverpassQuery({ highway = '', maxPoints = 0, pointOffset = 0 } = {}) {
+function autohofOverpassQuery({ highway = '', maxPoints = 0, pointOffset = 0, routePointsOverride = null } = {}) {
   const normalizedHighway = String(highway || '').trim().toUpperCase().replace(/\s+/g, '');
-  const routePoints = highwaySearchPoints[normalizedHighway] || [];
+  const routePoints = Array.isArray(routePointsOverride) ? routePointsOverride : highwaySearchPoints[normalizedHighway] || [];
   const pointLimit = Math.round(Number(maxPoints || 0));
   const offset = Math.max(0, Math.round(Number(pointOffset || 0)));
   const points = pointLimit > 0 ? routePoints.slice(offset, offset + pointLimit) : routePoints.slice(offset);
@@ -1242,7 +1321,7 @@ function normalizeAutohofElement(element, highwayFallback = '') {
     sideLabel: directionSideFromName(name),
     directionSource: directionSideFromName(name) ? 'name_suffix_side_only' : null,
     directionText: null,
-    highway: highwayFromTags(tags) || highwayFallback || null,
+    highway: highwayFromTags(tags) || null,
     exitRef: tags['motorway_junction:ref'] || tags['destination:ref'] || null,
     street: tags['addr:street'] || null,
     houseNumber: tags['addr:housenumber'] || null,
@@ -1268,6 +1347,10 @@ async function importAutohofDirectory({ limit = 0, highway = '', maxPoints = 0, 
   const normalizedHighway = String(highway || '').trim().toUpperCase().replace(/\s+/g, '');
   const pointLimit = Math.round(numberParam(maxPoints, 0, 0, 40));
   const offset = Math.round(numberParam(pointOffset, 0, 0, 200));
+  const routePoints = normalizedHighway
+    ? await loadHighwaySearchPointsFromData(normalizedHighway, pointLimit || 10)
+    : [];
+  if (normalizedHighway && !routePoints.length) throw new Error(`No search points configured for ${normalizedHighway}.`);
   const runRef = db.collection('autohof_import_runs').doc();
   await runRef.set({
     runId: runRef.id,
@@ -1289,7 +1372,7 @@ async function importAutohofDirectory({ limit = 0, highway = '', maxPoints = 0, 
         'content-type': 'application/x-www-form-urlencoded; charset=utf-8',
         'user-agent': 'Tankprofi/1.0 (autohof-import)',
       },
-      body: new URLSearchParams({ data: autohofOverpassQuery({ highway: normalizedHighway, maxPoints: pointLimit, pointOffset: offset }) }).toString(),
+      body: new URLSearchParams({ data: autohofOverpassQuery({ highway: normalizedHighway, maxPoints: pointLimit, pointOffset: offset, routePointsOverride: routePoints }) }).toString(),
     });
     const text = await response.text();
     if (!response.ok) throw new Error(`Overpass failed with HTTP ${response.status}: ${text.slice(0, 200)}`);
@@ -1469,6 +1552,201 @@ function sampleHighwaySearchPoints(points, maxPoints = 10) {
   return [...new Map(result.map((point) => [pointKey(point), point])).values()];
 }
 
+async function fetchOverpassJson(query, userAgent = 'Tankprofi/1.0 (overpass)') {
+  const errors = [];
+  for (const sourceUrl of overpassApiUrls) {
+    try {
+      const response = await fetch(sourceUrl, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded; charset=utf-8',
+          'user-agent': userAgent,
+        },
+        signal: AbortSignal.timeout(overpassRequestTimeoutMs),
+        body: new URLSearchParams({ data: query }).toString(),
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        errors.push(`${sourceUrl} HTTP ${response.status}: ${text.slice(0, 140)}`);
+        continue;
+      }
+      return JSON.parse(text);
+    } catch (error) {
+      errors.push(`${sourceUrl}: ${error.message}`);
+    }
+  }
+  throw new Error(`Overpass failed: ${errors.join(' | ')}`);
+}
+
+async function loadHighwaySearchPointsFromOverpass(highway, maxPoints = 10) {
+  const normalizedHighway = String(highway || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!/^A\d{1,3}$/.test(normalizedHighway)) return [];
+  const spacedRef = normalizedHighway.replace(/^A/, 'A ');
+  const query = `
+[out:json][timeout:35];
+area(3600051477)->.de;
+(
+  way(area.de)["highway"="motorway"]["ref"~"(^|;| )${normalizedHighway}($|;| )"];
+  way(area.de)["highway"="motorway"]["ref"~"(^|;| )${spacedRef}($|;| )"];
+);
+out center tags 240;
+`;
+  const data = await fetchOverpassJson(query, 'Tankprofi/1.0 (highway-route-points)');
+  let points = (data.elements || [])
+    .map((element) => {
+      const lat = Number(element.center?.lat ?? element.lat);
+      const lng = Number(element.center?.lon ?? element.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      return {
+        id: `osm_way_${element.id}`,
+        label: normalizedHighway,
+        lat,
+        lng,
+      };
+    })
+    .filter(Boolean);
+  if (!points.length) {
+    const relationQuery = `
+[out:json][timeout:45];
+area(3600051477)->.de;
+(
+  relation(area.de)["route"="road"]["ref"~"(^|;| )${normalizedHighway}($|;| )"];
+  relation(area.de)["route"="road"]["ref"~"(^|;| )${spacedRef}($|;| )"];
+);
+way(r);
+out center tags 240;
+`;
+    const relationData = await fetchOverpassJson(relationQuery, 'Tankprofi/1.0 (highway-relation-points)');
+    points = (relationData.elements || [])
+      .map((element) => {
+        const lat = Number(element.center?.lat ?? element.lat);
+        const lng = Number(element.center?.lon ?? element.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        return {
+          id: `osm_relation_way_${element.id}`,
+          label: normalizedHighway,
+          lat,
+          lng,
+        };
+      })
+      .filter(Boolean);
+  }
+  return sampleHighwaySearchPoints(points, maxPoints);
+}
+
+async function loadHighwayGeometryFromOverpass(highway) {
+  const normalizedHighway = String(highway || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!/^A\d{1,3}$/.test(normalizedHighway)) return [];
+  const spacedRef = normalizedHighway.replace(/^A/, 'A ');
+  const query = `
+[out:json][timeout:60];
+area(3600051477)->.de;
+(
+  way(area.de)["highway"="motorway"]["ref"~"(^|;| )${normalizedHighway}($|;| )"];
+  way(area.de)["highway"="motorway"]["ref"~"(^|;| )${spacedRef}($|;| )"];
+);
+out geom 1200;
+`;
+  const data = await fetchOverpassJson(query, 'Tankprofi/1.0 (highway-route-geometry)');
+  let elements = data.elements || [];
+  if (!elements.length) {
+    const relationQuery = `
+[out:json][timeout:60];
+area(3600051477)->.de;
+(
+  relation(area.de)["route"="road"]["ref"~"(^|;| )${normalizedHighway}($|;| )"];
+  relation(area.de)["route"="road"]["ref"~"(^|;| )${spacedRef}($|;| )"];
+);
+way(r);
+out geom 1200;
+`;
+    const relationData = await fetchOverpassJson(relationQuery, 'Tankprofi/1.0 (highway-relation-geometry)');
+    elements = relationData.elements || [];
+  }
+  const points = [];
+  elements.forEach((element) => {
+    if (!Array.isArray(element.geometry)) return;
+    element.geometry.forEach((point) => {
+      const lat = Number(point.lat);
+      const lng = Number(point.lon);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) points.push({ lat, lng });
+    });
+  });
+  if (points.length >= 2) {
+    points.sort((a, b) => {
+      const highwayNumber = Number(normalizedHighway.match(/\d+/)?.[0] || 0);
+      const eastWestHighways = new Set([2, 4, 6, 8, 10, 12, 14, 15, 20, 23, 24, 25, 26, 28, 30, 38, 40, 42, 44, 46, 52, 60, 62, 64, 65, 66, 70, 72, 96]);
+      if (eastWestHighways.has(highwayNumber)) return Number(a.lng) - Number(b.lng) || Number(b.lat) - Number(a.lat);
+      return Number(b.lat) - Number(a.lat) || Number(a.lng) - Number(b.lng);
+    });
+  }
+  if (points.length >= 2) return points;
+  return (highwaySearchPoints[normalizedHighway] || [])
+    .map((point) => ({
+      lat: Number(point.lat),
+      lng: Number(point.lng),
+    }))
+    .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+}
+
+async function loadHighwayJunctionsFromOverpass(highway) {
+  const normalizedHighway = String(highway || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!/^A\d{1,3}$/.test(normalizedHighway)) return [];
+  const spacedRef = normalizedHighway.replace(/^A/, 'A ');
+  const query = `
+[out:json][timeout:45];
+area(3600051477)->.de;
+(
+  way(area.de)["highway"="motorway"]["ref"~"(^|;| )${normalizedHighway}($|;| )"];
+  way(area.de)["highway"="motorway"]["ref"~"(^|;| )${spacedRef}($|;| )"];
+)->.roads;
+node(w.roads)["highway"="motorway_junction"];
+out tags;
+`;
+  const data = await fetchOverpassJson(query, 'Tankprofi/1.0 (highway-junctions)');
+  let elements = data.elements || [];
+  if (!elements.length) {
+    const relationQuery = `
+[out:json][timeout:45];
+area(3600051477)->.de;
+(
+  relation(area.de)["route"="road"]["ref"~"(^|;| )${normalizedHighway}($|;| )"];
+  relation(area.de)["route"="road"]["ref"~"(^|;| )${spacedRef}($|;| )"];
+);
+way(r)->.roads;
+node(w.roads)["highway"="motorway_junction"];
+out tags;
+`;
+    const relationData = await fetchOverpassJson(relationQuery, 'Tankprofi/1.0 (highway-relation-junctions)');
+    elements = relationData.elements || [];
+  }
+  return elements
+    .map((element) => {
+      const tags = element.tags || {};
+      const lat = Number(element.lat);
+      const lng = Number(element.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      return {
+        id: `osm_junction_${element.id}`,
+        lat,
+        lng,
+        exitNumber: tags.ref || tags['junction:ref'] || '',
+        exitName: tags.name || tags.destination || '',
+      };
+    })
+    .filter(Boolean);
+}
+
+function nearestHighwayJunction(lat, lng, junctions, maxDistanceKm = 15) {
+  let best = null;
+  junctions.forEach((junction) => {
+    const distanceKm = distanceKmBetween(lat, lng, junction.lat, junction.lng);
+    if (distanceKm > maxDistanceKm) return;
+    if (!best || distanceKm < best.distanceKm) best = { ...junction, distanceKm };
+  });
+  return best;
+}
+
 async function loadHighwaySearchPointsFromData(highway, maxPoints = 10) {
   const points = [...(highwaySearchPoints[highway] || [])];
   const addDocs = (docs, source) => {
@@ -1502,11 +1780,13 @@ async function loadHighwaySearchPointsFromData(highway, maxPoints = 10) {
     return Number(b.lat) - Number(a.lat) || Number(a.lng) - Number(b.lng);
   });
 
-  return sampleHighwaySearchPoints(points, maxPoints);
+  const sampled = sampleHighwaySearchPoints(points, maxPoints);
+  if (sampled.length) return sampled;
+  return await loadHighwaySearchPointsFromOverpass(highway, maxPoints);
 }
 
 async function availableHighwaysForServiceImport(maxHighways = 0) {
-  const highways = new Set(Object.keys(highwaySearchPoints));
+  const highways = new Set([...operationalHighwayIds, ...Object.keys(highwaySearchPoints)]);
   const collect = async (collectionName) => {
     const snapshot = await db.collection(collectionName).limit(1000).get();
     snapshot.docs.forEach((doc) => {
@@ -2438,6 +2718,34 @@ function distanceKmBetween(latA, lngA, latB, lngB) {
   const a = Math.sin(dLat / 2) ** 2
     + Math.cos(startLat) * Math.cos(endLat) * Math.sin(dLng / 2) ** 2;
   return earthKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function pointDistanceToSegmentKm(lat, lng, start, end) {
+  const baseLat = ((Number(start.lat) + Number(end.lat) + Number(lat)) / 3) * Math.PI / 180;
+  const kmPerLat = 111.32;
+  const kmPerLng = 111.32 * Math.max(0.2, Math.cos(baseLat));
+  const px = Number(lng) * kmPerLng;
+  const py = Number(lat) * kmPerLat;
+  const ax = Number(start.lng) * kmPerLng;
+  const ay = Number(start.lat) * kmPerLat;
+  const bx = Number(end.lng) * kmPerLng;
+  const by = Number(end.lat) * kmPerLat;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lengthSq = dx * dx + dy * dy;
+  if (!lengthSq) return Math.hypot(px - ax, py - ay);
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSq));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+function distanceToRouteGeometryKm(lat, lng, geometry) {
+  if (!Array.isArray(geometry) || geometry.length < 2) return Number.POSITIVE_INFINITY;
+  let best = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < geometry.length; index += 1) {
+    const distance = pointDistanceToSegmentKm(lat, lng, geometry[index - 1], geometry[index]);
+    if (distance < best) best = distance;
+  }
+  return best;
 }
 
 function roundPrice(value) {
@@ -5575,6 +5883,139 @@ async function handleChargingCleanup(req, res) {
   });
 }
 
+function routeBounds(geometry, paddingKm = 2) {
+  const lats = geometry.map((point) => Number(point.lat)).filter(Number.isFinite);
+  const lngs = geometry.map((point) => Number(point.lng)).filter(Number.isFinite);
+  if (!lats.length || !lngs.length) return null;
+  const centerLat = lats.reduce((sum, value) => sum + value, 0) / lats.length;
+  return {
+    minLat: Math.min(...lats) - kmToLat(paddingKm),
+    maxLat: Math.max(...lats) + kmToLat(paddingKm),
+    minLng: Math.min(...lngs) - kmToLon(paddingKm, centerLat),
+    maxLng: Math.max(...lngs) + kmToLon(paddingKm, centerLat),
+  };
+}
+
+function isTeslaChargingStation(data) {
+  const haystack = [
+    data.source,
+    data.sourceName,
+    data.name,
+    data.operatorName,
+    data.displayName,
+    data.siteName,
+    data.network,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return haystack.includes('tesla') || haystack.includes('supercharger') || data.source === 'supercharge_info';
+}
+
+async function tagChargingStationsForHighway({ highway, radiusKm = 2, minChargingPoints = 0, limit = 30000, dryRun = false, teslaOnly = false } = {}) {
+  const normalizedHighway = String(highway || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!/^A\d{1,3}$/.test(normalizedHighway)) throw new Error('Unsupported highway.');
+  const geometry = await loadHighwayGeometryFromOverpass(normalizedHighway);
+  if (geometry.length < 2) throw new Error(`No route geometry found for ${normalizedHighway}.`);
+  const junctions = await loadHighwayJunctionsFromOverpass(normalizedHighway).catch(() => []);
+  const bounds = routeBounds(geometry, radiusKm + 1);
+  const docs = await loadChargingDocsWithSupplemental(limit);
+  const matches = [];
+  docs.forEach((doc) => {
+    const data = doc.data() || {};
+    const lat = Number(data.lat);
+    const lng = Number(data.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    if (bounds && (lat < bounds.minLat || lat > bounds.maxLat || lng < bounds.minLng || lng > bounds.maxLng)) return;
+    const pointCount = Number(data.chargingPointCount || 0);
+    if (pointCount < minChargingPoints) return;
+    if (teslaOnly && !isTeslaChargingStation(data)) return;
+    const distanceKm = distanceToRouteGeometryKm(lat, lng, geometry);
+    if (distanceKm > radiusKm) return;
+    const junction = nearestHighwayJunction(lat, lng, junctions);
+    matches.push({
+      ref: doc.ref,
+      id: doc.id,
+      name: data.name || data.displayName || data.operatorName || 'Ladeanlage',
+      city: data.city || '',
+      chargingPointCount: pointCount,
+      distanceKm,
+      exitNumber: junction?.exitNumber || '',
+      exitName: junction?.exitName || '',
+      exitDistanceKm: junction?.distanceKm ?? null,
+    });
+  });
+
+  if (!dryRun && matches.length) {
+    for (let index = 0; index < matches.length; index += 400) {
+      const batch = db.batch();
+      matches.slice(index, index + 400).forEach((match) => {
+        batch.set(match.ref, {
+          autobahnTags: FieldValue.arrayUnion(normalizedHighway),
+          nearestAutobahn: normalizedHighway,
+          autobahnDistanceKm: Math.round(match.distanceKm * 1000) / 1000,
+          autobahnExitNumber: match.exitNumber || FieldValue.delete(),
+          autobahnExitName: match.exitName || FieldValue.delete(),
+          autobahnExitDistanceKm: Number.isFinite(match.exitDistanceKm) ? Math.round(match.exitDistanceKm * 1000) / 1000 : FieldValue.delete(),
+          autobahnTaggedAt: FieldValue.serverTimestamp(),
+          autobahnTagSource: 'osm_motorway_geometry',
+        }, { merge: true });
+      });
+      await batch.commit();
+    }
+  }
+
+  return {
+    highway: normalizedHighway,
+    status: dryRun ? 'dry-run' : 'completed',
+    radiusKm,
+    minChargingPoints,
+    teslaOnly,
+    routePointCount: geometry.length,
+    junctionCount: junctions.length,
+    scannedCount: docs.length,
+    taggedCount: matches.length,
+    taggedChargingPoints: matches.reduce((sum, match) => sum + Number(match.chargingPointCount || 0), 0),
+    sample: matches
+      .sort((a, b) => a.distanceKm - b.distanceKm || String(a.name).localeCompare(String(b.name), 'de'))
+      .slice(0, 15)
+      .map(({ ref, distanceKm, exitDistanceKm, ...match }) => ({
+        ...match,
+        distanceKm: Math.round(distanceKm * 100) / 100,
+        exitDistanceKm: Number.isFinite(exitDistanceKm) ? Math.round(exitDistanceKm * 100) / 100 : null,
+      })),
+  };
+}
+
+async function handleChargingAutobahnTag(req, res) {
+  if (!['POST', 'GET'].includes(req.method)) return sendJson(res, { error: 'Method not allowed.' }, 405);
+  const highway = String(req.query.highway || req.body?.highway || '').trim().toUpperCase().replace(/\s+/g, '');
+  const radiusKm = numberParam(req.query.radiusKm || req.body?.radiusKm, 2, 0.2, 10);
+  const minChargingPoints = Math.round(numberParam(req.query.minChargingPoints || req.body?.minChargingPoints, 0, 0, 1000));
+  const limit = Math.round(numberParam(req.query.limit || req.body?.limit, 30000, 1, 30000));
+  const dryRun = String(req.query.dryRun || req.body?.dryRun || '0') === '1';
+  const teslaOnly = ['1', 'true', 'yes'].includes(String(req.query.teslaOnly || req.body?.teslaOnly || '').toLowerCase());
+  if (!highway || highway === 'ALL') {
+    const startIndex = Math.round(numberParam(req.query.startIndex || req.body?.startIndex, 0, 0, operationalHighwayIds.length - 1));
+    const maxHighways = Math.round(numberParam(req.query.maxHighways || req.body?.maxHighways, operationalHighwayIds.length, 1, operationalHighwayIds.length));
+    const results = [];
+    for (const currentHighway of operationalHighwayIds.slice(startIndex, startIndex + maxHighways)) {
+      try {
+        results.push(await tagChargingStationsForHighway({ highway: currentHighway, radiusKm, minChargingPoints, limit, dryRun, teslaOnly }));
+      } catch (error) {
+        results.push({ highway: currentHighway, status: 'failed', error: error.message });
+      }
+    }
+    return sendJson(res, {
+      status: dryRun ? 'dry-run' : 'completed',
+      highway: 'ALL',
+      startIndex,
+      highwaysProcessed: results.length,
+      taggedCount: results.reduce((sum, result) => sum + Number(result.taggedCount || 0), 0),
+      taggedChargingPoints: results.reduce((sum, result) => sum + Number(result.taggedChargingPoints || 0), 0),
+      results,
+    });
+  }
+  return sendJson(res, await tagChargingStationsForHighway({ highway, radiusKm, minChargingPoints, limit, dryRun, teslaOnly }));
+}
+
 function normalizeChargingForClient(doc, origin = null) {
   const data = doc.data ? doc.data() : doc;
   const station = {
@@ -5608,6 +6049,13 @@ function normalizeChargingForClient(doc, origin = null) {
     sourceName: data.sourceName || 'Bundesnetzagentur Ladesaeulenregister',
     sourceLicense: data.sourceLicense || 'CC BY 4.0',
     sourceUpdatedAt: data.sourceUpdatedAt || bnetzaChargingSourceDate,
+    autobahnTags: Array.isArray(data.autobahnTags) ? data.autobahnTags : [],
+    nearestAutobahn: data.nearestAutobahn || '',
+    autobahnDistanceKm: Number.isFinite(Number(data.autobahnDistanceKm)) ? Number(data.autobahnDistanceKm) : null,
+    autobahnExitNumber: data.autobahnExitNumber || '',
+    autobahnExitName: data.autobahnExitName || '',
+    autobahnExitDistanceKm: Number.isFinite(Number(data.autobahnExitDistanceKm)) ? Number(data.autobahnExitDistanceKm) : null,
+    autobahnTaggedAt: isoFromTimestamp(data.autobahnTaggedAt) || data.autobahnTaggedAt || null,
   };
   if (origin && Number.isFinite(station.lat) && Number.isFinite(station.lng)) {
     station.distance = distanceKmBetween(origin.lat, origin.lng, station.lat, station.lng);
@@ -5635,6 +6083,13 @@ function normalizeChargingForDistribution(doc) {
     state: station.state,
     lat: station.lat,
     lng: station.lng,
+    autobahnTags: station.autobahnTags,
+    nearestAutobahn: station.nearestAutobahn,
+    autobahnDistanceKm: station.autobahnDistanceKm,
+    autobahnExitNumber: station.autobahnExitNumber,
+    autobahnExitName: station.autobahnExitName,
+    autobahnExitDistanceKm: station.autobahnExitDistanceKm,
+    autobahnTaggedAt: station.autobahnTaggedAt,
   };
 }
 
@@ -5694,6 +6149,13 @@ function groupChargingFacilities(stations, origin = null) {
       sourceName: station.sourceName || 'Bundesnetzagentur Ladesaeulenregister',
       sourceLicense: station.sourceLicense || 'CC BY 4.0',
       sourceUpdatedAt: station.sourceUpdatedAt || bnetzaChargingSourceDate,
+      autobahnTags: new Set(),
+      nearestAutobahn: '',
+      autobahnDistanceKm: null,
+      autobahnExitNumber: '',
+      autobahnExitName: '',
+      autobahnExitDistanceKm: null,
+      autobahnTaggedAt: null,
     };
     group.chargingUnitCount += 1;
     group.sourceIds.push(station.sourceId);
@@ -5709,6 +6171,18 @@ function groupChargingFacilities(stations, origin = null) {
     (Array.isArray(station.connectors) ? station.connectors : []).forEach((connector) => {
       if (group.connectors.length < 12) group.connectors.push(connector);
     });
+    (Array.isArray(station.autobahnTags) ? station.autobahnTags : []).forEach((tag) => tag && group.autobahnTags.add(tag));
+    if (station.nearestAutobahn) group.autobahnTags.add(station.nearestAutobahn);
+    const autobahnDistance = Number(station.autobahnDistanceKm);
+    if (station.nearestAutobahn && Number.isFinite(autobahnDistance)
+      && (!Number.isFinite(Number(group.autobahnDistanceKm)) || autobahnDistance < Number(group.autobahnDistanceKm))) {
+      group.nearestAutobahn = station.nearestAutobahn;
+      group.autobahnDistanceKm = autobahnDistance;
+      group.autobahnExitNumber = station.autobahnExitNumber || '';
+      group.autobahnExitName = station.autobahnExitName || '';
+      group.autobahnExitDistanceKm = Number.isFinite(Number(station.autobahnExitDistanceKm)) ? Number(station.autobahnExitDistanceKm) : null;
+      group.autobahnTaggedAt = station.autobahnTaggedAt || null;
+    }
     group.latSum += Number(station.lat);
     group.lngSum += Number(station.lng);
     if (/in betrieb/i.test(station.status || '') && !/außer|ausser|nicht/i.test(station.status || '')) group.status = 'In Betrieb';
@@ -5727,9 +6201,11 @@ function groupChargingFacilities(stations, origin = null) {
       connectorTypes: [...group.connectorTypes],
       sourceIds: [...new Set(group.sourceIds.filter(Boolean))],
       stationIds: [...new Set(group.stationIds.filter(Boolean))],
+      autobahnTags: [...group.autobahnTags].filter(Boolean),
       latSum: undefined,
       lngSum: undefined,
       acDcModes: undefined,
+      autobahnTagsSet: undefined,
     };
     if (origin) facility.distance = distanceKmBetween(origin.lat, origin.lng, lat, lng);
     return facility;
@@ -5745,6 +6221,15 @@ async function loadChargingDocsWithSupplemental(limit = 30000) {
   primarySnapshot.docs.forEach((doc) => byId.set(doc.id, doc));
   teslaSnapshot.docs.forEach((doc) => byId.set(doc.id, doc));
   return [...byId.values()];
+}
+
+async function loadChargingAutobahnDocs(limit = 30000) {
+  const snapshot = await db.collection('charging_stations')
+    .where('nearestAutobahn', '!=', '')
+    .orderBy('nearestAutobahn')
+    .limit(limit)
+    .get();
+  return snapshot.docs;
 }
 
 async function loadChargingDocsAroundOrigin(lat, lng, radiusKm) {
@@ -5884,6 +6369,7 @@ async function handleChargingStations(req, res) {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
   const hasOrigin = Number.isFinite(lat) && Number.isFinite(lng);
+  const autobahnMode = req.query.autobahn === '1';
   const distributionMode = req.query.distribution === '1' || req.query.all === '1';
   const requestedCityId = normalizeText(req.query.city || '');
   const cityConfig = requestedCityId
@@ -5891,10 +6377,12 @@ async function handleChargingStations(req, res) {
     : null;
   const cityMode = Boolean(cityConfig);
   const radiusKm = numberParam(req.query.radius, hasOrigin ? 25 : 0, 1, 100);
-  const maxLimit = (distributionMode && !hasOrigin) || cityMode ? 30000 : 500;
-  const limit = Math.round(numberParam(req.query.limit, distributionMode || cityMode ? 30000 : 100, 1, maxLimit));
+  const maxLimit = (autobahnMode || distributionMode && !hasOrigin) || cityMode ? 30000 : 500;
+  const limit = Math.round(numberParam(req.query.limit, autobahnMode || distributionMode || cityMode ? 30000 : 100, 1, maxLimit));
   let docs = [];
-  if (cityMode) {
+  if (autobahnMode) {
+    docs = await loadChargingAutobahnDocs(limit);
+  } else if (cityMode) {
     docs = await loadChargingDocsWithSupplemental(30000);
   } else if (hasOrigin) {
     docs = await loadChargingDocsAroundOrigin(lat, lng, radiusKm);
@@ -5908,8 +6396,9 @@ async function handleChargingStations(req, res) {
       : null;
   const cityKeys = cityMode ? chargingCityKeys(cityConfig) : null;
   const rawStations = docs
-    .map((doc) => (distributionMode && !hasOrigin ? normalizeChargingForDistribution(doc) : normalizeChargingForClient(doc, origin)))
+    .map((doc) => (distributionMode && !hasOrigin && !autobahnMode ? normalizeChargingForDistribution(doc) : normalizeChargingForClient(doc, origin)))
     .filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lng))
+    .filter((station) => !autobahnMode || station.nearestAutobahn || (Array.isArray(station.autobahnTags) && station.autobahnTags.length))
     .filter((station) => !cityMode || cityKeys.has(normalizeText(station.city)))
     .filter((station) => !hasOrigin || distanceKmBetween(origin.lat, origin.lng, station.lat, station.lng) <= radiusKm);
   const facilities = groupChargingFacilities(rawStations, origin);
@@ -5925,7 +6414,7 @@ async function handleChargingStations(req, res) {
     chargingPointCount: pointCount,
     chargingUnitCount: unitCount,
     groupedAs: 'charging_facility',
-    matchMode: cityMode ? 'city' : hasOrigin ? 'radius' : distributionMode ? 'distribution' : 'all',
+    matchMode: autobahnMode ? 'autobahn' : cityMode ? 'city' : hasOrigin ? 'radius' : distributionMode ? 'distribution' : 'all',
     cityId: cityConfig?.cityId || null,
     cityName: cityConfig?.cityName || null,
     source: 'Bundesnetzagentur Ladesaeulenregister',
@@ -6349,6 +6838,7 @@ export const api = onRequest({
     if (endpoint === 'chargingImport') return await handleChargingImport(req, res);
     if (endpoint === 'chargingTeslaImport') return await handleChargingTeslaImport(req, res);
     if (endpoint === 'chargingCleanup') return await handleChargingCleanup(req, res);
+    if (endpoint === 'chargingAutobahnTag') return await handleChargingAutobahnTag(req, res);
     if (endpoint === 'chargingStations') return await handleChargingStations(req, res);
     if (endpoint === 'chargingCities') return await handleChargingCities(req, res);
     if (endpoint === 'chargingOperators') return await handleChargingOperators(req, res);
