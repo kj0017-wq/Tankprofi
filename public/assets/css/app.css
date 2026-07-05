@@ -1828,11 +1828,11 @@ select:focus {
 .driving-mode.view-map .driving-map-speed { display: none; }
 
 .driving-map-nearest {
-    position: absolute;
+    position: fixed;
     left: 14px;
     right: 14px;
-    bottom: max(180px, calc(env(safe-area-inset-bottom) + 156px));
-    z-index: 620;
+    bottom: max(18px, env(safe-area-inset-bottom));
+    z-index: 1200;
     display: none;
     pointer-events: auto;
 }

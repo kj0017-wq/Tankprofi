@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260705-drive-map-nearest-fallback';
+const appVersion = '20260705-drive-map-nearest-visible';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -46,9 +46,9 @@ const DRIVE_MAP_FOLLOW_MIN_MS = 2500;
 const DRIVE_MAP_MANUAL_PAUSE_MS = 15 * 1000;
 const DRIVE_MAP_INITIAL_ZOOM_DELAY_MS = 5 * 1000;
 const DRIVE_MAP_NEAREST_OPEN_DELAY_MS = 1000;
-const DRIVE_MAP_FOLLOW_ZOOM = 16;
+const DRIVE_MAP_FOLLOW_ZOOM = 17;
 const DRIVE_MAP_USER_VERTICAL_OFFSET_RATIO = 0.16;
-const DRIVE_CITY_MAP_RADIUS_KM = 1.5;
+const DRIVE_CITY_MAP_RADIUS_KM = 0.85;
 const DRIVE_CONTROL_REVEAL_MS = 10 * 1000;
 const DRIVE_CONTROL_MOVING_KMH = 5;
 const DRIVE_LIST_AUTO_TOP_MS = 10 * 1000;
@@ -2236,11 +2236,11 @@ function focusDrivingMapByHeading(stationsToShow, userPosition, { force = false 
         state.map.fitBounds(drivingMapBoundsAround(lat, lng, DRIVE_CITY_MAP_RADIUS_KM), {
             animate: false,
             padding: [18, 18],
-            maxZoom: 15,
+            maxZoom: 17,
         });
         liftDrivingMapUserMarker();
     } else {
-        const targetZoom = Number.isFinite(speed) && speed > 40 ? 14 : 15;
+        const targetZoom = Number.isFinite(speed) && speed > 40 ? 15 : 16;
         const zoom = Math.max(state.map.getZoom() || targetZoom, targetZoom);
         state.map.setView([lat, lng], zoom, { animate: false });
         liftDrivingMapUserMarker();
