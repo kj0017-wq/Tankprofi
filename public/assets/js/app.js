@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260705-drive-rural-stability';
+const appVersion = '20260705-drive-map-nearest-fallback';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -1977,14 +1977,17 @@ function updateDrivingMapNearestBox(stations = state.stations) {
             mapBehindDrivingDirection: behindDrivingDirection,
         };
     });
-    const nearest = stationsWithDistance
+    const finiteStations = stationsWithDistance
         .filter((station) => (
             Number.isFinite(Number(station.mapDistance))
-            && (!isLocalDrivingContext(station.drivingContext)
-                || !station.mapBehindDrivingDirection
-                || Number(station.mapDistance) <= CITY_DRIVE_BEHIND_KEEP_KM)
         ))
-        .sort((a, b) => Number(a.mapDistance) - Number(b.mapDistance))[0];
+        .sort((a, b) => Number(a.mapDistance) - Number(b.mapDistance));
+    const directionalStations = finiteStations.filter((station) => (
+        station.drivingContext !== 'city'
+        || !station.mapBehindDrivingDirection
+        || Number(station.mapDistance) <= CITY_DRIVE_BEHIND_KEEP_KM
+    ));
+    const nearest = directionalStations[0] || finiteStations[0];
     if (!nearest) {
         clearDrivingMapNearestBox();
         return;
