@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260712-drive-highway-forward-cards';
+const appVersion = '20260712-drive-highway-speed-confidence';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -43,7 +43,9 @@ const DRIVE_ROUTE_HOLD_MS = 90 * 1000;
 const DRIVE_ROUTE_HOLD_MAX_KM = 4;
 const DRIVE_ROUTE_REFRESH_MS = 20 * 60 * 1000;
 const DRIVE_HIGHWAY_SPEED_CERTAIN_KMH = 100;
-const DRIVE_HIGHWAY_SPEED_ROUTE_MAX_KM = 20;
+const DRIVE_HIGHWAY_SPEED_ROUTE_MAX_KM = 3.5;
+const DRIVE_HIGHWAY_SPEED_ROUTE_RECENT_MAX_KM = 6;
+const DRIVE_HIGHWAY_SPEED_MAX_BEARING_DELTA = 35;
 const DRIVE_POSITION_STALE_MS = 15 * 1000;
 const DRIVE_COMPASS_REFRESH_MS = 30 * 1000;
 const DRIVE_COMPASS_RENDER_FAST_MS = 1200;
@@ -5354,11 +5356,32 @@ function speedImpliesHighway() {
     return currentDrivingSpeedKmh() >= DRIVE_HIGHWAY_SPEED_CERTAIN_KMH;
 }
 
+function speedHighwayRouteIsPlausible(route) {
+    if (!route?.projection || !route.routeId) return false;
+    const distanceKm = Number(route.distanceKm);
+    if (!Number.isFinite(distanceKm)) return false;
+    const recentSameRoute = state.drivingLastHighwayRouteId === route.routeId
+        && Number(state.drivingLastHighwayAt || 0)
+        && Date.now() - Number(state.drivingLastHighwayAt || 0) <= DRIVE_ROUTE_HOLD_MS;
+    const maxDistanceKm = recentSameRoute
+        ? DRIVE_HIGHWAY_SPEED_ROUTE_RECENT_MAX_KM
+        : DRIVE_HIGHWAY_SPEED_ROUTE_MAX_KM;
+    if (distanceKm > maxDistanceKm) return false;
+
+    const segmentBearing = Number(route.projection.segmentBearing);
+    const drivingBearing = visualDrivingBearing();
+    if (!Number.isFinite(segmentBearing) || !Number.isFinite(drivingBearing)) {
+        return route.onRoute || distanceKm <= DRIVE_ROUTE_ON_ROUTE_MAX_KM || recentSameRoute;
+    }
+
+    const forwardDelta = angularDifference(drivingBearing, segmentBearing);
+    const backwardDelta = angularDifference(drivingBearing, (segmentBearing + 180) % 360);
+    return Math.min(forwardDelta, backwardDelta) <= DRIVE_HIGHWAY_SPEED_MAX_BEARING_DELTA;
+}
+
 function applySpeedHighwayHeuristic(route) {
     if (!speedImpliesHighway()) return route;
-    if (!route?.projection || !route.routeId) return route;
-    const distanceKm = Number(route.distanceKm);
-    if (!Number.isFinite(distanceKm) || distanceKm > DRIVE_HIGHWAY_SPEED_ROUTE_MAX_KM) return route;
+    if (!speedHighwayRouteIsPlausible(route)) return route;
     const forcedRoute = {
         ...route,
         onRoute: true,
