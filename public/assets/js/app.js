@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260712-drive-speed-display-offset';
+const appVersion = '20260712-rural-behind-500m';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -35,6 +35,7 @@ const DRIVE_ROUTE_DESTINATION_PREVIEW_LIMIT = 500;
 const DRIVE_ROUTE_PREVIEW_CORRIDOR_KM = 15;
 const DRIVE_ROUTE_PREVIEW_BEHIND_KM = 0.5;
 const CITY_DRIVE_BEHIND_KEEP_KM = 0.2;
+const RURAL_DRIVE_BEHIND_KEEP_KM = 0.5;
 const DRIVE_RURAL_MAX_TANKPOINTS = 4;
 const DRIVE_BEARING_MEMORY_MS = 3 * 60 * 1000;
 const DRIVE_ROUTE_ON_ROUTE_MAX_KM = 1.5;
@@ -1993,9 +1994,9 @@ function updateDrivingMapNearestBox(stations = state.stations) {
         ))
         .sort((a, b) => Number(a.mapDistance) - Number(b.mapDistance));
     const directionalStations = finiteStations.filter((station) => (
-        station.drivingContext !== 'city'
+        !isLocalDrivingContext(station.drivingContext)
         || !station.mapBehindDrivingDirection
-        || Number(station.mapDistance) <= CITY_DRIVE_BEHIND_KEEP_KM
+        || Number(station.mapDistance) <= localDriveBehindKeepKm(station.drivingContext)
     ));
     const nearest = directionalStations[0] || finiteStations[0];
     if (!nearest) {
@@ -6003,6 +6004,10 @@ function isLocalDrivingContext(context = state.drivingContext) {
     return context === 'city' || context === 'rural';
 }
 
+function localDriveBehindKeepKm(context = state.drivingContext) {
+    return context === 'rural' ? RURAL_DRIVE_BEHIND_KEEP_KM : CITY_DRIVE_BEHIND_KEEP_KM;
+}
+
 function localDriveContextFor(stations = []) {
     return stations.length <= DRIVE_RURAL_MAX_TANKPOINTS ? 'rural' : 'city';
 }
@@ -6023,7 +6028,7 @@ function filterCityDriveStations(stations, position, limit = 10) {
         .filter((station) => (
             Number.isFinite(station.distance)
             && hasDrivingPrice(station)
-            && (!station.behindDrivingDirection || station.distance <= CITY_DRIVE_BEHIND_KEEP_KM)
+            && (!station.behindDrivingDirection || station.distance <= localDriveBehindKeepKm('city'))
         ))
         .sort((a, b) => a.distance - b.distance)
         .slice(0, limit);
@@ -6037,7 +6042,7 @@ function filterRuralDriveStations(stations, position, limit = 10) {
             Number.isFinite(station.distance)
             && station.distance <= 25
             && hasDrivingPrice(station)
-            && (!station.behindDrivingDirection || station.distance <= CITY_DRIVE_BEHIND_KEEP_KM)
+            && (!station.behindDrivingDirection || station.distance <= localDriveBehindKeepKm('rural'))
         ))
         .sort((a, b) => a.distance - b.distance)
         .slice(0, limit);
