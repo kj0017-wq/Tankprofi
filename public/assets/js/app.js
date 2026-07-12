@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260712-rural-behind-500m';
+const appVersion = '20260712-city-empty-rural-fallback';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -6169,6 +6169,10 @@ async function loadLocalDriveStations(position, limit = 10) {
     if (localDriveContextFor(cityStations) !== 'rural') {
         return applyLocalDriveContext(cityStations);
     }
+    state.drivingContext = 'rural';
+    state.drivingMessage = cityStations.length
+        ? 'Wenige Stadttreffer - Landmodus wird erweitert'
+        : 'Keine Stadttreffer - Landmodus wird geladen';
     const ruralStations = await loadLiveRuralDriveStations(position, limit);
     if (ruralStations.length) {
         state.drivingContext = 'rural';
@@ -7745,6 +7749,10 @@ async function loadElectricDriveStations(position, limit = ELECTRIC_NEAREST_LIMI
         state.drivingContext = 'city';
         return cityStations.map((station) => ({ ...station, drivingContext: 'city' }));
     }
+    state.drivingContext = 'rural';
+    state.drivingMessage = cityStations.length
+        ? 'Wenige Ladepunkte im Stadtbereich - Landmodus wird erweitert'
+        : 'Keine Ladepunkte im Stadtbereich - Landmodus wird geladen';
     const ruralStations = await fetchElectricDriveStations(position, ELECTRIC_RURAL_RADIUS_KM, limit);
     state.drivingContext = 'rural';
     return ruralStations.map((station) => ({ ...station, drivingContext: 'rural' }));
