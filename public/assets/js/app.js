@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260705-drive-map-nearest-visible';
+const appVersion = '20260712-drive-highway-reentry2';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -19,6 +19,8 @@ const ELECTRIC_ROUTE_CORRIDOR_KM = 8;
 const DRIVE_HIGHWAY_PRICE_MAX_AGE_MS = 15 * 60 * 1000;
 const USAGE_PRICE_MAX_AGE_MS = 30 * 60 * 1000;
 const DRIVE_UPDATE_INTERVAL_MS = 5000;
+const DRIVE_POSITION_EVALUATE_MS = 30000;
+const DRIVE_UPDATE_WATCHDOG_MS = 45 * 1000;
 const DRIVE_SPEED_STALE_MS = 2800;
 const DRIVE_SPEED_RESET_DELAY_MS = DRIVE_SPEED_STALE_MS + 250;
 const NORMAL_SEARCH_REFRESH_MS = 60 * 1000;
@@ -39,6 +41,9 @@ const DRIVE_ROUTE_STABLE_MAX_KM = 0.8;
 const DRIVE_ROUTE_LEFT_AFTER_MS = 45 * 1000;
 const DRIVE_ROUTE_HOLD_MS = 90 * 1000;
 const DRIVE_ROUTE_HOLD_MAX_KM = 4;
+const DRIVE_ROUTE_REFRESH_MS = 20 * 60 * 1000;
+const DRIVE_HIGHWAY_SPEED_CERTAIN_KMH = 100;
+const DRIVE_HIGHWAY_SPEED_ROUTE_MAX_KM = 20;
 const DRIVE_POSITION_STALE_MS = 15 * 1000;
 const DRIVE_COMPASS_REFRESH_MS = 30 * 1000;
 const DRIVE_COMPASS_RENDER_FAST_MS = 1200;
@@ -324,6 +329,8 @@ const state = {
     drivingNearestRouteDistanceKm: null,
     drivingCurrentRoutePosition: null,
     drivingRouteProjection: null,
+    drivingLastUpdateAt: 0,
+    drivingUpdateStartedAt: 0,
     drivingLastHighwayAt: null,
     drivingLastHighwayRouteId: null,
     drivingLastHighwayProjection: null,
@@ -5335,6 +5342,35 @@ function detectCurrentRoute(position, routeId = state.drivingRouteId) {
     return best;
 }
 
+function currentDrivingSpeedKmh() {
+    const last = state.drivingSamples.at(-1);
+    const sampleSpeed = Number(last?.speedKmh);
+    if (Number.isFinite(sampleSpeed)) return sampleSpeed;
+    const estimatedSpeed = Number(state.drivingSpeedKmh);
+    return Number.isFinite(estimatedSpeed) ? estimatedSpeed : 0;
+}
+
+function speedImpliesHighway() {
+    return currentDrivingSpeedKmh() >= DRIVE_HIGHWAY_SPEED_CERTAIN_KMH;
+}
+
+function applySpeedHighwayHeuristic(route) {
+    if (!speedImpliesHighway()) return route;
+    if (!route?.projection || !route.routeId) return route;
+    const distanceKm = Number(route.distanceKm);
+    if (!Number.isFinite(distanceKm) || distanceKm > DRIVE_HIGHWAY_SPEED_ROUTE_MAX_KM) return route;
+    const forcedRoute = {
+        ...route,
+        onRoute: true,
+        uncertain: true,
+        speedForced: true,
+    };
+    rememberDrivingHighwayRoute(forcedRoute);
+    state.drivingDetectedRouteId = forcedRoute.routeId;
+    state.drivingRouteProjection = forcedRoute.projection;
+    return forcedRoute;
+}
+
 function rememberDrivingHighwayRoute(route) {
     if (!route?.onRoute || !route.routeId || !route.projection) return;
     state.drivingLastHighwayAt = Date.now();
@@ -6152,7 +6188,7 @@ async function loadRouteTankpoints(routeId = state.drivingRouteId, options = {})
     const requestRouteId = drivingRouteRequestId(routeId, options.ignoreTemplate);
     const loadKey = `route:${requestRouteId}`;
     const freshMs = state.drivingRouteLoadedAt ? Date.now() - state.drivingRouteLoadedAt : Number.POSITIVE_INFINITY;
-    if (state.drivingRouteTankpoints.length && state.drivingRouteLoadKey === loadKey && freshMs < 30 * 60 * 1000) return state.drivingRouteTankpoints;
+    if (!options.force && state.drivingRouteTankpoints.length && state.drivingRouteLoadKey === loadKey && freshMs < DRIVE_ROUTE_REFRESH_MS) return state.drivingRouteTankpoints;
     const data = await fetchJson(`/api/route/tankpoints.php?route=${encodeURIComponent(requestRouteId)}`);
     state.drivingRouteTankpoints = dedupeRouteTankpoints((data.tankpoints || [])
         .map(normalizeRouteTankpoint)
@@ -6807,7 +6843,7 @@ async function updateDrivingMode(options = {}) {
         return;
     }
     await loadRouteTankpoints(state.drivingRouteId);
-    const route = stabilizedDrivingRoute(detectCurrentRoute(position, state.drivingRouteId), position);
+    const route = stabilizedDrivingRoute(applySpeedHighwayHeuristic(detectCurrentRoute(position, state.drivingRouteId)), position);
     if (route.projection && state.drivingSamples.length) {
         state.drivingSamples[state.drivingSamples.length - 1] = {
             ...state.drivingSamples[state.drivingSamples.length - 1],
@@ -6817,7 +6853,7 @@ async function updateDrivingMode(options = {}) {
         };
     }
     const templateDirection = drivingTemplateDirection();
-    const direction = route.onRoute ? (detectDrivingDirectionOnRoute() || templateDirection) : detectDrivingDirection();
+    const direction = route.onRoute ? (detectDrivingDirectionOnRoute() || detectDrivingDirection() || templateDirection) : detectDrivingDirection();
     state.drivingDirection = direction;
     const hasDestinationRoute = Boolean(state.drivingDestination && state.drivingRouteSuggestion);
     const hasRoutePreviewCache = Boolean(state.drivingRoutePreviewCache?.stations?.length);
@@ -6840,7 +6876,7 @@ async function updateDrivingMode(options = {}) {
         if (offRouteTooLong) resetDrivingRoutePreviewCache();
         let routePreviewStations = routePreviewStationsForDriving(position, state.drivingDestination ? DRIVE_ROUTE_DESTINATION_PREVIEW_LIMIT : 120);
         const routePreviewDisplayLimit = state.drivingDestination ? routePreviewStations.length : 10;
-        if (routePreviewStations.some((station) => !hasCurrentDrivingPrice(station, els.fuel.value, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS))) {
+        if (staleDrivingStations(routePreviewStations).length) {
             state.stations = routePreviewStations.slice(0, routePreviewDisplayLimit);
             state.drivingStatus = 'loading-prices';
             state.drivingMessage = 'Preise werden aktualisiert';
@@ -6869,8 +6905,8 @@ async function updateDrivingMode(options = {}) {
         state.drivingContext = 'highway';
         state.drivingLivePriceMessage = '';
         let stationsAhead = getNextTankpointsOnRoute({ position, direction, limit: 50 });
-        if (stationsAhead.some((station) => !hasCurrentDrivingPrice(station, els.fuel.value, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS))) {
-            state.stations = [];
+        if (staleDrivingStations(stationsAhead).length) {
+            state.stations = stationsAhead.slice(0, 10);
             state.drivingStatus = 'loading-prices';
             state.drivingMessage = 'Preise werden aktualisiert';
             if (!isDrivingDestinationInputActive()) renderDrivingModeList();
@@ -6903,7 +6939,11 @@ async function updateDrivingMode(options = {}) {
 }
 
 async function evaluateDrivingModeList() {
-    if (!state.drivingActive || state.drivingUpdateInProgress) return;
+    if (!state.drivingActive) return;
+    if (state.drivingUpdateInProgress) {
+        if (Date.now() - Number(state.drivingUpdateStartedAt || 0) <= DRIVE_UPDATE_WATCHDOG_MS) return;
+        state.drivingUpdateInProgress = false;
+    }
     if (state.drivingDestinationOpen) return;
     if (isDrivingRestMode() && state.stations.length) {
         state.drivingMessage = state.drivingMessage || 'Ruhemodus - Liste bleibt stabil';
@@ -6911,6 +6951,7 @@ async function evaluateDrivingModeList() {
         return;
     }
     state.drivingUpdateInProgress = true;
+    state.drivingUpdateStartedAt = Date.now();
     try {
         await updateDrivingMode();
     } catch (error) {
@@ -6920,6 +6961,8 @@ async function evaluateDrivingModeList() {
         setStatus('Fehler');
     } finally {
         state.drivingUpdateInProgress = false;
+        state.drivingUpdateStartedAt = 0;
+        state.drivingLastUpdateAt = Date.now();
     }
 }
 
@@ -6957,6 +7000,14 @@ function handleDrivingPosition(position) {
     rememberDrivingPosition(position);
     syncDrivingControlsVisibility();
     updateDrivingMapPositionOnly();
+    if (
+        state.drivingActive
+        && !state.drivingUpdateInProgress
+        && !isDrivingDestinationInputActive()
+        && Date.now() - Number(state.drivingLastUpdateAt || 0) >= DRIVE_POSITION_EVALUATE_MS
+    ) {
+        evaluateDrivingModeList();
+    }
 }
 
 function refreshDrivingCurrentPosition() {
@@ -7101,6 +7152,8 @@ async function startDrivingMode(routeId = 'ALL', options = {}) {
     state.drivingSamples = [];
     state.drivingSpeedKmh = null;
     state.drivingSpeedUpdatedAt = null;
+    state.drivingLastUpdateAt = 0;
+    state.drivingUpdateStartedAt = 0;
     state.drivingMapReadyPending = false;
     state.drivingMapLastAutoFitKey = null;
     state.drivingMapFocusKey = null;
@@ -7171,6 +7224,8 @@ function stopDrivingMode(restore = true) {
     state.drivingWatchId = null;
     state.drivingUpdateTimer = null;
     state.drivingUpdateInProgress = false;
+    state.drivingLastUpdateAt = 0;
+    state.drivingUpdateStartedAt = 0;
     state.drivingActive = false;
     state.drivingVehicleMode = DEFAULT_VEHICLE_MODE;
     state.drivingMapReadyPending = false;
