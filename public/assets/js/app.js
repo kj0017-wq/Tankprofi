@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260712-drive-price-status';
+const appVersion = '20260712-drive-speed-display-offset';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -23,6 +23,7 @@ const DRIVE_POSITION_EVALUATE_MS = 30000;
 const DRIVE_UPDATE_WATCHDOG_MS = 45 * 1000;
 const DRIVE_SPEED_STALE_MS = 2800;
 const DRIVE_SPEED_RESET_DELAY_MS = DRIVE_SPEED_STALE_MS + 250;
+const DRIVE_SPEED_DISPLAY_OFFSET_KMH = 3;
 const NORMAL_SEARCH_REFRESH_MS = 60 * 1000;
 const CITY_DRIVE_PRICE_REFRESH_MS = 60 * 1000;
 const DRIVE_HIGHWAY_LIVE_PRICE_LIMIT = 36;
@@ -881,8 +882,8 @@ function distanceText(station) {
 function drivingSpeedText() {
     const isFresh = Date.now() - Number(state.drivingSpeedUpdatedAt || 0) <= DRIVE_SPEED_STALE_MS;
     if (!isFresh || !Number.isFinite(state.drivingSpeedKmh)) return '0 km/h';
-    const displaySpeed = state.drivingContext === 'city' && state.drivingSpeedKmh > 10
-        ? state.drivingSpeedKmh + 3
+    const displaySpeed = state.drivingSpeedKmh > 10
+        ? state.drivingSpeedKmh + DRIVE_SPEED_DISPLAY_OFFSET_KMH
         : state.drivingSpeedKmh;
     return Number.isFinite(displaySpeed)
         ? `${Math.round(displaySpeed)} km/h`
