@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260712-drive-highway-reentry2';
+const appVersion = '20260712-drive-highway-forward-cards';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -25,13 +25,13 @@ const DRIVE_SPEED_STALE_MS = 2800;
 const DRIVE_SPEED_RESET_DELAY_MS = DRIVE_SPEED_STALE_MS + 250;
 const NORMAL_SEARCH_REFRESH_MS = 60 * 1000;
 const CITY_DRIVE_PRICE_REFRESH_MS = 60 * 1000;
-const DRIVE_HIGHWAY_LIVE_PRICE_LIMIT = 24;
-const DRIVE_HIGHWAY_LIVE_CLUSTER_LIMIT = 5;
-const DRIVE_HIGHWAY_LIVE_CLUSTER_RADIUS_KM = 5;
+const DRIVE_HIGHWAY_LIVE_PRICE_LIMIT = 36;
+const DRIVE_HIGHWAY_LIVE_CLUSTER_LIMIT = 7;
+const DRIVE_HIGHWAY_LIVE_CLUSTER_RADIUS_KM = 8;
 const DRIVE_HIGHWAY_LIVE_PRICE_DELAY_MS = 650;
 const DRIVE_HIGHWAY_PRICE_RETRY_MS = 2 * 60 * 1000;
 const DRIVE_ROUTE_DESTINATION_PREVIEW_LIMIT = 500;
-const DRIVE_ROUTE_PREVIEW_CORRIDOR_KM = 8;
+const DRIVE_ROUTE_PREVIEW_CORRIDOR_KM = 15;
 const DRIVE_ROUTE_PREVIEW_BEHIND_KM = 0.5;
 const CITY_DRIVE_BEHIND_KEEP_KM = 0.2;
 const DRIVE_RURAL_MAX_TANKPOINTS = 4;
@@ -5484,6 +5484,17 @@ function detectDrivingDirectionOnRoute(samples = state.drivingSamples) {
     return state.drivingStableDirection;
 }
 
+function detectRouteAxisDirectionFromBearing(route) {
+    const segmentBearing = Number(route?.projection?.segmentBearing);
+    const drivingBearing = visualDrivingBearing();
+    if (!Number.isFinite(segmentBearing) || !Number.isFinite(drivingBearing)) return null;
+    const forwardDelta = angularDifference(drivingBearing, segmentBearing);
+    const backwardDelta = angularDifference(drivingBearing, (segmentBearing + 180) % 360);
+    if (Math.min(forwardDelta, backwardDelta) > 75) return null;
+    state.drivingStableDirection = forwardDelta <= backwardDelta ? 'Muenchen' : 'Berlin';
+    return state.drivingStableDirection;
+}
+
 function getNextTankpointsOnRoute({ position, direction, limit = 5 } = {}) {
     if (!position || !direction) return [];
     const currentPosition = estimateCurrentRoutePosition(position);
@@ -5492,8 +5503,6 @@ function getNextTankpointsOnRoute({ position, direction, limit = 5 } = {}) {
     const axis = state.drivingRouteProjection?.axis || routeAxisFor(activeRouteId);
     const candidates = routeTankpointsFor(activeRouteId)
         .filter((point) => {
-            const pointDirection = normalizeRouteDirection(point.richtung);
-            if (pointDirection !== 'beide' && pointDirection !== direction) return false;
             const value = routeAxisValueForPoint(point, axis);
             if (!Number.isFinite(value)) return false;
             return direction === 'Muenchen'
@@ -6254,6 +6263,26 @@ function routeExitNumberLabel(station) {
     return match ? `AS ${match[0].toUpperCase()}` : '';
 }
 
+function routeTankpointDirectionLabel(station) {
+    const raw = String(station?.richtung || station?.direction || station?.sideLabel || '').trim();
+    if (!raw || /^beide$/i.test(raw) || raw === '-') return '';
+    return raw
+        .replace(/^rg[:\s-]*/i, '')
+        .replace(/^richtung\s+/i, '')
+        .trim();
+}
+
+function routeTankpointExitName(station) {
+    const raw = String(station?.abfahrtName || station?.exitName || '').trim();
+    if (!raw || raw === String(station?.abfahrtNummer || '').trim()) return '';
+    const route = String(station?.routeId || station?.autobahn || station?.highway || '').trim();
+    const normalized = raw.replace(/\s+/g, ' ').trim();
+    if (/^beide$/i.test(normalized)) return '';
+    if (/^A\s*\d+\s+beide$/i.test(normalized)) return '';
+    if (route && normalized.toUpperCase() === `${route.toUpperCase()} BEIDE`) return '';
+    return normalized;
+}
+
 function drivingTankpointRowHtml(station, rank, thresholds) {
     const cls = markerClass(station, thresholds);
     const typeLabel = routeTankpointTypeLabel(station.typ);
@@ -6261,7 +6290,7 @@ function drivingTankpointRowHtml(station, rank, thresholds) {
         ? 'direkt an Autobahn'
         : `nahe Abfahrt${station.abfahrtEntfernungMin ? `, ca. ${station.abfahrtEntfernungMin} Min.` : ''}`;
     const exitNumber = routeExitNumberLabel(station);
-    const exit = [exitNumber, station.abfahrtName && station.abfahrtName !== station.abfahrtNummer ? station.abfahrtName : ''].filter(Boolean).join(' ');
+    const exit = [exitNumber, routeTankpointExitName(station)].filter(Boolean).join(' ');
     return `
         <button class="driving-row" type="button" data-driving-station-id="${escapeHtml(station.tankerkoenig_id)}">
             <span class="rank ${cls}">${rank}</span>
@@ -6319,16 +6348,24 @@ function drivingTankpointCardHtml(station, rank, thresholds) {
         ? 'direkt an Autobahn'
         : `nahe Abfahrt${station.abfahrtEntfernungMin ? `, ca. ${station.abfahrtEntfernungMin} Min.` : ''}`;
     const exitNumber = routeExitNumberLabel(station);
-    const exit = [exitNumber, station.abfahrtName && station.abfahrtName !== station.abfahrtNummer ? station.abfahrtName : ''].filter(Boolean).join(' ');
+    const exit = [exitNumber, routeTankpointExitName(station)].filter(Boolean).join(' ');
     const addressLine = drivingStationAddress(station);
-    const routeDetail = `${escapeHtml(typeLabel)} - ${escapeHtml(access)}${exit ? ` - ${escapeHtml(exit)}` : ''}`;
+    const routeDirection = routeTankpointDirectionLabel(station);
+    const routeTitle = station.name || station.brand || station.operator || 'Tankpunkt';
+    const routeParts = [
+        typeLabel,
+        access,
+        exit,
+        routeDirection ? `Richtung ${routeDirection}` : '',
+        addressLine,
+    ].filter(Boolean);
     const subtitle = isCity
         ? `${escapeHtml(addressLine || 'Umkreis')}`
-        : `${routeDetail}${addressLine ? ` - ${escapeHtml(addressLine)}` : ''}`;
+        : escapeHtml(routeParts.join(' - '));
     const selectedFuel = els.fuel.value;
     const hasCurrentHighwayPrice = isCity || hasCurrentDrivingPrice(station, selectedFuel, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS);
-    const selectedPrice = hasCurrentHighwayPrice ? fuelPriceValue(station, selectedFuel) : null;
-    const selectedPriceClass = hasCurrentHighwayPrice
+    const selectedPrice = hasCurrentHighwayPrice || hasAnyFuelPrice(station) ? fuelPriceValue(station, selectedFuel) : null;
+    const selectedPriceClass = hasCurrentHighwayPrice || hasAnyFuelPrice(station)
         ? priceClassForFuel(station, selectedFuel)
         : 'price-rank-unknown';
     const dataStatus = drivingPriceStatus(station);
@@ -6348,6 +6385,7 @@ function drivingTankpointCardHtml(station, rank, thresholds) {
                     ${brandLogoHtml(station)}
                     ${highwayBadgeHtml}
                 </span>
+                ${isCity ? '' : `<strong class="driving-station-title">${escapeHtml(routeTitle)}</strong>`}
                 ${dataStatusHtml}
                 <small>${subtitle}</small>
             </span>
@@ -6853,7 +6891,9 @@ async function updateDrivingMode(options = {}) {
         };
     }
     const templateDirection = drivingTemplateDirection();
-    const direction = route.onRoute ? (detectDrivingDirectionOnRoute() || detectDrivingDirection() || templateDirection) : detectDrivingDirection();
+    const direction = route.onRoute
+        ? (detectDrivingDirectionOnRoute() || detectRouteAxisDirectionFromBearing(route) || detectDrivingDirection() || templateDirection)
+        : detectDrivingDirection();
     state.drivingDirection = direction;
     const hasDestinationRoute = Boolean(state.drivingDestination && state.drivingRouteSuggestion);
     const hasRoutePreviewCache = Boolean(state.drivingRoutePreviewCache?.stations?.length);

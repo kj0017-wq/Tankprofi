@@ -4289,9 +4289,11 @@ button.city-row:focus {
 }
 
 .driving-card-highway {
+    min-height: 176px;
     grid-template-columns: minmax(86px, 1fr) 112px;
     grid-template-areas:
         "main distance"
+        "title distance"
         "statusbadge distance"
         "meta meta"
         "prices prices";
@@ -4633,6 +4635,21 @@ button.city-row:focus {
     white-space: nowrap;
 }
 
+.driving-card .driving-station-title {
+    grid-area: title;
+    display: -webkit-box;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ink);
+    font-size: 0.98rem;
+    font-weight: 950;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
 .driving-card .driving-main > small {
     grid-area: meta;
     display: -webkit-box;
@@ -4644,7 +4661,7 @@ button.city-row:focus {
     line-height: 1.22;
     white-space: normal;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 1;
+    -webkit-line-clamp: 2;
 }
 
 .driving-card-charging .driving-charging-name,

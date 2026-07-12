@@ -22,6 +22,7 @@ const autobahnPriceRefreshScheduleMs = 15 * 60 * 1000;
 const autobahnPriceRefreshRadiusKm = 6;
 const autobahnPriceRefreshMaxQueries = 30;
 const autobahnPriceRefreshDelayMs = 450;
+const routeTankpointSideCorridorKm = 18;
 const tankIdAdminPinHash = '1c6d7c838b3bde9154ede84d8c4ef4ab8420bf1990f82b63a3af81acecfc3323';
 const cityPriceThresholds = {
   cheapDelta: -0.02,
@@ -4504,7 +4505,7 @@ function routePriceFromCurrent(data, fuel) {
   };
 }
 
-function routeTankpointFromDoc(doc, data, sourceCollection) {
+function routeTankpointFromDoc(doc, data, sourceCollection, requestedRoute = '') {
   const stationTypes = Array.isArray(data.standortTyp) ? data.standortTyp : [];
   const priceStationId = explicitTankerkoenigId(data, doc.id);
   const hasFuel = data.tankstelleVorhanden === true
@@ -4525,6 +4526,17 @@ function routeTankpointFromDoc(doc, data, sourceCollection) {
   const lat = Number(data.lat ?? data.latitude);
   const lng = Number(data.lng ?? data.longitude);
   const stationId = priceStationId || `route_missing_${sourceCollection}_${doc.id}`;
+  const autobahnTags = Array.isArray(data.autobahnTags)
+    ? data.autobahnTags.map((tag) => String(tag || '').toUpperCase().replace(/\s+/g, '')).filter(Boolean)
+    : [];
+  const nearestAutobahn = String(data.nearestAutobahn || '').toUpperCase().replace(/\s+/g, '');
+  const explicitRoute = String(data.routeId || data.autobahn || data.highway || '').toUpperCase().replace(/\s+/g, '');
+  const matchedRoute = explicitRoute
+    || (requestedRoute && nearestAutobahn === requestedRoute ? requestedRoute : '')
+    || (requestedRoute && autobahnTags.includes(requestedRoute) ? requestedRoute : '')
+    || nearestAutobahn
+    || autobahnTags[0]
+    || '';
 
   return {
     id: stationId,
@@ -4539,8 +4551,8 @@ function routeTankpointFromDoc(doc, data, sourceCollection) {
     postcode: data.postcode || data.postCode || data.zip || '',
     city: data.city || data.place || data.town || '',
     country: data.country || 'DE',
-    autobahn: String(data.autobahn || data.highway || '').toUpperCase().replace(/\s+/g, ''),
-    routeId: String(data.routeId || data.autobahn || data.highway || '').toUpperCase().replace(/\s+/g, ''),
+    autobahn: matchedRoute,
+    routeId: matchedRoute,
     typ,
     lat,
     lng,
@@ -4550,6 +4562,9 @@ function routeTankpointFromDoc(doc, data, sourceCollection) {
     abfahrtNummer: data.abfahrtNummer || data.exitNumber || data.exitRef || null,
     abfahrtEntfernungKm: Number.isFinite(Number(data.abfahrtEntfernungKm)) ? Number(data.abfahrtEntfernungKm) : null,
     abfahrtEntfernungMin: Number.isFinite(Number(data.abfahrtEntfernungMin)) ? Number(data.abfahrtEntfernungMin) : null,
+    autobahnDistanceKm: Number.isFinite(Number(data.autobahnDistanceKm)) ? Number(data.autobahnDistanceKm) : null,
+    autobahnTags,
+    nearestAutobahn,
     streckenIndex: Number.isFinite(Number(data.streckenIndex)) ? Number(data.streckenIndex) : null,
     kmPosition: Number.isFinite(Number(data.kmPosition)) ? Number(data.kmPosition) : null,
     active: data.active !== false && data.isActive !== false,
@@ -4566,18 +4581,48 @@ function routeTankpointFromDoc(doc, data, sourceCollection) {
   };
 }
 
+function routeTankpointDistanceToRouteKm(point, route) {
+  if (route === 'ALL') return 0;
+  const geometry = highwaySearchPoints[route];
+  if (!Array.isArray(geometry) || geometry.length < 2) return 0;
+  return distanceToRouteGeometryKm(point.lat, point.lng, geometry);
+}
+
+function routeTankpointWithinSideCorridor(point, route) {
+  if (route === 'ALL') return true;
+  const knownDistanceRaw = point.autobahnDistanceKm ?? point.abfahrtEntfernungKm;
+  const knownDistance = Number(knownDistanceRaw);
+  if (knownDistanceRaw !== null && knownDistanceRaw !== undefined && Number.isFinite(knownDistance) && knownDistance <= routeTankpointSideCorridorKm) return true;
+  return routeTankpointDistanceToRouteKm(point, route) <= routeTankpointSideCorridorKm;
+}
+
 async function loadRouteTankpointsFromCollection(collectionName, route) {
-  const query = route === 'ALL'
-    ? db.collection(collectionName).limit(5000)
-    : db.collection(collectionName).where('autobahn', '==', route).limit(1000);
-  const snapshot = await query.get();
-  return snapshot.docs
-    .map((doc) => routeTankpointFromDoc(doc, doc.data(), collectionName))
+  let docs = [];
+  if (route === 'ALL') {
+    const snapshot = await db.collection(collectionName).limit(5000).get();
+    docs = snapshot.docs;
+  } else {
+    const queryResults = await Promise.all([
+      db.collection(collectionName).where('autobahn', '==', route).limit(1000).get().catch(() => null),
+      db.collection(collectionName).where('routeId', '==', route).limit(1000).get().catch(() => null),
+      db.collection(collectionName).where('nearestAutobahn', '==', route).limit(1000).get().catch(() => null),
+      db.collection(collectionName).where('autobahnTags', 'array-contains', route).limit(1000).get().catch(() => null),
+    ]);
+    const byPath = new Map();
+    queryResults
+      .filter(Boolean)
+      .flatMap((snapshot) => snapshot.docs)
+      .forEach((doc) => byPath.set(doc.ref.path, doc));
+    docs = [...byPath.values()];
+  }
+  return docs
+    .map((doc) => routeTankpointFromDoc(doc, doc.data(), collectionName, route))
     .filter((point) => (
       point
       && point.active
       && /^A\d+$/i.test(point.autobahn)
       && (route === 'ALL' || point.autobahn === route)
+      && routeTankpointWithinSideCorridor(point, route)
       && Number.isFinite(point.lat)
       && Number.isFinite(point.lng)
     ));
