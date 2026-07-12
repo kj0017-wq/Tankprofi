@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260712-drive-highway-speed-confidence';
+const appVersion = '20260712-drive-price-status';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -6429,9 +6429,15 @@ function drivingPriceStatus(station) {
     const selectedFuel = els.fuel.value;
     const isCity = isLocalDrivingContext() || isLocalDrivingContext(station?.drivingContext);
     if (isCity) {
-        return hasCurrentDrivingPrice(station, selectedFuel, NORMAL_SEARCH_REFRESH_MS * 5)
-            ? { key: 'live', label: 'Live' }
-            : { key: 'missing', label: 'keine Daten' };
+        if (hasCurrentDrivingPrice(station, selectedFuel, NORMAL_SEARCH_REFRESH_MS * 5)) {
+            return { key: 'live', label: 'Live' };
+        }
+        if (hasDrivingPrice(station, selectedFuel)) {
+            return station.priceSource === 'fallback'
+                ? { key: 'stale', label: 'gespeichert' }
+                : { key: 'live', label: 'Live' };
+        }
+        return { key: 'missing', label: 'keine Daten' };
     }
     if (hasCurrentDrivingPrice(station, selectedFuel, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS)) {
         return { key: 'current', label: 'aktuell' };
