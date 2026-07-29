@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260729-dashcam-cheapest-navigation';
+const appVersion = '20260729-drive-maplibre-prototype';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -236,6 +236,11 @@ const AUTOBAHN_ROUTE_META = {
 
 const state = {
     map: null,
+    drivingVectorMap: null,
+    drivingVectorMarkers: [],
+    drivingVectorUserMarker: null,
+    drivingVectorReady: false,
+    drivingVectorFailed: false,
     layer: null,
     drivingMarkerLayer: null,
     drivingRouteLayer: null,
@@ -493,6 +498,7 @@ const els = {
     resultCount: document.querySelector('#resultCount'),
     resultMeta: document.querySelector('#resultMeta'),
     drivingMapBack: document.querySelector('#drivingMapBackButton'),
+    drivingVectorMap: document.querySelector('#drivingVectorMap'),
     drivingMapSpeed: document.querySelector('#drivingMapSpeed'),
     drivingMapNearest: document.querySelector('#drivingMapNearest'),
     globalProgress: document.querySelector('#globalProgress'),
@@ -2722,6 +2728,7 @@ function setView(view) {
     }
 
     if (view !== 'map') {
+        setDrivingVectorMapVisible(false);
         clearDetailMapZoomTimer();
         clearDrivingMapFocusTimer();
         clearDrivingMapInitialZoomTimer();
@@ -2926,6 +2933,7 @@ function renderMarkers() {
     if (!state.map) return;
 
     if (state.listMode === 'autobahn') syncAutobahnVisibleStations();
+    if (state.listMode !== 'driving') setDrivingVectorMapVisible(false);
     state.markers.forEach((marker) => {
         if (state.map?.hasLayer?.(marker)) state.map.removeLayer(marker);
     });
@@ -3024,6 +3032,7 @@ function renderDrivingMap() {
     const userPosition = state.drivingSamples[state.drivingSamples.length - 1] || state.selectedLocation;
     const stationsToShow = drivingMapStationsToShow(userPosition);
     updateDrivingMapNearestBox(stationsToShow);
+    if (renderDrivingVectorMap(stationsToShow, userPosition)) return;
     if (state.map.type === 'fallback') {
         renderFallbackMap(state.drivingDestination ? stationsToShow : [], thresholdsFor(stationsToShow));
         return;
@@ -3054,6 +3063,148 @@ function renderDrivingMap() {
         });
 
     focusDrivingMapByHeading(stationsToShow, userPosition, { force: !state.drivingMapFollowAt });
+}
+
+function setDrivingVectorMapVisible(visible) {
+    els.appShell?.classList.toggle('has-vector-drive-map', Boolean(visible));
+    if (els.drivingVectorMap) els.drivingVectorMap.hidden = !visible;
+}
+
+function initDrivingVectorMap() {
+    if (state.drivingVectorMap || state.drivingVectorFailed) return Boolean(state.drivingVectorMap);
+    if (!window.maplibregl || !els.drivingVectorMap) {
+        state.drivingVectorFailed = true;
+        return false;
+    }
+    try {
+        state.drivingVectorMap = new maplibregl.Map({
+            container: els.drivingVectorMap,
+            style: `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_API_KEY}`,
+            center: [10.4515, 51.1657],
+            zoom: 6,
+            bearing: 0,
+            pitch: 38,
+            interactive: false,
+            attributionControl: false,
+        });
+        state.drivingVectorMap.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+        state.drivingVectorMap.on('load', () => {
+            state.drivingVectorReady = true;
+            if (state.listMode === 'driving' && state.view === 'map') updateDrivingModeMapMarkers();
+        });
+        state.drivingVectorMap.on('error', () => {
+            state.drivingVectorFailed = true;
+            setDrivingVectorMapVisible(false);
+        });
+        return true;
+    } catch {
+        state.drivingVectorFailed = true;
+        return false;
+    }
+}
+
+function clearDrivingVectorMarkers() {
+    state.drivingVectorMarkers.forEach((marker) => marker.remove());
+    state.drivingVectorMarkers = [];
+}
+
+function renderDrivingVectorUserMarker(userPosition) {
+    if (!state.drivingVectorMap || !state.drivingVectorReady) return;
+    const lat = Number(userPosition?.lat);
+    const lng = Number(userPosition?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    if (!state.drivingVectorUserMarker) {
+        const element = document.createElement('span');
+        element.className = 'user-location-marker driving-location-marker vector-driving-location-marker';
+        element.innerHTML = '<i></i>';
+        state.drivingVectorUserMarker = new maplibregl.Marker({ element, anchor: 'center' })
+            .setLngLat([lng, lat])
+            .addTo(state.drivingVectorMap);
+    } else {
+        state.drivingVectorUserMarker.setLngLat([lng, lat]);
+    }
+}
+
+function drivingVectorMarkerHtml(station, thresholds, selected = false) {
+    const wrapper = document.createElement('button');
+    wrapper.type = 'button';
+    const selectedFuel = els.fuel.value;
+    const price = fuelPriceValue(station, selectedFuel);
+    const priceText = isValidPriceValue(price)
+        ? `${Number(price).toFixed(3).replace('.', ',')} €`
+        : '-';
+    const cls = selected ? 'selected' : markerClass({
+        price,
+        is_open: station.is_open ?? station.isOpen,
+        priceCategory: station.priceCategory,
+    }, thresholds);
+    wrapper.className = `drive-map-price-marker ${cls}`;
+    wrapper.innerHTML = `<span class="drive-map-logo">${brandLogoHtml(station)}</span><strong>${escapeHtml(priceText)}</strong>`;
+    wrapper.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        state.selectedId = station.tankerkoenig_id;
+        state.detailReturnView = 'driving-map';
+        renderDetail(station);
+        importMissingDetailStationData(station, { force: true });
+    });
+    return wrapper;
+}
+
+function renderDrivingVectorMarkers(stationsToShow) {
+    if (!state.drivingVectorMap || !state.drivingVectorReady) return;
+    clearDrivingVectorMarkers();
+    const thresholds = driveMapThresholdsFor(stationsToShow);
+    stationsToShow
+        .filter((station) => Number.isFinite(Number(station.lat)) && Number.isFinite(Number(station.lng)))
+        .forEach((station) => {
+            const marker = new maplibregl.Marker({
+                element: drivingVectorMarkerHtml(station, thresholds, station.tankerkoenig_id === state.selectedId),
+                anchor: 'center',
+            })
+                .setLngLat([Number(station.lng), Number(station.lat)])
+                .addTo(state.drivingVectorMap);
+            state.drivingVectorMarkers.push(marker);
+        });
+}
+
+function updateDrivingVectorCamera(userPosition, { force = false } = {}) {
+    if (!state.drivingVectorMap || !state.drivingVectorReady) return;
+    const anchor = drivingMapFallbackPosition(userPosition);
+    updateDrivingMapRotation({ force });
+    const target = drivingMapCenterTarget(anchor, { moving: true }) || anchor;
+    const lat = Number(target?.lat);
+    const lng = Number(target?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    const speed = Number(state.drivingSpeedKmh);
+    const zoom = Number.isFinite(speed) && speed > 85 ? 15.8 : Number.isFinite(speed) && speed > 45 ? 16.4 : 17;
+    state.drivingVectorMap.easeTo({
+        center: [lng, lat],
+        zoom,
+        bearing: stableDrivingMapBearing({ force }),
+        pitch: 38,
+        duration: force ? 0 : 950,
+        easing: (t) => t,
+        padding: { top: 70, bottom: 210, left: 40, right: 40 },
+    });
+}
+
+function renderDrivingVectorMap(stationsToShow, userPosition) {
+    if (state.listMode !== 'driving' || state.view !== 'map') {
+        setDrivingVectorMapVisible(false);
+        return false;
+    }
+    if (!initDrivingVectorMap() || !state.drivingVectorMap) {
+        setDrivingVectorMapVisible(false);
+        return false;
+    }
+    setDrivingVectorMapVisible(true);
+    state.drivingVectorMap.resize();
+    if (!state.drivingVectorReady) return true;
+    renderDrivingVectorUserMarker(userPosition || state.selectedLocation);
+    renderDrivingVectorMarkers(stationsToShow);
+    updateDrivingVectorCamera(userPosition, { force: !state.drivingMapFollowAt });
+    return true;
 }
 
 function updateDrivingMapNearestBox(stations = state.stations) {
@@ -7971,9 +8122,11 @@ function updateDrivingMapPositionOnly() {
     if (position) {
         state.selectedLocation = { label: 'Aktuelle Position', lat: position.lat, lng: position.lng };
     }
+    const stationsToShow = drivingMapStationsToShow(position || state.selectedLocation);
+    updateDrivingMapNearestBox(stationsToShow);
+    if (renderDrivingVectorMap(stationsToShow, position || state.selectedLocation)) return;
     renderUserLocationMarker();
-    focusDrivingMapByHeading(drivingMapStationsToShow(position || state.selectedLocation), position || state.selectedLocation);
-    updateDrivingMapNearestBox(drivingMapStationsToShow(position || state.selectedLocation));
+    focusDrivingMapByHeading(stationsToShow, position || state.selectedLocation);
 }
 
 async function applyDrivingTestPosition(formData) {

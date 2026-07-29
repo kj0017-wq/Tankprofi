@@ -1820,6 +1820,27 @@ select:focus {
     transform: none;
 }
 
+.driving-mode.view-map.has-vector-drive-map #map {
+    visibility: hidden;
+}
+
+.driving-vector-map {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    background: #dce6ef;
+}
+
+.driving-vector-map[hidden] {
+    display: none;
+}
+
+.driving-mode.view-map .driving-vector-map {
+    height: 100vh;
+}
+
 .driving-map-back {
     position: absolute;
     left: 12px;
@@ -5518,6 +5539,10 @@ button.city-row:focus {
     border-radius: 50% 50% 50% 12px;
     transform: rotate(calc(var(--user-bearing, 0deg) + 135deg));
     background: var(--blue-600);
+}
+
+.vector-driving-location-marker {
+    z-index: 10;
 }
 
 .driving-mode.view-map .user-location-marker i,

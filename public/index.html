@@ -14,7 +14,8 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
-    <link rel="stylesheet" href="assets/css/app.css?v=20260729-dashcam-cheapest-navigation">
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260729-drive-maplibre-prototype">
 </head>
 <body>
     <section class="splash-screen" id="splashScreen" aria-label="Tankprofi wird geladen">
@@ -106,6 +107,7 @@
             <div class="app-content">
                 <section class="map-pane" aria-label="Karte">
                     <div id="map"></div>
+                    <div id="drivingVectorMap" class="driving-vector-map" hidden></div>
                     <button class="driving-map-back" id="drivingMapBackButton" type="button">Liste</button>
                     <div class="driving-map-speed" id="drivingMapSpeed" aria-label="Geschwindigkeit">0 km/h</div>
                     <div class="driving-map-nearest" id="drivingMapNearest" aria-live="polite"></div>
@@ -621,8 +623,9 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script type="module" src="assets/js/firebase-app.js?v=20260701-city-speed-display-plus3"></script>
-    <script src="assets/js/app.js?v=20260729-dashcam-cheapest-navigation" defer></script>
+    <script src="assets/js/app.js?v=20260729-drive-maplibre-prototype" defer></script>
 </body>
 </html>
 
