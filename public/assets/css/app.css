@@ -4741,7 +4741,7 @@ button.city-row:focus {
     margin-bottom: 10px;
 }
 
-.dashcam-admin-recordings-panel {
+.dashcam-settings-recordings-panel {
     display: grid;
     gap: 10px;
     margin-bottom: 12px;
@@ -4751,13 +4751,13 @@ button.city-row:focus {
     background: var(--white);
 }
 
-.dashcam-admin-recordings-panel > span {
+.dashcam-settings-recordings-panel > span {
     color: var(--gray-700);
     font-size: 0.88rem;
     font-weight: 800;
 }
 
-#dashcamAdminRecordingsList {
+#dashcamSettingsRecordingsList {
     display: grid;
     gap: 10px;
     max-height: min(48vh, 460px);
@@ -5096,7 +5096,7 @@ button.city-row:focus {
     font-weight: 950;
 }
 
-#dashcamAdminRecordingsList {
+#dashcamSettingsRecordingsList {
     display: grid;
     gap: 10px;
     overflow: auto;
