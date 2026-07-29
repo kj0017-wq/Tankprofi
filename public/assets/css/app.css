@@ -5076,24 +5076,32 @@ button.city-row:focus {
 .dashcam-cheapest-panel {
     position: absolute;
     right: max(14px, env(safe-area-inset-right));
-    bottom: max(14px, env(safe-area-inset-bottom));
+    bottom: calc(max(14px, env(safe-area-inset-bottom)) + 76px);
+    z-index: 6;
     display: grid;
     grid-template-columns: 58px minmax(0, 1fr);
     align-items: center;
     justify-items: stretch;
     gap: 3px 10px;
-    max-width: min(42vw, 380px);
+    max-width: min(36vw, 360px);
     padding: 10px 14px;
     border: 3px solid rgba(255, 255, 255, 0.86);
     border-radius: 10px;
     color: #ffffff;
     background: rgba(5, 12, 22, 0.72);
     box-shadow: 0 8px 26px rgba(0, 0, 0, 0.34);
+    font: inherit;
     text-align: right;
+    pointer-events: auto;
+    touch-action: manipulation;
 }
 
 .dashcam-cheapest-panel[hidden] {
     display: none;
+}
+
+.dashcam-cheapest-panel:active {
+    transform: translate(1px, 1px);
 }
 
 .dashcam-cheapest-panel small {
@@ -5157,11 +5165,32 @@ button.city-row:focus {
     position: absolute;
     left: 50%;
     bottom: max(14px, env(safe-area-inset-bottom));
+    z-index: 5;
     display: flex;
     align-items: center;
     gap: 10px;
     transform: translateX(-50%);
     transition: opacity 0.18s ease;
+}
+
+@media (max-width: 780px) and (orientation: landscape) {
+    .dashcam-cheapest-panel {
+        grid-template-columns: 46px minmax(0, 1fr);
+        gap: 2px 8px;
+        max-width: min(34vw, 300px);
+        padding: 8px 10px;
+    }
+
+    .dashcam-cheapest-logo {
+        width: 46px;
+        height: 46px;
+    }
+
+    .dashcam-cheapest-logo .brand-logo {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+    }
 }
 
 .dashcam-controls.collapsed {

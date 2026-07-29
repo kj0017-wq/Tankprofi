@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260729-dashcam-video-only-carplay';
+const appVersion = '20260729-dashcam-cheapest-navigation';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -1675,6 +1675,22 @@ function dashcamCheapestStation() {
         .sort((a, b) => a.price - b.price || a.distance - b.distance)[0] || null;
 }
 
+function openDashcamCheapestNavigation(event) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    const cheapest = dashcamCheapestStation();
+    const station = cheapest?.station;
+    const lat = Number(station?.lat);
+    const lng = Number(station?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        showDashcamMessage('Keine Navigation fuer diese Tankempfehlung verfuegbar.');
+        return;
+    }
+    const destination = `${lat},${lng}`;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
+    window.open(url, '_blank', 'noopener');
+}
+
 function renderDashcamOverlay() {
     const street = state.dashcamStableStreet;
     if (els.dashcamStreetName) {
@@ -1710,6 +1726,7 @@ function renderDashcamOverlay() {
             if (els.dashcamCheapestName) els.dashcamCheapestName.textContent = name;
             if (els.dashcamCheapestPrice) els.dashcamCheapestPrice.textContent = `${money(cheapest.price)} ${fuelLabel(els.fuel.value)}`;
             if (els.dashcamCheapestDistance) els.dashcamCheapestDistance.textContent = distance;
+            els.dashcamCheapestPanel.setAttribute('aria-label', `Navigation zu ${name} starten`);
         }
     }
     updateDashcamRecordingStatus();
@@ -11450,6 +11467,7 @@ function bindEvents() {
         control.addEventListener('change', updateDashcamSettingFromControls);
     });
     els.dashcamMode?.addEventListener('pointerdown', revealDashcamControls);
+    els.dashcamCheapestPanel?.addEventListener('click', openDashcamCheapestNavigation);
     els.dashcamSave?.addEventListener('click', () => saveDashcamSequence().catch(() => showDashcamMessage('Sequenz konnte nicht archiviert werden.')));
     els.dashcamPause?.addEventListener('click', toggleDashcamPause);
     els.dashcamStop?.addEventListener('click', () => stopDashcamMode({ askSave: true }).catch(() => null));
