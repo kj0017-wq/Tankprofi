@@ -5140,6 +5140,33 @@ button.city-row:focus {
     min-width: 0;
 }
 
+.dashcam-settings-player {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+    padding: 8px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    background: var(--cream-100);
+}
+
+.dashcam-settings-player[hidden] {
+    display: none;
+}
+
+.dashcam-settings-player video {
+    display: block;
+    width: 100%;
+    max-height: min(42vh, 360px);
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    background: #101820;
+}
+
+.dashcam-settings-player button {
+    justify-self: stretch;
+}
+
 .dashcam-recording-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;

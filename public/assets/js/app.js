@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260729-dashcam-recording-actions';
+const appVersion = '20260729-dashcam-inline-player';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -537,6 +537,9 @@ const els = {
     dashcamCheapestDistance: document.querySelector('#dashcamCheapestDistance'),
     dashcamSettingsRecordingsRefresh: document.querySelector('#dashcamSettingsRecordingsRefresh'),
     dashcamSettingsRecordingsList: document.querySelector('#dashcamSettingsRecordingsList'),
+    dashcamSettingsPlayer: document.querySelector('#dashcamSettingsPlayer'),
+    dashcamSettingsVideo: document.querySelector('#dashcamSettingsVideo'),
+    dashcamSettingsPlayerClose: document.querySelector('#dashcamSettingsPlayerClose'),
 };
 
 function updateViewportHeightVar() {
@@ -1815,20 +1818,43 @@ async function renderDashcamRecordings() {
     });
 }
 
+function closeDashcamSettingsPlayer() {
+    const video = els.dashcamSettingsVideo;
+    if (video) {
+        const url = video.dataset.objectUrl || '';
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+        if (url) URL.revokeObjectURL(url);
+        delete video.dataset.objectUrl;
+    }
+    if (els.dashcamSettingsPlayer) els.dashcamSettingsPlayer.hidden = true;
+}
+
+function openDashcamSettingsPlayer(recording) {
+    if (!recording?.blob || !els.dashcamSettingsPlayer || !els.dashcamSettingsVideo) return;
+    closeDashcamSettingsPlayer();
+    const url = URL.createObjectURL(recording.blob);
+    els.dashcamSettingsVideo.src = url;
+    els.dashcamSettingsVideo.dataset.objectUrl = url;
+    els.dashcamSettingsPlayer.hidden = false;
+    els.dashcamSettingsPlayer.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    els.dashcamSettingsVideo.play?.().catch(() => null);
+}
+
 async function handleDashcamRecordingAction(event) {
     const row = event.target.closest('[data-dashcam-recording]');
     if (!row) return;
     const recording = state.dashcamSavedRecordings.find((item) => item.id === row.dataset.dashcamRecording);
     if (!recording) return;
     if (event.target.closest('[data-dashcam-delete]')) {
+        closeDashcamSettingsPlayer();
         await deleteDashcamRecording(recording.id);
         renderDashcamRecordings();
         return;
     }
     if (event.target.closest('[data-dashcam-play]')) {
-        const url = URL.createObjectURL(recording.blob);
-        window.open(url, '_blank', 'noopener');
-        window.setTimeout(() => URL.revokeObjectURL(url), 60 * 1000);
+        openDashcamSettingsPlayer(recording);
         return;
     }
     if (event.target.closest('[data-dashcam-share]')) {
@@ -11259,6 +11285,7 @@ function bindEvents() {
         els.dashcamSettingsRecordingsList?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
     });
     els.dashcamSettingsRecordingsRefresh?.addEventListener('click', () => renderDashcamRecordings().catch(() => null));
+    els.dashcamSettingsPlayerClose?.addEventListener('click', closeDashcamSettingsPlayer);
     els.dashcamSettingsRecordingsList?.addEventListener('click', (event) => {
         handleDashcamRecordingAction(event).catch(() => showDashcamMessage('Aktion konnte nicht ausgefuehrt werden.'));
     });
