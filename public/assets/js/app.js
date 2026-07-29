@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260729-dashcam-recordings-compact';
+const appVersion = '20260729-dashcam-recording-fallback';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -1107,7 +1107,7 @@ function dashboardModeFromSettings() {
 }
 
 function requestDashcamInitialChoice() {
-    const choice = window.prompt('Soll TankProfi beim Drehen ins Querformat automatisch den Dashcam-Fahrmodus starten?\n1 = Aktivieren\n2 = Nur Fahranzeige ohne Aufnahme\n3 = Nicht aktivieren', '2');
+    const choice = window.prompt('Soll TankProfi beim Drehen ins Querformat automatisch den Dashcam-Fahrmodus starten?\n1 = Dashcam mit Aufnahme\n2 = Nur Fahranzeige ohne Aufnahme\n3 = Nicht aktivieren', '1');
     const settings = state.dashcamSettings || defaultDashcamSettings();
     state.dashcamPromptShown = true;
     if (choice === '1') {
@@ -1158,6 +1158,24 @@ function dashcamVideoConstraints() {
 function supportedDashcamMimeType() {
     if (!window.MediaRecorder) return '';
     return DASHCAM_PREFERRED_MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type)) || '';
+}
+
+function createDashcamRecorder(stream) {
+    if (!window.MediaRecorder) return null;
+    const supportedTypes = DASHCAM_PREFERRED_MIME_TYPES
+        .filter((type) => MediaRecorder.isTypeSupported(type));
+    for (const mimeType of [...supportedTypes, '']) {
+        try {
+            const recorder = mimeType
+                ? new MediaRecorder(stream, { mimeType })
+                : new MediaRecorder(stream);
+            state.dashcamMimeType = mimeType || recorder.mimeType || 'video/webm';
+            return recorder;
+        } catch {
+            // Try the next browser-supported MediaRecorder format.
+        }
+    }
+    return null;
 }
 
 async function initDashcamCamera(mode) {
@@ -1221,22 +1239,36 @@ async function startDashcamRecording() {
         return;
     }
     const stream = recordingStreamForDashcam();
-    if (!stream?.getVideoTracks().length) return;
-    const mimeType = supportedDashcamMimeType();
-    state.dashcamMimeType = mimeType || 'video/webm';
+    if (!stream?.getVideoTracks().length) {
+        showDashcamMessage('Keine Videoquelle fuer die Aufnahme gefunden.');
+        return;
+    }
     resetDashcamSegment();
-    const options = mimeType ? { mimeType } : undefined;
-    state.dashcamRecorder = new MediaRecorder(stream, options);
+    state.dashcamRecorder = createDashcamRecorder(stream);
+    if (!state.dashcamRecorder) {
+        showDashcamMessage('Aufnahme konnte mit diesem Browserformat nicht gestartet werden.');
+        return;
+    }
     state.dashcamRecorder.ondataavailable = (event) => {
         if (event.data?.size) state.dashcamChunks.push(event.data);
+    };
+    state.dashcamRecorder.onerror = () => {
+        showDashcamMessage('Aufnahmefehler. Bitte Dashcam neu starten.');
     };
     state.dashcamRecorder.onstop = () => finalizeDashcamSegment(false);
     state.dashcamRecordingStartedAt = Date.now();
     state.dashcamPausedAt = null;
     state.dashcamPausedDurationMs = 0;
-    state.dashcamRecorder.start();
+    try {
+        state.dashcamRecorder.start(1000);
+    } catch {
+        state.dashcamRecorder = null;
+        showDashcamMessage('Aufnahme konnte nicht gestartet werden. Bitte Dashcam neu starten.');
+        return;
+    }
     scheduleDashcamSegmentStop();
     updateDashcamRecordingStatus();
+    showDashcamMessage('Aufnahme laeuft.', 1800);
 }
 
 function scheduleDashcamSegmentStop() {
@@ -1445,7 +1477,10 @@ async function saveDashcamSequence() {
         }
     }
     if (!state.dashcamBuffer.length) {
-        showDashcamMessage('Noch keine Videosequenz im Puffer.');
+        const hint = state.dashcamMode === 'record'
+            ? 'Noch keine Videosequenz im Puffer. Einen Moment weiter aufnehmen.'
+            : 'Keine Aufnahme aktiv. In Einstellungen Dashcam mit Aufnahme waehlen.';
+        showDashcamMessage(hint, 5200);
         return null;
     }
     const mimeType = state.dashcamBuffer.at(-1)?.mimeType || state.dashcamMimeType || 'video/webm';
@@ -1466,12 +1501,12 @@ async function saveDashcamSequence() {
         maxSpeed: Math.max(...state.dashcamBuffer.map((segment) => Number(segment.maxSpeed || 0))),
         size: blob.size,
         audio: state.dashcamBuffer.some((segment) => segment.audio),
-        exportStatus: 'Lokal gespeichert',
+        exportStatus: 'Lokal archiviert',
     };
     await putDashcamRecording(recording);
     state.dashcamSavedRecordings = await getDashcamRecordings();
     renderDashcamRecordings();
-    showDashcamMessage('Sequenz lokal gespeichert.');
+    showDashcamMessage('Sequenz lokal archiviert.');
     if (state.dashcamSettings?.exportAction === 'share' || state.dashcamSettings?.exportAction === 'download') {
         await exportDashcamRecording(recording, state.dashcamSettings.exportAction);
     }
@@ -1720,6 +1755,10 @@ async function startDashcamMode(mode = dashboardModeFromSettings()) {
     if (mode === 'record' && state.dashcamStream) {
         await runDashcamCountdown();
         await startDashcamRecording();
+    } else if (mode === 'record') {
+        showDashcamMessage('Keine Aufnahme aktiv: Kamera konnte nicht gestartet werden.', 5200);
+    } else {
+        showDashcamMessage('Fahranzeige ohne Aufnahme aktiv.', 3200);
     }
     state.dashcamRecordTimer = window.setInterval(() => {
         renderDashcamOverlay();
@@ -1731,8 +1770,8 @@ async function startDashcamMode(mode = dashboardModeFromSettings()) {
 async function stopDashcamMode({ askSave = true } = {}) {
     if (!state.dashcamActive) return;
     if (askSave && state.dashcamRecorder && state.dashcamRecorder.state !== 'inactive') {
-        const save = window.confirm('Letzte Aufnahme sichern?');
-        if (save) await saveDashcamSequence().catch(() => showDashcamMessage('Sequenz konnte nicht gespeichert werden.'));
+        const save = window.confirm('Letzte Aufnahme archivieren?');
+        if (save) await saveDashcamSequence().catch(() => showDashcamMessage('Sequenz konnte nicht archiviert werden.'));
     }
     await stopDashcamRecording({ keepSegment: false }).catch(() => null);
     state.dashcamStream?.getTracks?.().forEach((track) => track.stop());
@@ -1754,7 +1793,7 @@ async function stopDashcamMode({ askSave = true } = {}) {
 async function disableDashcamDuringUse() {
     if (!state.dashcamActive) return;
     const save = state.dashcamRecorder?.state === 'recording'
-        ? window.confirm('Letzte Aufnahme vor dem Ausschalten sichern?')
+        ? window.confirm('Letzte Aufnahme vor dem Ausschalten archivieren?')
         : false;
     if (save) await saveDashcamSequence().catch(() => null);
     await stopDashcamMode({ askSave: false });
@@ -1805,7 +1844,7 @@ async function renderDashcamRecordings() {
             <span class="dashcam-recording-main">
                 <strong>${escapeHtml(recording.street || 'Dashcam-Aufnahme')}</strong>
                 <small>${escapeHtml(new Date(recording.createdAt).toLocaleString('de-DE'))} - ${escapeHtml(formatDashcamDuration(recording.durationMs))} - ${escapeHtml(formatDashcamBytes(recording.size))}</small>
-                <small>${recording.audio ? 'Mit Ton' : 'Ohne Ton'} - ${escapeHtml(recording.exportStatus || 'Lokal gespeichert')}</small>
+                <small>${recording.audio ? 'Mit Ton' : 'Ohne Ton'} - ${escapeHtml(recording.exportStatus || 'Lokal archiviert')}</small>
             </span>
             <span class="dashcam-recording-actions">
                 <button class="dashcam-recording-action play" type="button" data-dashcam-play aria-label="Abspielen" title="Abspielen"><span aria-hidden="true"></span></button>
@@ -11295,7 +11334,7 @@ function bindEvents() {
         control.addEventListener('change', updateDashcamSettingFromControls);
     });
     els.dashcamMode?.addEventListener('pointerdown', revealDashcamControls);
-    els.dashcamSave?.addEventListener('click', () => saveDashcamSequence().catch(() => showDashcamMessage('Sequenz konnte nicht gespeichert werden.')));
+    els.dashcamSave?.addEventListener('click', () => saveDashcamSequence().catch(() => showDashcamMessage('Sequenz konnte nicht archiviert werden.')));
     els.dashcamPause?.addEventListener('click', toggleDashcamPause);
     els.dashcamStop?.addEventListener('click', () => stopDashcamMode({ askSave: true }).catch(() => null));
     els.dashcamExit?.addEventListener('click', () => stopDashcamMode({ askSave: true }).catch(() => null));
