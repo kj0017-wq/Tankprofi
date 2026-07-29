@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260729-drive-heading-up-map';
+const appVersion = '20260729-drive-map-no-rubberband';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -60,7 +60,7 @@ const DRIVE_HIGHWAY_SPEED_MAX_BEARING_DELTA = 35;
 const DRIVE_POSITION_STALE_MS = 15 * 1000;
 const DRIVE_COMPASS_REFRESH_MS = 30 * 1000;
 const DRIVE_COMPASS_RENDER_FAST_MS = 1200;
-const DRIVE_MAP_FOLLOW_MIN_MS = 3200;
+const DRIVE_MAP_FOLLOW_MIN_MS = 4800;
 const DRIVE_MAP_MANUAL_PAUSE_MS = 15 * 1000;
 const DRIVE_MAP_INITIAL_ZOOM_DELAY_MS = 5 * 1000;
 const DRIVE_MAP_NEAREST_OPEN_DELAY_MS = 1000;
@@ -69,6 +69,9 @@ const DRIVE_MAP_USER_VERTICAL_OFFSET_RATIO = 0.16;
 const DRIVE_MAP_BEARING_MIN_SPEED_KMH = 8;
 const DRIVE_MAP_BEARING_MIN_DELTA = 4;
 const DRIVE_MAP_BEARING_MAX_STEP = 24;
+const DRIVE_MAP_LOOKAHEAD_MIN_KM = 0.08;
+const DRIVE_MAP_LOOKAHEAD_MAX_KM = 0.34;
+const DRIVE_MAP_CENTER_MIN_MOVE_KM = 0.04;
 const DRIVE_CITY_MAP_RADIUS_KM = 0.85;
 const DRIVE_CONTROL_REVEAL_MS = 10 * 1000;
 const DRIVE_CONTROL_MOVING_KMH = 5;
@@ -3307,6 +3310,26 @@ function liftDrivingMapUserMarker({ animate = false } = {}) {
     state.map.panBy([0, offsetY], { animate });
 }
 
+function drivingMapLookaheadKm(speedKmh) {
+    const speed = Number(speedKmh);
+    if (!Number.isFinite(speed) || speed < DRIVE_CONTROL_MOVING_KMH) return 0;
+    const scaled = speed / 360;
+    return Math.max(DRIVE_MAP_LOOKAHEAD_MIN_KM, Math.min(DRIVE_MAP_LOOKAHEAD_MAX_KM, scaled));
+}
+
+function drivingMapCenterTarget(anchor, { moving = false } = {}) {
+    const lat = Number(anchor?.lat);
+    const lng = Number(anchor?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    if (!moving) return { lat, lng };
+    const bearing = normalizedBearing(state.drivingMapBearing);
+    const lookahead = drivingMapLookaheadKm(state.drivingSpeedKmh);
+    const ahead = Number.isFinite(bearing) && lookahead > 0
+        ? pointAtBearing({ lat, lng }, bearing, lookahead)
+        : null;
+    return ahead && Number.isFinite(ahead.lat) && Number.isFinite(ahead.lng) ? ahead : { lat, lng };
+}
+
 function focusDrivingMapByHeading(stationsToShow, userPosition, { force = false } = {}) {
     if (!state.map || state.map.type === 'fallback' || state.listMode !== 'driving' || state.view !== 'map') return;
     if (els.detail.classList.contains('visible')) return;
@@ -3319,28 +3342,39 @@ function focusDrivingMapByHeading(stationsToShow, userPosition, { force = false 
     const lat = Number(anchor.lat);
     const lng = Number(anchor.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    updateDrivingMapRotation({ force });
+    const target = drivingMapCenterTarget(anchor, { moving: isMoving });
+    const targetLat = Number(target?.lat);
+    const targetLng = Number(target?.lng);
+    if (!Number.isFinite(targetLat) || !Number.isFinite(targetLng)) return;
+    const currentCenter = state.map.getCenter?.();
+    const centerMoveKm = currentCenter
+        ? routeDistanceKm(currentCenter.lat, currentCenter.lng, targetLat, targetLng)
+        : Number.POSITIVE_INFINITY;
+    if (!force && Number.isFinite(centerMoveKm) && centerMoveKm < DRIVE_MAP_CENTER_MIN_MOVE_KM) return;
     state.drivingMapFollowAt = now;
     state.drivingMapProgrammaticMove = true;
     if (isMoving) {
-        state.map.setView([lat, lng], DRIVE_MAP_FOLLOW_ZOOM, { animate: true });
-        window.setTimeout(() => liftDrivingMapUserMarker({ animate: true }), 140);
+        const currentZoom = Number(state.map.getZoom?.());
+        if (!Number.isFinite(currentZoom) || currentZoom < DRIVE_MAP_FOLLOW_ZOOM) {
+            state.map.setView([targetLat, targetLng], DRIVE_MAP_FOLLOW_ZOOM, { animate: false });
+        } else {
+            state.map.panTo([targetLat, targetLng], { animate: true, duration: 0.65, easeLinearity: 0.35 });
+        }
     } else if (state.drivingContext === 'city') {
         state.map.fitBounds(drivingMapBoundsAround(lat, lng, DRIVE_CITY_MAP_RADIUS_KM), {
             animate: false,
             padding: [18, 18],
             maxZoom: 17,
         });
-        liftDrivingMapUserMarker();
     } else {
         const targetZoom = Number.isFinite(speed) && speed > 40 ? 15 : 16;
         const zoom = Math.max(state.map.getZoom() || targetZoom, targetZoom);
-        state.map.setView([lat, lng], zoom, { animate: false });
-        liftDrivingMapUserMarker();
+        state.map.setView([targetLat, targetLng], zoom, { animate: false });
     }
     window.setTimeout(() => {
         state.drivingMapProgrammaticMove = false;
     }, isMoving ? 320 : 0);
-    updateDrivingMapRotation({ force });
 }
 
 function clearDrivingMapFocusTimer() {
