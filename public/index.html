@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
-    <link rel="stylesheet" href="assets/css/app.css?v=20260729-dashcam-cheapest-toggle">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260729-splash-dashcam">
 </head>
 <body>
     <section class="splash-screen" id="splashScreen" aria-label="Tankprofi wird geladen">
@@ -24,6 +24,10 @@
         <div class="splash-copy">
             <strong>Tankprofi</strong>
             <span>Preise und Standort werden geladen</span>
+        </div>
+        <div class="splash-feature" aria-label="Neue Dashcam-Funktion">
+            <span aria-hidden="true">REC</span>
+            <strong>Jetzt mit Dashcam-Funktion</strong>
         </div>
         <button class="home-install-button splash-install-button" id="splashInstallButton" type="button">
             <span class="home-install-icon" aria-hidden="true">H</span>
@@ -177,6 +181,14 @@
                     <article>
                         <h2>Drive</h2>
                         <p>Drive ist der aktive Fahrmodus. Links steht der aktuelle Kontext: Drive Mode: Stadt, Land, Autobahn oder Laden. Stadt ist gelb, Land gruen und Autobahn blau markiert. Die Karte zeigt deinen Fahrpfeil hoeher im Bild, damit mehr Strecke voraus sichtbar bleibt.</p>
+                    </article>
+                    <article>
+                        <h2>Dashcam</h2>
+                        <p>Die Dashcam-Funktion wird in den Einstellungen aktiviert und startet nach deiner Freigabe im Querformat. Je nach Standardmodus nutzt Tankprofi Aufnahme, Kamera ohne Aufnahme oder nur die Fahranzeige. REC zeichnet lokale Sequenzen auf diesem Geraet auf, Pause haelt die Aufnahme an und Sequenz archivieren speichert den aktuellen Puffer. Gesicherte Aufnahmen findest du in den Einstellungen unter Dashcam-Aufnahmen.</p>
+                    </article>
+                    <article>
+                        <h2>Tankempfehlung</h2>
+                        <p>Im Dashcam-Fahrmodus kann unten rechts eine guenstige Tankstelle angezeigt werden. Die Empfehlung basiert auf den aktuell geladenen Treffern, der gewaehlten Kraftstoffsorte, Preis, Entfernung und Fahrtrichtung. In den Einstellungen kannst du die Tankempfehlung ein- oder ausblenden.</p>
                     </article>
                     <article>
                         <h2>Drive Stadt und Land</h2>
@@ -601,7 +613,7 @@
     <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script type="module" src="assets/js/firebase-app.js?v=20260701-city-speed-display-plus3"></script>
-    <script src="assets/js/app.js?v=20260729-dashcam-cheapest-toggle" defer></script>
+    <script src="assets/js/app.js?v=20260729-splash-dashcam" defer></script>
 </body>
 </html>
 

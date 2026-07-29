@@ -102,6 +102,41 @@ body {
     font-weight: 800;
 }
 
+.splash-feature {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    min-height: 42px;
+    width: min(310px, 82vw);
+    border: 3px solid #101419;
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: #101419;
+    background: linear-gradient(90deg, #dff7df 0%, #ffffff 100%);
+    box-shadow: 5px 5px 0 #1f4fbf;
+    font-weight: 950;
+    line-height: 1;
+}
+
+.splash-feature span {
+    min-width: 46px;
+    border: 3px solid #101419;
+    border-radius: 999px;
+    padding: 4px 7px;
+    color: #ffffff;
+    background: #df4d43;
+    box-shadow: 2px 2px 0 rgba(16, 20, 25, 0.26);
+    font-size: 0.72rem;
+    text-align: center;
+}
+
+.splash-feature strong {
+    min-width: 0;
+    font-size: 0.92rem;
+    line-height: 1.08;
+}
+
 .splash-loader {
     width: min(220px, 62vw);
     height: 6px;
