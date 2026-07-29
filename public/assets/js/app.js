@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260729-dashcam-download-abort-safe';
+const appVersion = '20260729-dashcam-download-separate';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -1442,7 +1442,10 @@ async function exportDashcamRecording(recording, preferred = 'share') {
     const fileName = dashcamFileName(recording);
     const blob = recording.blob;
     const file = new File([blob], fileName, { type: recording.mimeType || blob.type, lastModified: Date.now() });
-    const needsShareSheet = preferred === 'share' || (preferred === 'download' && (isIOSDevice() || isStandaloneApp()));
+    const needsShareSheet = preferred === 'share';
+    if (preferred === 'download' && (isIOSDevice() || isStandaloneApp())) {
+        return { method: 'download', success: false, unsupported: true };
+    }
     let canShareFiles = false;
     try {
         canShareFiles = Boolean(needsShareSheet && navigator.share && navigator.canShare && navigator.canShare({ files: [file] }));
@@ -1935,7 +1938,7 @@ async function handleDashcamRecordingAction(event) {
     }
     if (event.target.closest('[data-dashcam-download]')) {
         const result = await exportDashcamRecording(recording, 'download').catch(() => null);
-        if (result?.unsupported) showDashcamMessage('Download ist hier nur ueber Teilen moeglich.');
+        if (result?.unsupported) showDashcamMessage('Datei-Download ist in der iPhone-App nicht verfuegbar. Mediathek separat nutzen.');
         else if (!result?.aborted && result === null) showDashcamMessage('Download fehlgeschlagen.');
     }
 }
