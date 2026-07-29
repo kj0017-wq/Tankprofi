@@ -4772,6 +4772,78 @@ button.city-row:focus {
     gap: 12px;
 }
 
+.dashcam-settings-panel details {
+    display: grid;
+    gap: 10px;
+}
+
+.dashcam-settings-panel summary {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: -2px;
+    border: 3px solid var(--ink);
+    border-radius: 8px;
+    padding: 8px 12px;
+    background: linear-gradient(90deg, var(--yellow-300) 0%, var(--cream-100) 100%);
+    box-shadow: 4px 4px 0 rgba(16, 20, 25, 0.18);
+    cursor: pointer;
+    list-style: none;
+}
+
+.dashcam-settings-panel summary::-webkit-details-marker {
+    display: none;
+}
+
+.dashcam-settings-panel summary::after {
+    content: "+";
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 3px solid var(--ink);
+    border-radius: 50%;
+    background: var(--white);
+    font-size: 1.2rem;
+    font-weight: 950;
+    line-height: 1;
+}
+
+.dashcam-settings-panel details[open] summary::after {
+    content: "-";
+}
+
+.dashcam-settings-panel summary span {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.dashcam-settings-panel summary strong {
+    font-size: 1rem;
+    line-height: 1.05;
+}
+
+.dashcam-settings-panel summary small {
+    color: var(--gray-700);
+    font-size: 0.76rem;
+    font-weight: 850;
+    line-height: 1.1;
+}
+
+.dashcam-settings-content {
+    display: grid;
+    gap: 12px;
+    padding-top: 10px;
+}
+
+.dashcam-settings-panel > .text-button {
+    margin-top: 2px;
+}
+
 .dashcam-admin-option {
     margin-bottom: 10px;
 }

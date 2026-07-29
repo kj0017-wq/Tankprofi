@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260729-splash-dashcam';
+const appVersion = '20260729-dashcam-collapsible-settings';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -513,6 +513,7 @@ const els = {
     dashcamStop: document.querySelector('#dashcamStopButton'),
     dashcamExit: document.querySelector('#dashcamExitButton'),
     dashcamRecordingsButton: document.querySelector('#dashcamRecordingsButton'),
+    dashcamSettingsDetails: document.querySelector('#dashcamSettingsDetails'),
     dashcamRecordingsPage: document.querySelector('#dashcamRecordingsPage'),
     dashcamRecordingsBack: document.querySelector('#dashcamRecordingsBack'),
     dashcamSettingsStatus: document.querySelector('#dashcamSettingsStatus'),
@@ -1026,6 +1027,7 @@ function defaultDashcamSettings() {
 }
 
 function loadDashcamSettings() {
+    const hasStoredSettings = Boolean(localStorage.getItem(DASHCAM_SETTINGS_KEY));
     try {
         const stored = JSON.parse(localStorage.getItem(DASHCAM_SETTINGS_KEY) || 'null') || {};
         state.dashcamSettings = { ...defaultDashcamSettings(), ...stored };
@@ -1034,6 +1036,7 @@ function loadDashcamSettings() {
         state.dashcamSettings = defaultDashcamSettings();
     }
     syncDashcamSettingsControls();
+    if (els.dashcamSettingsDetails) els.dashcamSettingsDetails.open = !hasStoredSettings;
 }
 
 function saveDashcamSettings() {
