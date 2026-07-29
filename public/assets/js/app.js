@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260729-dashcam-collapsible-settings';
+const appVersion = '20260729-dashcam-download-abort-safe';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -636,6 +636,11 @@ function hideSplashScreen(force = false) {
 function isStandaloneApp() {
     return window.matchMedia?.('(display-mode: standalone)').matches
         || window.navigator.standalone === true;
+}
+
+function isIOSDevice() {
+    return /iphone|ipad|ipod/i.test(navigator.userAgent)
+        || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
 function installButtonHtml(text, hint, icon = 'H') {
@@ -1437,9 +1442,10 @@ async function exportDashcamRecording(recording, preferred = 'share') {
     const fileName = dashcamFileName(recording);
     const blob = recording.blob;
     const file = new File([blob], fileName, { type: recording.mimeType || blob.type, lastModified: Date.now() });
+    const needsShareSheet = preferred === 'share' || (preferred === 'download' && (isIOSDevice() || isStandaloneApp()));
     let canShareFiles = false;
     try {
-        canShareFiles = Boolean(preferred !== 'download' && navigator.share && navigator.canShare && navigator.canShare({ files: [file] }));
+        canShareFiles = Boolean(needsShareSheet && navigator.share && navigator.canShare && navigator.canShare({ files: [file] }));
     } catch {
         canShareFiles = false;
     }
@@ -1451,6 +1457,9 @@ async function exportDashcamRecording(recording, preferred = 'share') {
             if (error?.name === 'AbortError') return { method: 'share', success: false, aborted: true };
             throw error;
         }
+    }
+    if (needsShareSheet) {
+        return { method: 'share', success: false, unsupported: true };
     }
     return downloadVideoFile(blob, fileName);
 }
@@ -1901,6 +1910,8 @@ function setDashcamRecordingsPageOpen(open) {
 }
 
 async function handleDashcamRecordingAction(event) {
+    event.preventDefault();
+    event.stopPropagation();
     const row = event.target.closest('[data-dashcam-recording]');
     if (!row) return;
     const recording = state.dashcamSavedRecordings.find((item) => item.id === row.dataset.dashcamRecording);
@@ -1917,11 +1928,15 @@ async function handleDashcamRecordingAction(event) {
     }
     if (event.target.closest('[data-dashcam-share]')) {
         showDashcamMessage('iPhone: Im Teilen-Menue "Video sichern" waehlen.', 4800);
-        await exportDashcamRecording(recording, 'share').catch(() => showDashcamMessage('Export fehlgeschlagen.'));
+        const result = await exportDashcamRecording(recording, 'share').catch(() => null);
+        if (result?.unsupported) showDashcamMessage('Teilen ist auf diesem Browser nicht verfuegbar.');
+        else if (!result?.aborted && result === null) showDashcamMessage('Export fehlgeschlagen.');
         return;
     }
     if (event.target.closest('[data-dashcam-download]')) {
-        await exportDashcamRecording(recording, 'download').catch(() => showDashcamMessage('Download fehlgeschlagen.'));
+        const result = await exportDashcamRecording(recording, 'download').catch(() => null);
+        if (result?.unsupported) showDashcamMessage('Download ist hier nur ueber Teilen moeglich.');
+        else if (!result?.aborted && result === null) showDashcamMessage('Download fehlgeschlagen.');
     }
 }
 
