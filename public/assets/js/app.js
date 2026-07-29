@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260729-dashcam-street-logo';
+const appVersion = '20260729-dashcam-recordings-page';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -513,6 +513,8 @@ const els = {
     dashcamStop: document.querySelector('#dashcamStopButton'),
     dashcamExit: document.querySelector('#dashcamExitButton'),
     dashcamRecordingsButton: document.querySelector('#dashcamRecordingsButton'),
+    dashcamRecordingsPage: document.querySelector('#dashcamRecordingsPage'),
+    dashcamRecordingsBack: document.querySelector('#dashcamRecordingsBack'),
     dashcamSettingsStatus: document.querySelector('#dashcamSettingsStatus'),
     dashcamEnabled: document.querySelector('#dashcamEnabled'),
     dashcamDisplayEnabled: document.querySelector('#dashcamDisplayEnabled'),
@@ -1802,14 +1804,14 @@ async function renderDashcamRecordings() {
         <article class="dashcam-recording-row" data-dashcam-recording="${escapeHtml(recording.id)}">
             <span class="dashcam-recording-main">
                 <strong>${escapeHtml(recording.street || 'Dashcam-Aufnahme')}</strong>
-                <small>${escapeHtml(new Date(recording.createdAt).toLocaleString('de-DE'))} · ${escapeHtml(formatDashcamDuration(recording.durationMs))} · ${escapeHtml(formatDashcamBytes(recording.size))}</small>
-                <small>${recording.audio ? 'Mit Ton' : 'Ohne Ton'} · ${escapeHtml(recording.exportStatus || 'Lokal gespeichert')}</small>
+                <small>${escapeHtml(new Date(recording.createdAt).toLocaleString('de-DE'))} - ${escapeHtml(formatDashcamDuration(recording.durationMs))} - ${escapeHtml(formatDashcamBytes(recording.size))}</small>
+                <small>${recording.audio ? 'Mit Ton' : 'Ohne Ton'} - ${escapeHtml(recording.exportStatus || 'Lokal gespeichert')}</small>
             </span>
             <span class="dashcam-recording-actions">
-                <button class="dashcam-recording-action" type="button" data-dashcam-play aria-label="Abspielen" title="Abspielen"><span aria-hidden="true">▶</span></button>
-                <button class="dashcam-recording-action" type="button" data-dashcam-share aria-label="In Mediathek sichern" title="In Mediathek sichern"><span aria-hidden="true">▣</span></button>
-                <button class="dashcam-recording-action" type="button" data-dashcam-download aria-label="Herunterladen" title="Herunterladen"><span aria-hidden="true">↓</span></button>
-                <button class="dashcam-recording-action danger" type="button" data-dashcam-delete aria-label="Loeschen" title="Loeschen"><span aria-hidden="true">×</span></button>
+                <button class="dashcam-recording-action play" type="button" data-dashcam-play aria-label="Abspielen" title="Abspielen"><span aria-hidden="true"></span></button>
+                <button class="dashcam-recording-action share" type="button" data-dashcam-share aria-label="In Mediathek sichern" title="In Mediathek sichern"><span aria-hidden="true"></span></button>
+                <button class="dashcam-recording-action download" type="button" data-dashcam-download aria-label="Herunterladen" title="Herunterladen"><span aria-hidden="true"></span></button>
+                <button class="dashcam-recording-action delete danger" type="button" data-dashcam-delete aria-label="Loeschen" title="Loeschen"><span aria-hidden="true"></span></button>
             </span>
         </article>
     `).join('');
@@ -1840,6 +1842,20 @@ function openDashcamSettingsPlayer(recording) {
     els.dashcamSettingsPlayer.hidden = false;
     els.dashcamSettingsPlayer.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
     els.dashcamSettingsVideo.play?.().catch(() => null);
+}
+
+function setDashcamRecordingsPageOpen(open) {
+    if (!els.dashcamRecordingsPage) return;
+    els.dashcamRecordingsPage.hidden = !open;
+    document.body.classList.toggle('dashcam-recordings-open', open);
+    if (open) {
+        setSettingsOpen(false);
+        setAdminOpen(false);
+        setHelpOpen(false);
+        renderDashcamRecordings().catch(() => null);
+    } else {
+        closeDashcamSettingsPlayer();
+    }
 }
 
 async function handleDashcamRecordingAction(event) {
@@ -11247,6 +11263,9 @@ function bindEvents() {
         if (event.key === 'Escape' && els.helpSheet?.classList.contains('open')) {
             setHelpOpen(false);
         }
+        if (event.key === 'Escape' && !els.dashcamRecordingsPage?.hidden) {
+            setDashcamRecordingsPageOpen(false);
+        }
     });
     document.addEventListener('visibilitychange', () => {
         handleDriveWakeLockVisibility();
@@ -11281,9 +11300,9 @@ function bindEvents() {
     els.dashcamStop?.addEventListener('click', () => stopDashcamMode({ askSave: true }).catch(() => null));
     els.dashcamExit?.addEventListener('click', () => stopDashcamMode({ askSave: true }).catch(() => null));
     els.dashcamRecordingsButton?.addEventListener('click', () => {
-        renderDashcamRecordings().catch(() => null);
-        els.dashcamSettingsRecordingsList?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+        setDashcamRecordingsPageOpen(true);
     });
+    els.dashcamRecordingsBack?.addEventListener('click', () => setDashcamRecordingsPageOpen(false));
     els.dashcamSettingsRecordingsRefresh?.addEventListener('click', () => renderDashcamRecordings().catch(() => null));
     els.dashcamSettingsPlayerClose?.addEventListener('click', closeDashcamSettingsPlayer);
     els.dashcamSettingsRecordingsList?.addEventListener('click', (event) => {

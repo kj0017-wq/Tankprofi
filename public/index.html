@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
-    <link rel="stylesheet" href="assets/css/app.css?v=20260729-dashcam-street-logo">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260729-dashcam-recordings-page">
 </head>
 <body>
     <section class="splash-screen" id="splashScreen" aria-label="Tankprofi wird geladen">
@@ -387,18 +387,6 @@
                             </label>
                         </div>
                         <button class="text-button" id="dashcamRecordingsButton" type="button">Gesicherte Aufnahmen anzeigen</button>
-                        <section class="dashcam-settings-recordings-panel" aria-label="Dashcam-Aufnahmen">
-                            <div class="dashcam-recordings-header">
-                                <strong>Dashcam-Aufnahmen</strong>
-                                <button class="text-button" id="dashcamSettingsRecordingsRefresh" type="button">Aktualisieren</button>
-                            </div>
-                            <span>Lokale Aufnahmen dieses Geraets. Abspielen, sichern oder loeschen.</span>
-                            <div class="dashcam-settings-player" id="dashcamSettingsPlayer" hidden>
-                                <video id="dashcamSettingsVideo" controls playsinline></video>
-                                <button class="text-button" id="dashcamSettingsPlayerClose" type="button">Player schliessen</button>
-                            </div>
-                            <div id="dashcamSettingsRecordingsList">Noch nicht geladen.</div>
-                        </section>
                         <span id="dashcamSettingsStatus">Dashcam startet erst nach deiner Freigabe.</span>
                     </section>
 
@@ -542,6 +530,22 @@
         </aside>
     </div>
 
+    <section class="dashcam-recordings-page" id="dashcamRecordingsPage" aria-label="Dashcam-Aufnahmen" hidden>
+        <div class="dashcam-recordings-page-header">
+            <button class="text-button" id="dashcamRecordingsBack" type="button">Zurueck</button>
+            <strong>Dashcam-Aufnahmen</strong>
+            <button class="text-button" id="dashcamSettingsRecordingsRefresh" type="button">Aktualisieren</button>
+        </div>
+        <div class="dashcam-recordings-page-body">
+            <span>Lokale Aufnahmen dieses Geraets. Abspielen, sichern oder loeschen.</span>
+            <div class="dashcam-settings-player" id="dashcamSettingsPlayer" hidden>
+                <video id="dashcamSettingsVideo" controls playsinline></video>
+                <button class="text-button" id="dashcamSettingsPlayerClose" type="button">Player schliessen</button>
+            </div>
+            <div id="dashcamSettingsRecordingsList">Noch nicht geladen.</div>
+        </div>
+    </section>
+
     <section class="dashcam-mode" id="dashcamMode" aria-label="Dashcam-Fahrmodus" hidden>
         <video class="dashcam-video" id="dashcamVideo" autoplay muted playsinline></video>
         <div class="dashcam-display-fallback" id="dashcamFallback">Fahranzeige</div>
@@ -597,7 +601,7 @@
     <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script type="module" src="assets/js/firebase-app.js?v=20260701-city-speed-display-plus3"></script>
-    <script src="assets/js/app.js?v=20260729-dashcam-street-logo" defer></script>
+    <script src="assets/js/app.js?v=20260729-dashcam-recordings-page" defer></script>
 </body>
 </html>
 

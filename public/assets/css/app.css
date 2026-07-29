@@ -4741,7 +4741,7 @@ button.city-row:focus {
     margin-bottom: 10px;
 }
 
-.dashcam-settings-recordings-panel {
+.dashcam-recordings-page-body {
     display: grid;
     gap: 10px;
     margin-bottom: 12px;
@@ -4751,10 +4751,48 @@ button.city-row:focus {
     background: var(--white);
 }
 
-.dashcam-settings-recordings-panel > span {
+.dashcam-recordings-page-body > span {
     color: var(--gray-700);
     font-size: 0.88rem;
     font-weight: 800;
+}
+
+.dashcam-recordings-page {
+    position: fixed;
+    inset: 0;
+    z-index: 950;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    color: var(--ink);
+    background: var(--gray-100);
+}
+
+.dashcam-recordings-page[hidden] {
+    display: none;
+}
+
+.dashcam-recordings-page-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: calc(env(safe-area-inset-top) + 10px) 14px 10px;
+    border-bottom: 4px solid var(--ink);
+    background: var(--yellow-300);
+}
+
+.dashcam-recordings-page-header strong {
+    overflow: hidden;
+    font-size: 1.1rem;
+    font-weight: 950;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dashcam-recordings-page-body {
+    margin: 14px;
+    overflow: auto;
 }
 
 #dashcamSettingsRecordingsList {
@@ -5222,6 +5260,84 @@ button.city-row:focus {
     color: var(--blue-700);
     font-size: 1.35rem;
     line-height: 1;
+}
+
+.dashcam-recording-action span {
+    position: relative;
+    display: block;
+    width: 20px;
+    height: 20px;
+}
+
+.dashcam-recording-action.play span::before {
+    position: absolute;
+    inset: 2px 1px 2px 5px;
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+    border-left: 13px solid currentColor;
+    content: "";
+}
+
+.dashcam-recording-action.share span::before {
+    position: absolute;
+    inset: 2px;
+    border: 3px solid currentColor;
+    border-radius: 3px;
+    content: "";
+}
+
+.dashcam-recording-action.share span::after {
+    position: absolute;
+    top: -1px;
+    right: 1px;
+    width: 8px;
+    height: 8px;
+    border-top: 3px solid currentColor;
+    border-right: 3px solid currentColor;
+    content: "";
+}
+
+.dashcam-recording-action.download span::before {
+    position: absolute;
+    left: 8px;
+    top: 1px;
+    width: 4px;
+    height: 12px;
+    border-radius: 2px;
+    background: currentColor;
+    content: "";
+}
+
+.dashcam-recording-action.download span::after {
+    position: absolute;
+    left: 3px;
+    bottom: 2px;
+    width: 14px;
+    height: 14px;
+    border-right: 4px solid currentColor;
+    border-bottom: 4px solid currentColor;
+    transform: rotate(45deg);
+    content: "";
+}
+
+.dashcam-recording-action.delete span::before,
+.dashcam-recording-action.delete span::after {
+    position: absolute;
+    left: 8px;
+    top: 1px;
+    width: 4px;
+    height: 19px;
+    border-radius: 2px;
+    background: currentColor;
+    content: "";
+}
+
+.dashcam-recording-action.delete span::before {
+    transform: rotate(45deg);
+}
+
+.dashcam-recording-action.delete span::after {
+    transform: rotate(-45deg);
 }
 
 .dashcam-recording-actions .dashcam-recording-action.danger {
