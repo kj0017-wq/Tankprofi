@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260729-dashcam-mode';
+const appVersion = '20260729-dashcam-refinements';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -376,6 +376,8 @@ const state = {
     dashcamRecorder: null,
     dashcamMimeType: '',
     dashcamRecordingStartedAt: null,
+    dashcamPausedAt: null,
+    dashcamPausedDurationMs: 0,
     dashcamSegmentStartedAt: null,
     dashcamSegmentTimer: null,
     dashcamRecordTimer: null,
@@ -530,6 +532,10 @@ const els = {
     dashcamPlace: document.querySelector('#dashcamPlace'),
     dashcamSpeed: document.querySelector('#dashcamSpeed'),
     dashcamClock: document.querySelector('#dashcamClock'),
+    dashcamCheapestStation: document.querySelector('#dashcamCheapestStation'),
+    dashcamCheapestPanel: document.querySelector('#dashcamCheapestPanel'),
+    dashcamCheapestName: document.querySelector('#dashcamCheapestName'),
+    dashcamCheapestPrice: document.querySelector('#dashcamCheapestPrice'),
 };
 
 function updateViewportHeightVar() {
@@ -1009,6 +1015,7 @@ function defaultDashcamSettings() {
         showPlace: true,
         showSpeed: true,
         showClock: true,
+        showCheapestStation: true,
     };
 }
 
@@ -1048,6 +1055,7 @@ function updateDashcamSettingFromControls() {
         showPlace: Boolean(els.dashcamPlace?.checked),
         showSpeed: Boolean(els.dashcamSpeed?.checked),
         showClock: Boolean(els.dashcamClock?.checked),
+        showCheapestStation: Boolean(els.dashcamCheapestStation?.checked),
     };
     saveDashcamSettings();
     if (!state.dashcamSettings.enabled && state.dashcamActive && state.dashcamMode !== 'display') {
@@ -1072,6 +1080,7 @@ function syncDashcamSettingsControls() {
     if (els.dashcamPlace) els.dashcamPlace.checked = settings.showPlace;
     if (els.dashcamSpeed) els.dashcamSpeed.checked = settings.showSpeed;
     if (els.dashcamClock) els.dashcamClock.checked = settings.showClock;
+    if (els.dashcamCheapestStation) els.dashcamCheapestStation.checked = settings.showCheapestStation;
     if (els.dashcamSettingsStatus) {
         els.dashcamSettingsStatus.textContent = settings.enabled || settings.displayEnabled
             ? 'Querformat-Fahrmodus ist vorbereitet.'
@@ -1217,6 +1226,8 @@ async function startDashcamRecording() {
     };
     state.dashcamRecorder.onstop = () => finalizeDashcamSegment(false);
     state.dashcamRecordingStartedAt = Date.now();
+    state.dashcamPausedAt = null;
+    state.dashcamPausedDurationMs = 0;
     state.dashcamRecorder.start();
     scheduleDashcamSegmentStop();
     updateDashcamRecordingStatus();
@@ -1266,6 +1277,27 @@ function finalizeDashcamSegment(stopCompletely = false) {
 function trimDashcamBuffer() {
     const maxSegments = Math.max(1, Math.ceil((Number(state.dashcamSettings?.bufferMinutes || 5) * 60) / Number(state.dashcamSettings?.segmentSeconds || 60)));
     while (state.dashcamBuffer.length > maxSegments) state.dashcamBuffer.shift();
+}
+
+async function flushDashcamRecorderData() {
+    const recorder = state.dashcamRecorder;
+    if (!recorder || recorder.state === 'inactive' || typeof recorder.requestData !== 'function') return;
+    await new Promise((resolve) => {
+        let resolved = false;
+        const finish = () => {
+            if (resolved) return;
+            resolved = true;
+            recorder.removeEventListener?.('dataavailable', finish);
+            resolve();
+        };
+        recorder.addEventListener?.('dataavailable', finish, { once: true });
+        try {
+            recorder.requestData();
+        } catch {
+            finish();
+        }
+        window.setTimeout(finish, 500);
+    });
 }
 
 async function stopDashcamRecording({ keepSegment = true } = {}) {
@@ -1383,7 +1415,8 @@ async function exportDashcamRecording(recording, preferred = 'share') {
 }
 
 async function saveDashcamSequence() {
-    if (state.dashcamRecorder?.state === 'recording') {
+    if (state.dashcamRecorder && state.dashcamRecorder.state !== 'inactive') {
+        await flushDashcamRecorderData();
         const chunks = state.dashcamChunks;
         if (chunks.length) {
             const blob = new Blob(chunks, { type: state.dashcamMimeType || 'video/webm' });
@@ -1401,6 +1434,8 @@ async function saveDashcamSequence() {
                 maxSpeed: Math.max(0, Number(state.drivingSpeedKmh || 0)),
             });
             trimDashcamBuffer();
+            state.dashcamChunks = [];
+            state.dashcamSegmentStartedAt = Date.now();
         }
     }
     if (!state.dashcamBuffer.length) {
@@ -1529,15 +1564,34 @@ function dashcamClockText() {
 function updateDashcamRecordingStatus() {
     const recording = state.dashcamRecorder?.state === 'recording';
     const paused = state.dashcamRecorder?.state === 'paused';
-    const duration = recording || paused
-        ? Math.max(0, Date.now() - Number(state.dashcamRecordingStartedAt || Date.now()))
+    const duration = recording
+        ? Math.max(0, Date.now() - Number(state.dashcamRecordingStartedAt || Date.now()) - Number(state.dashcamPausedDurationMs || 0))
+        : paused
+            ? Math.max(0, Number(state.dashcamPausedAt || Date.now()) - Number(state.dashcamRecordingStartedAt || Date.now()) - Number(state.dashcamPausedDurationMs || 0))
         : state.dashcamRecordDurationMs;
     const mm = String(Math.floor(duration / 60000)).padStart(2, '0');
     const ss = String(Math.floor((duration % 60000) / 1000)).padStart(2, '0');
     els.dashcamRecordDot?.classList.toggle('recording', recording);
+    els.dashcamPause?.classList.toggle('is-paused', paused);
+    if (els.dashcamPause) {
+        els.dashcamPause.setAttribute('aria-label', paused ? 'Aufnahme fortsetzen' : 'Aufnahme pausieren');
+    }
     if (els.dashcamRecordStatus) {
         els.dashcamRecordStatus.textContent = recording ? `REC ${mm}:${ss}` : paused ? `Pause ${mm}:${ss}` : 'Bereit';
     }
+}
+
+function dashcamCheapestStation() {
+    if (!state.dashcamSettings?.showCheapestStation || state.drivingVehicleMode === 'electric') return null;
+    const fuel = els.fuel.value;
+    return [...(state.stations || [])]
+        .map((station) => ({
+            station,
+            price: Number(fuelPriceValue(station, fuel)),
+            distance: Number(station.distance || station.dist || Number.POSITIVE_INFINITY),
+        }))
+        .filter((item) => isValidPriceValue(item.price))
+        .sort((a, b) => a.price - b.price || a.distance - b.distance)[0] || null;
 }
 
 function renderDashcamOverlay() {
@@ -1562,6 +1616,18 @@ function renderDashcamOverlay() {
         els.dashcamGpsStatus.textContent = Number.isFinite(state.drivingAccuracy)
             ? `GPS ${Math.round(state.drivingAccuracy)} m`
             : 'GPS wird ermittelt';
+    }
+    const cheapest = dashcamCheapestStation();
+    if (els.dashcamCheapestPanel) {
+        els.dashcamCheapestPanel.hidden = !cheapest;
+        if (cheapest) {
+            const name = cheapest.station.brand || cheapest.station.name || cheapest.station.operator || 'Tankstelle';
+            const distance = Number.isFinite(cheapest.distance)
+                ? ` - ${cheapest.distance.toFixed(1).replace('.', ',')} km`
+                : '';
+            if (els.dashcamCheapestName) els.dashcamCheapestName.textContent = name;
+            if (els.dashcamCheapestPrice) els.dashcamCheapestPrice.textContent = `${money(cheapest.price)} ${fuelLabel(els.fuel.value)}${distance}`;
+        }
     }
     updateDashcamRecordingStatus();
 }
@@ -1656,7 +1722,7 @@ async function startDashcamMode(mode = dashboardModeFromSettings()) {
 
 async function stopDashcamMode({ askSave = true } = {}) {
     if (!state.dashcamActive) return;
-    if (askSave && state.dashcamRecorder?.state === 'recording') {
+    if (askSave && state.dashcamRecorder && state.dashcamRecorder.state !== 'inactive') {
         const save = window.confirm('Letzte Aufnahme sichern?');
         if (save) await saveDashcamSequence().catch(() => showDashcamMessage('Sequenz konnte nicht gespeichert werden.'));
     }
@@ -1689,8 +1755,16 @@ async function disableDashcamDuringUse() {
 async function toggleDashcamPause() {
     const recorder = state.dashcamRecorder;
     if (!recorder) return;
-    if (recorder.state === 'recording') recorder.pause();
-    else if (recorder.state === 'paused') recorder.resume();
+    if (recorder.state === 'recording') {
+        state.dashcamPausedAt = Date.now();
+        recorder.pause();
+        clearDashcamSegmentTimer();
+    } else if (recorder.state === 'paused') {
+        state.dashcamPausedDurationMs += Math.max(0, Date.now() - Number(state.dashcamPausedAt || Date.now()));
+        state.dashcamPausedAt = null;
+        recorder.resume();
+        scheduleDashcamSegmentStop();
+    }
     updateDashcamRecordingStatus();
 }
 
@@ -11159,6 +11233,7 @@ function bindEvents() {
         els.dashcamPlace,
         els.dashcamSpeed,
         els.dashcamClock,
+        els.dashcamCheapestStation,
     ].filter(Boolean).forEach((control) => {
         control.addEventListener('change', updateDashcamSettingFromControls);
     });

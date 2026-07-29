@@ -4801,6 +4801,7 @@ button.city-row:focus {
 .dashcam-street-panel,
 .dashcam-status-panel,
 .dashcam-speed-panel,
+.dashcam-cheapest-panel,
 .dashcam-controls,
 .dashcam-message,
 .dashcam-countdown,
@@ -4829,7 +4830,7 @@ button.city-row:focus {
     display: -webkit-box;
     overflow: hidden;
     max-width: 100%;
-    font-size: clamp(1.5rem, 5.4vw, 4rem);
+    font-size: clamp(1.25rem, 4.4vw, 3.35rem);
     font-weight: 950;
     line-height: 1.02;
     text-overflow: ellipsis;
@@ -4903,6 +4904,48 @@ button.city-row:focus {
     font-weight: 900;
 }
 
+.dashcam-cheapest-panel {
+    position: absolute;
+    right: max(14px, env(safe-area-inset-right));
+    bottom: max(14px, env(safe-area-inset-bottom));
+    display: grid;
+    justify-items: end;
+    gap: 3px;
+    max-width: min(36vw, 330px);
+    padding: 10px 14px;
+    border: 3px solid rgba(255, 255, 255, 0.86);
+    border-radius: 10px;
+    color: #ffffff;
+    background: rgba(5, 12, 22, 0.72);
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.34);
+    text-align: right;
+}
+
+.dashcam-cheapest-panel[hidden] {
+    display: none;
+}
+
+.dashcam-cheapest-panel small {
+    color: rgba(255, 255, 255, 0.78);
+    font-size: clamp(0.7rem, 1.6vw, 0.95rem);
+    font-weight: 900;
+}
+
+.dashcam-cheapest-panel strong {
+    overflow: hidden;
+    max-width: 100%;
+    font-size: clamp(0.95rem, 2.2vw, 1.45rem);
+    font-weight: 950;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dashcam-cheapest-panel span {
+    color: #d8ffe7;
+    font-size: clamp(1rem, 2.7vw, 1.75rem);
+    font-weight: 950;
+}
+
 .dashcam-controls {
     position: absolute;
     left: 50%;
@@ -4934,6 +4977,55 @@ button.city-row:focus {
 .dashcam-controls .dashcam-save-button {
     min-width: min(42vw, 360px);
     background: #29c56f;
+}
+
+.dashcam-controls .dashcam-icon-button {
+    display: grid;
+    place-items: center;
+    width: 58px;
+    min-width: 58px;
+    padding: 0;
+}
+
+.dashcam-pause-icon {
+    position: relative;
+    display: block;
+    width: 24px;
+    height: 28px;
+}
+
+.dashcam-pause-icon::before,
+.dashcam-pause-icon::after {
+    position: absolute;
+    top: 0;
+    width: 8px;
+    height: 28px;
+    border-radius: 3px;
+    background: var(--ink);
+    content: "";
+}
+
+.dashcam-pause-icon::before {
+    left: 1px;
+}
+
+.dashcam-pause-icon::after {
+    right: 1px;
+}
+
+.dashcam-icon-button.is-paused .dashcam-pause-icon::before {
+    left: 4px;
+    width: 0;
+    height: 0;
+    border-top: 14px solid transparent;
+    border-bottom: 14px solid transparent;
+    border-left: 22px solid var(--ink);
+    border-radius: 0;
+    background: transparent;
+}
+
+.dashcam-icon-button.is-paused .dashcam-pause-icon::after {
+    display: none;
 }
 
 .dashcam-message {

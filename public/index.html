@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
-    <link rel="stylesheet" href="assets/css/app.css?v=20260729-dashcam-mode">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260729-dashcam-refinements">
 </head>
 <body>
     <section class="splash-screen" id="splashScreen" aria-label="Tankprofi wird geladen">
@@ -508,6 +508,10 @@
                             <button class="text-button" id="tankIdUnlockButton" type="button">Freischalten</button>
                         </div>
                         <div class="tank-id-admin-content" id="tankIdAdminContent" hidden>
+                            <label class="switch-label dashcam-admin-option">
+                                <input id="dashcamCheapestStation" type="checkbox" checked>
+                                <span>Guenstigste Tankstelle im Dashcam-Modus anzeigen</span>
+                            </label>
                             <div class="tank-id-admin-controls">
                                 <select id="tankIdRadiusSelect" aria-label="Suchradius">
                                     <option value="0.5">0,5 km</option>
@@ -543,11 +547,18 @@
             <strong id="dashcamSpeedText">0 km/h</strong>
             <small id="dashcamClockText">--:--</small>
         </div>
+        <div class="dashcam-cheapest-panel" id="dashcamCheapestPanel" hidden>
+            <small>Guenstigste Tankstelle</small>
+            <strong id="dashcamCheapestName">-</strong>
+            <span id="dashcamCheapestPrice">-</span>
+        </div>
         <div class="dashcam-countdown" id="dashcamCountdownView" hidden>3</div>
         <div class="dashcam-message" id="dashcamMessage" hidden></div>
         <div class="dashcam-controls" id="dashcamControls">
             <button class="dashcam-save-button" id="dashcamSaveButton" type="button">Sequenz sichern</button>
-            <button id="dashcamPauseButton" type="button">Pause</button>
+            <button class="dashcam-icon-button" id="dashcamPauseButton" type="button" aria-label="Aufnahme pausieren">
+                <span class="dashcam-pause-icon" aria-hidden="true"></span>
+            </button>
             <button id="dashcamStopButton" type="button">Beenden</button>
             <button id="dashcamExitButton" type="button">Zurueck</button>
         </div>
@@ -579,7 +590,7 @@
     <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script type="module" src="assets/js/firebase-app.js?v=20260701-city-speed-display-plus3"></script>
-    <script src="assets/js/app.js?v=20260729-dashcam-mode" defer></script>
+    <script src="assets/js/app.js?v=20260729-dashcam-refinements" defer></script>
 </body>
 </html>
 
