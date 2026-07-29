@@ -4831,8 +4831,7 @@ button.city-row:focus {
 .dashcam-cheapest-panel,
 .dashcam-controls,
 .dashcam-message,
-.dashcam-countdown,
-.dashcam-recordings {
+.dashcam-countdown {
     position: relative;
     z-index: 2;
 }
@@ -5075,24 +5074,6 @@ button.city-row:focus {
     text-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
 }
 
-.dashcam-recordings {
-    position: absolute;
-    inset: 18px;
-    display: grid;
-    grid-template-rows: auto 1fr;
-    gap: 12px;
-    padding: 16px;
-    border: 3px solid var(--ink);
-    border-radius: 10px;
-    color: var(--ink);
-    background: #f3f7fb;
-    overflow: hidden;
-}
-
-.dashcam-recordings[hidden] {
-    display: none;
-}
-
 .dashcam-recordings-header,
 .dashcam-recording-row,
 .dashcam-recording-actions {
@@ -5115,7 +5096,6 @@ button.city-row:focus {
     font-weight: 950;
 }
 
-#dashcamRecordingsList,
 #dashcamAdminRecordingsList {
     display: grid;
     gap: 10px;
