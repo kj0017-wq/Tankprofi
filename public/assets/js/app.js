@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260729-dashcam-recordings-dedupe-layout';
+const appVersion = '20260729-dashcam-video-only-carplay';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -1043,7 +1043,7 @@ function loadDashcamSettings() {
     const hasStoredSettings = Boolean(localStorage.getItem(DASHCAM_SETTINGS_KEY));
     try {
         const stored = JSON.parse(localStorage.getItem(DASHCAM_SETTINGS_KEY) || 'null') || {};
-        state.dashcamSettings = { ...defaultDashcamSettings(), ...stored };
+        state.dashcamSettings = { ...defaultDashcamSettings(), ...stored, audio: false };
     } catch {
         localStorage.removeItem(DASHCAM_SETTINGS_KEY);
         state.dashcamSettings = defaultDashcamSettings();
@@ -1067,7 +1067,7 @@ function updateDashcamSettingFromControls() {
         autoStart: Boolean(els.dashcamAutoStart?.checked),
         mode: els.dashcamModeSelect?.value || settings.mode,
         autoRecord: Boolean(els.dashcamAutoRecord?.checked),
-        audio: Boolean(els.dashcamAudio?.checked),
+        audio: false,
         countdown: Boolean(els.dashcamCountdown?.checked),
         quality: els.dashcamQuality?.value || settings.quality,
         segmentSeconds: Number(els.dashcamSegment?.value || settings.segmentSeconds),
@@ -1091,7 +1091,10 @@ function syncDashcamSettingsControls() {
     if (els.dashcamDisplayEnabled) els.dashcamDisplayEnabled.checked = settings.displayEnabled;
     if (els.dashcamAutoStart) els.dashcamAutoStart.checked = settings.autoStart;
     if (els.dashcamAutoRecord) els.dashcamAutoRecord.checked = settings.autoRecord;
-    if (els.dashcamAudio) els.dashcamAudio.checked = settings.audio;
+    if (els.dashcamAudio) {
+        els.dashcamAudio.checked = false;
+        els.dashcamAudio.disabled = true;
+    }
     if (els.dashcamCountdown) els.dashcamCountdown.checked = settings.countdown;
     if (els.dashcamModeSelect) els.dashcamModeSelect.value = settings.mode;
     if (els.dashcamQuality) els.dashcamQuality.value = settings.quality;
@@ -1200,7 +1203,7 @@ async function initDashcamCamera(mode) {
         showDashcamMessage('Kamera nicht verfuegbar. Fahranzeige bleibt aktiv.');
         return null;
     }
-    const wantsAudio = Boolean(state.dashcamSettings.audio && mode === 'record');
+    const wantsAudio = false;
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
             video: dashcamVideoConstraints(),
@@ -1237,10 +1240,8 @@ async function initDashcamCamera(mode) {
 
 function recordingStreamForDashcam() {
     if (!state.dashcamStream) return null;
-    const audioEnabled = Boolean(state.dashcamSettings?.audio);
     return new MediaStream([
         ...state.dashcamStream.getVideoTracks(),
-        ...(audioEnabled ? state.dashcamStream.getAudioTracks() : []),
     ]);
 }
 
@@ -1313,7 +1314,7 @@ function finalizeDashcamSegment(stopCompletely = false) {
             endedAt: Date.now(),
             streetStart: dashcamStreetTitle(state.dashcamStableStreet),
             streetEnd: dashcamStreetTitle(state.dashcamStableStreet),
-            audio: Boolean(state.dashcamSettings?.audio),
+            audio: false,
             startPosition: currentDrivingPosition() || state.selectedLocation || null,
             endPosition: currentDrivingPosition() || state.selectedLocation || null,
             maxSpeed: Math.max(0, Number(state.drivingSpeedKmh || 0)),
@@ -1505,7 +1506,7 @@ async function saveDashcamSequence() {
                 endedAt: Date.now(),
                 streetStart: dashcamStreetTitle(state.dashcamStableStreet),
                 streetEnd: dashcamStreetTitle(state.dashcamStableStreet),
-                audio: Boolean(state.dashcamSettings?.audio),
+                audio: false,
                 startPosition: currentDrivingPosition() || state.selectedLocation || null,
                 endPosition: currentDrivingPosition() || state.selectedLocation || null,
                 maxSpeed: Math.max(0, Number(state.drivingSpeedKmh || 0)),
@@ -1539,7 +1540,7 @@ async function saveDashcamSequence() {
         endPosition: last.endPosition || null,
         maxSpeed: Math.max(...state.dashcamBuffer.map((segment) => Number(segment.maxSpeed || 0))),
         size: blob.size,
-        audio: state.dashcamBuffer.some((segment) => segment.audio),
+        audio: false,
         exportStatus: 'Lokal archiviert',
     };
     await putDashcamRecording(recording);
