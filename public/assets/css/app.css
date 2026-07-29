@@ -4743,12 +4743,14 @@ button.city-row:focus {
 
 .dashcam-recordings-page-body {
     display: grid;
-    gap: 10px;
-    margin-bottom: 12px;
-    padding: 12px;
+    align-content: start;
+    gap: 8px;
+    margin: 10px;
+    padding: 10px;
     border: 2px solid var(--line);
     border-radius: 8px;
     background: var(--white);
+    overflow: auto;
 }
 
 .dashcam-recordings-page-body > span {
@@ -4790,15 +4792,11 @@ button.city-row:focus {
     white-space: nowrap;
 }
 
-.dashcam-recordings-page-body {
-    margin: 14px;
-    overflow: auto;
-}
-
 #dashcamSettingsRecordingsList {
     display: grid;
-    gap: 10px;
-    max-height: min(48vh, 460px);
+    align-content: start;
+    gap: 8px;
+    max-height: none;
     overflow: auto;
 }
 
@@ -5209,7 +5207,8 @@ button.city-row:focus {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
-    padding: 10px;
+    gap: 8px;
+    padding: 8px;
     border: 2px solid var(--ink);
     border-radius: 8px;
     background: var(--white);
@@ -5235,10 +5234,10 @@ button.city-row:focus {
 
 .dashcam-recording-actions {
     display: grid;
-    grid-template-columns: repeat(4, 42px);
-    gap: 6px;
+    grid-template-columns: repeat(4, 36px);
+    gap: 5px;
     justify-content: end;
-    margin-left: 8px;
+    margin-left: 0;
 }
 
 .dashcam-recordings-header button,
@@ -5254,8 +5253,8 @@ button.city-row:focus {
 .dashcam-recording-actions .dashcam-recording-action {
     display: grid;
     place-items: center;
-    width: 42px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     padding: 0;
     color: var(--blue-700);
     font-size: 1.35rem;
@@ -5265,23 +5264,23 @@ button.city-row:focus {
 .dashcam-recording-action span {
     position: relative;
     display: block;
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
 }
 
 .dashcam-recording-action.play span::before {
     position: absolute;
     inset: 2px 1px 2px 5px;
-    border-top: 8px solid transparent;
-    border-bottom: 8px solid transparent;
-    border-left: 13px solid currentColor;
+    border-top: 7px solid transparent;
+    border-bottom: 7px solid transparent;
+    border-left: 12px solid currentColor;
     content: "";
 }
 
 .dashcam-recording-action.share span::before {
     position: absolute;
     inset: 2px;
-    border: 3px solid currentColor;
+    border: 2px solid currentColor;
     border-radius: 3px;
     content: "";
 }
@@ -5290,16 +5289,16 @@ button.city-row:focus {
     position: absolute;
     top: -1px;
     right: 1px;
-    width: 8px;
-    height: 8px;
-    border-top: 3px solid currentColor;
-    border-right: 3px solid currentColor;
+    width: 7px;
+    height: 7px;
+    border-top: 2px solid currentColor;
+    border-right: 2px solid currentColor;
     content: "";
 }
 
 .dashcam-recording-action.download span::before {
     position: absolute;
-    left: 8px;
+    left: 7px;
     top: 1px;
     width: 4px;
     height: 12px;
@@ -5312,10 +5311,10 @@ button.city-row:focus {
     position: absolute;
     left: 3px;
     bottom: 2px;
-    width: 14px;
-    height: 14px;
-    border-right: 4px solid currentColor;
-    border-bottom: 4px solid currentColor;
+    width: 12px;
+    height: 12px;
+    border-right: 3px solid currentColor;
+    border-bottom: 3px solid currentColor;
     transform: rotate(45deg);
     content: "";
 }
@@ -5323,10 +5322,10 @@ button.city-row:focus {
 .dashcam-recording-action.delete span::before,
 .dashcam-recording-action.delete span::after {
     position: absolute;
-    left: 8px;
+    left: 7px;
     top: 1px;
     width: 4px;
-    height: 19px;
+    height: 17px;
     border-radius: 2px;
     background: currentColor;
     content: "";
