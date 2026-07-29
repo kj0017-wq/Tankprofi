@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260729-dashcam-settings-recordings';
+const appVersion = '20260729-dashcam-cheapest-logo';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -531,8 +531,10 @@ const els = {
     dashcamClock: document.querySelector('#dashcamClock'),
     dashcamCheapestStation: document.querySelector('#dashcamCheapestStation'),
     dashcamCheapestPanel: document.querySelector('#dashcamCheapestPanel'),
+    dashcamCheapestLogo: document.querySelector('#dashcamCheapestLogo'),
     dashcamCheapestName: document.querySelector('#dashcamCheapestName'),
     dashcamCheapestPrice: document.querySelector('#dashcamCheapestPrice'),
+    dashcamCheapestDistance: document.querySelector('#dashcamCheapestDistance'),
     dashcamSettingsRecordingsRefresh: document.querySelector('#dashcamSettingsRecordingsRefresh'),
     dashcamSettingsRecordingsList: document.querySelector('#dashcamSettingsRecordingsList'),
 };
@@ -1622,10 +1624,12 @@ function renderDashcamOverlay() {
         if (cheapest) {
             const name = cheapest.station.brand || cheapest.station.name || cheapest.station.operator || 'Tankstelle';
             const distance = Number.isFinite(cheapest.distance)
-                ? ` - ${cheapest.distance.toFixed(1).replace('.', ',')} km`
+                ? `${cheapest.distance.toFixed(1).replace('.', ',')} km`
                 : '';
+            if (els.dashcamCheapestLogo) els.dashcamCheapestLogo.innerHTML = brandLogoHtml(cheapest.station);
             if (els.dashcamCheapestName) els.dashcamCheapestName.textContent = name;
-            if (els.dashcamCheapestPrice) els.dashcamCheapestPrice.textContent = `${money(cheapest.price)} ${fuelLabel(els.fuel.value)}${distance}`;
+            if (els.dashcamCheapestPrice) els.dashcamCheapestPrice.textContent = `${money(cheapest.price)} ${fuelLabel(els.fuel.value)}`;
+            if (els.dashcamCheapestDistance) els.dashcamCheapestDistance.textContent = distance;
         }
     }
     updateDashcamRecordingStatus();

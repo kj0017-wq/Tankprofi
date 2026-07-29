@@ -4935,8 +4935,10 @@ button.city-row:focus {
     right: max(14px, env(safe-area-inset-right));
     bottom: max(14px, env(safe-area-inset-bottom));
     display: grid;
-    justify-items: end;
-    gap: 3px;
+    grid-template-columns: 42px minmax(0, 1fr);
+    align-items: center;
+    justify-items: stretch;
+    gap: 3px 10px;
     max-width: min(36vw, 330px);
     padding: 10px 14px;
     border: 3px solid rgba(255, 255, 255, 0.86);
@@ -4952,12 +4954,14 @@ button.city-row:focus {
 }
 
 .dashcam-cheapest-panel small {
+    grid-column: 2;
     color: rgba(255, 255, 255, 0.78);
     font-size: clamp(0.7rem, 1.6vw, 0.95rem);
     font-weight: 900;
 }
 
 .dashcam-cheapest-panel strong {
+    grid-column: 2;
     overflow: hidden;
     max-width: 100%;
     font-size: clamp(0.95rem, 2.2vw, 1.45rem);
@@ -4966,10 +4970,44 @@ button.city-row:focus {
     white-space: nowrap;
 }
 
-.dashcam-cheapest-panel span {
+.dashcam-cheapest-panel > span:not(.dashcam-cheapest-logo) {
+    grid-column: 2;
     color: #d8ffe7;
     font-size: clamp(1rem, 2.7vw, 1.75rem);
     font-weight: 950;
+}
+
+.dashcam-cheapest-panel em {
+    grid-column: 1 / -1;
+    justify-self: end;
+    color: rgba(255, 255, 255, 0.9);
+    font-style: normal;
+    font-size: clamp(0.85rem, 1.9vw, 1.15rem);
+    font-weight: 950;
+}
+
+.dashcam-cheapest-logo {
+    grid-column: 1;
+    grid-row: 1 / 4;
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+}
+
+.dashcam-cheapest-logo .brand-logo {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    border-width: 2px;
+    box-shadow: none;
+    font-size: 0.62rem;
+}
+
+.dashcam-cheapest-logo img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
 }
 
 .dashcam-controls {
