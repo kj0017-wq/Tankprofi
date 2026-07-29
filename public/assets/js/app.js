@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260729-dashcam-cheapest-logo';
+const appVersion = '20260729-dashcam-recording-actions';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -1803,10 +1803,10 @@ async function renderDashcamRecordings() {
                 <small>${recording.audio ? 'Mit Ton' : 'Ohne Ton'} · ${escapeHtml(recording.exportStatus || 'Lokal gespeichert')}</small>
             </span>
             <span class="dashcam-recording-actions">
-                <button type="button" data-dashcam-play>Abspielen</button>
-                <button type="button" data-dashcam-share>In Mediathek sichern</button>
-                <button type="button" data-dashcam-download>Herunterladen</button>
-                <button type="button" data-dashcam-delete>Loeschen</button>
+                <button class="dashcam-recording-action" type="button" data-dashcam-play aria-label="Abspielen" title="Abspielen"><span aria-hidden="true">▶</span></button>
+                <button class="dashcam-recording-action" type="button" data-dashcam-share aria-label="In Mediathek sichern" title="In Mediathek sichern"><span aria-hidden="true">▣</span></button>
+                <button class="dashcam-recording-action" type="button" data-dashcam-download aria-label="Herunterladen" title="Herunterladen"><span aria-hidden="true">↓</span></button>
+                <button class="dashcam-recording-action danger" type="button" data-dashcam-delete aria-label="Loeschen" title="Loeschen"><span aria-hidden="true">×</span></button>
             </span>
         </article>
     `).join('');

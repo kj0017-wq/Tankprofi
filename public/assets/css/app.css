@@ -5124,8 +5124,7 @@ button.city-row:focus {
     justify-content: space-between;
 }
 
-.dashcam-recordings-header button,
-.dashcam-recording-actions button {
+.dashcam-recordings-header button {
     min-height: 38px;
     border: 2px solid var(--ink);
     border-radius: 8px;
@@ -5138,26 +5137,85 @@ button.city-row:focus {
     display: grid;
     gap: 10px;
     overflow: auto;
+    min-width: 0;
 }
 
 .dashcam-recording-row {
-    flex-wrap: wrap;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
     padding: 10px;
     border: 2px solid var(--ink);
     border-radius: 8px;
     background: var(--white);
+    overflow: hidden;
 }
 
 .dashcam-recording-main {
     display: grid;
     gap: 2px;
-    min-width: min(420px, 100%);
+    min-width: 0;
+}
+
+.dashcam-recording-main strong,
+.dashcam-recording-main small {
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .dashcam-recording-main small {
     color: var(--gray-700);
     font-weight: 850;
+}
+
+.dashcam-recording-actions {
+    display: grid;
+    grid-template-columns: repeat(4, 42px);
+    gap: 6px;
+    justify-content: end;
+    margin-left: 8px;
+}
+
+.dashcam-recordings-header button,
+.dashcam-recording-actions .dashcam-recording-action {
+    min-height: 38px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    background: var(--cream-100);
+    font: inherit;
+    font-weight: 950;
+}
+
+.dashcam-recording-actions .dashcam-recording-action {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 40px;
+    padding: 0;
+    color: var(--blue-700);
+    font-size: 1.35rem;
+    line-height: 1;
+}
+
+.dashcam-recording-actions .dashcam-recording-action.danger {
+    color: #b42318;
+}
+
+@media (max-width: 460px) {
+    .dashcam-recording-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .dashcam-recording-actions {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .dashcam-recording-actions .dashcam-recording-action {
+        width: 100%;
+    }
 }
 
 @media (orientation: portrait) {
