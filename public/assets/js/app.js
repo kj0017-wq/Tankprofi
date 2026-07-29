@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260729-dashcam-download-separate';
+const appVersion = '20260729-drive-heading-up-map';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -60,12 +60,15 @@ const DRIVE_HIGHWAY_SPEED_MAX_BEARING_DELTA = 35;
 const DRIVE_POSITION_STALE_MS = 15 * 1000;
 const DRIVE_COMPASS_REFRESH_MS = 30 * 1000;
 const DRIVE_COMPASS_RENDER_FAST_MS = 1200;
-const DRIVE_MAP_FOLLOW_MIN_MS = 2500;
+const DRIVE_MAP_FOLLOW_MIN_MS = 3200;
 const DRIVE_MAP_MANUAL_PAUSE_MS = 15 * 1000;
 const DRIVE_MAP_INITIAL_ZOOM_DELAY_MS = 5 * 1000;
 const DRIVE_MAP_NEAREST_OPEN_DELAY_MS = 1000;
 const DRIVE_MAP_FOLLOW_ZOOM = 17;
 const DRIVE_MAP_USER_VERTICAL_OFFSET_RATIO = 0.16;
+const DRIVE_MAP_BEARING_MIN_SPEED_KMH = 8;
+const DRIVE_MAP_BEARING_MIN_DELTA = 4;
+const DRIVE_MAP_BEARING_MAX_STEP = 24;
 const DRIVE_CITY_MAP_RADIUS_KM = 0.85;
 const DRIVE_CONTROL_REVEAL_MS = 10 * 1000;
 const DRIVE_CONTROL_MOVING_KMH = 5;
@@ -249,6 +252,8 @@ const state = {
     drivingMapProgrammaticMove: false,
     drivingMapReadyPending: false,
     drivingMapLastAutoFitKey: null,
+    drivingMapBearing: 0,
+    drivingMapBearingAt: 0,
     drivingControlsVisibleUntil: 0,
     drivingControlsTimer: null,
     drivingListAutoTopTimer: null,
@@ -723,7 +728,7 @@ function registerServiceWorker() {
 function initMap() {
     if (state.map) return;
     if (window.L) {
-        state.map = L.map('map', { zoomControl: false, rotate: false, bearing: 0, rotateControl: false }).setView([51.1657, 10.4515], 6);
+        state.map = L.map('map', { zoomControl: false, rotate: true, bearing: 0, rotateControl: false }).setView([51.1657, 10.4515], 6);
         state.map.on('dragstart', pauseDrivingMapFollow);
         state.map.on('zoomstart', () => {
             if (!state.drivingMapProgrammaticMove) pauseDrivingMapFollow();
@@ -2411,8 +2416,43 @@ function driveMapThresholdsFor(stations) {
     })));
 }
 
+function normalizedBearing(value) {
+    const bearing = Number(value);
+    return Number.isFinite(bearing) ? ((bearing % 360) + 360) % 360 : null;
+}
+
+function signedBearingDelta(from, to) {
+    const start = normalizedBearing(from);
+    const end = normalizedBearing(to);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+    return ((((end - start) % 360) + 540) % 360) - 180;
+}
+
+function stableDrivingMapBearing({ force = false } = {}) {
+    const rawBearing = normalizedBearing(drivingMapHeading(currentDrivingPosition()));
+    const previousBearing = normalizedBearing(state.drivingMapBearing);
+    const speed = Number(state.drivingSpeedKmh);
+    if (!Number.isFinite(rawBearing)) return Number.isFinite(previousBearing) ? previousBearing : 0;
+    if (!force && Number.isFinite(speed) && speed < DRIVE_MAP_BEARING_MIN_SPEED_KMH) {
+        return Number.isFinite(previousBearing) ? previousBearing : rawBearing;
+    }
+    if (!Number.isFinite(previousBearing)) {
+        state.drivingMapBearing = rawBearing;
+        state.drivingMapBearingAt = Date.now();
+        return rawBearing;
+    }
+    const delta = signedBearingDelta(previousBearing, rawBearing);
+    if (!Number.isFinite(delta)) return previousBearing;
+    if (!force && Math.abs(delta) < DRIVE_MAP_BEARING_MIN_DELTA) return previousBearing;
+    const step = Math.max(-DRIVE_MAP_BEARING_MAX_STEP, Math.min(DRIVE_MAP_BEARING_MAX_STEP, delta));
+    const nextBearing = normalizedBearing(previousBearing + step);
+    state.drivingMapBearing = nextBearing;
+    state.drivingMapBearingAt = Date.now();
+    return nextBearing;
+}
+
 function userLocationIcon() {
-    const bearing = state.listMode === 'driving' && state.view === 'map' ? drivingMapHeading(currentDrivingPosition()) : 0;
+    const bearing = state.listMode === 'driving' && state.view === 'map' ? 0 : drivingMapHeading(currentDrivingPosition());
     const style = Number.isFinite(bearing) ? ` style="--user-bearing:${bearing}deg"` : '';
     const isDrivingMarker = state.listMode === 'driving';
     const size = isDrivingMarker ? 42 : 38;
@@ -3182,9 +3222,11 @@ function drivingMapFallbackPosition(position) {
 }
 
 function drivingMapHeading(position) {
-    const motionBearing = visualDrivingBearing();
+    const motionBearing = detectDrivingBearing();
     if (Number.isFinite(motionBearing)) return motionBearing;
-    return 0;
+    const visualBearing = visualDrivingBearing();
+    if (Number.isFinite(visualBearing)) return visualBearing;
+    return Number.isFinite(state.drivingMapBearing) ? state.drivingMapBearing : 0;
 }
 
 function drivingMapHasUsablePosition() {
@@ -3229,13 +3271,15 @@ function flushPendingDrivingMapView() {
     requestDrivingMapView();
 }
 
-function updateDrivingMapRotation() {
+function updateDrivingMapRotation({ force = false } = {}) {
     const mapEl = document.querySelector('#map');
     if (!mapEl) return;
-    const heading = state.listMode === 'driving' && state.view === 'map' ? drivingMapHeading(currentDrivingPosition()) : 0;
-    mapEl.style.setProperty('--driving-map-rotation', '0deg');
+    const heading = state.listMode === 'driving' && state.view === 'map'
+        ? stableDrivingMapBearing({ force })
+        : 0;
+    mapEl.style.setProperty('--driving-map-rotation', `${heading}deg`);
     if (state.map && typeof state.map.setBearing === 'function') {
-        state.map.setBearing(0);
+        state.map.setBearing(heading);
     }
     if (state.userLocationMarker) state.userLocationMarker.setIcon(userLocationIcon());
 }
@@ -3296,7 +3340,7 @@ function focusDrivingMapByHeading(stationsToShow, userPosition, { force = false 
     window.setTimeout(() => {
         state.drivingMapProgrammaticMove = false;
     }, isMoving ? 320 : 0);
-    updateDrivingMapRotation();
+    updateDrivingMapRotation({ force });
 }
 
 function clearDrivingMapFocusTimer() {
