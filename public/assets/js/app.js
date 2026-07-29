@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260729-dashcam-refinements';
+const appVersion = '20260729-dashcam-admin-recordings';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -536,6 +536,8 @@ const els = {
     dashcamCheapestPanel: document.querySelector('#dashcamCheapestPanel'),
     dashcamCheapestName: document.querySelector('#dashcamCheapestName'),
     dashcamCheapestPrice: document.querySelector('#dashcamCheapestPrice'),
+    dashcamAdminRecordingsRefresh: document.querySelector('#dashcamAdminRecordingsRefresh'),
+    dashcamAdminRecordingsList: document.querySelector('#dashcamAdminRecordingsList'),
 };
 
 function updateViewportHeightVar() {
@@ -1782,14 +1784,17 @@ function formatDashcamBytes(bytes) {
 }
 
 async function renderDashcamRecordings() {
-    if (!els.dashcamRecordingsList) return;
     const recordings = await getDashcamRecordings().catch(() => []);
     state.dashcamSavedRecordings = recordings;
+    const lists = [els.dashcamRecordingsList, els.dashcamAdminRecordingsList].filter(Boolean);
+    if (!lists.length) return;
     if (!recordings.length) {
-        els.dashcamRecordingsList.textContent = 'Noch keine Aufnahmen.';
+        lists.forEach((list) => {
+            list.textContent = 'Noch keine Aufnahmen.';
+        });
         return;
     }
-    els.dashcamRecordingsList.innerHTML = recordings.map((recording) => `
+    const html = recordings.map((recording) => `
         <article class="dashcam-recording-row" data-dashcam-recording="${escapeHtml(recording.id)}">
             <span class="dashcam-recording-main">
                 <strong>${escapeHtml(recording.street || 'Dashcam-Aufnahme')}</strong>
@@ -1804,6 +1809,9 @@ async function renderDashcamRecordings() {
             </span>
         </article>
     `).join('');
+    lists.forEach((list) => {
+        list.innerHTML = html;
+    });
 }
 
 async function handleDashcamRecordingAction(event) {
@@ -10583,7 +10591,10 @@ function setTankIdAdminUnlocked(unlocked) {
             ? 'Freigeschaltet. Kandidaten koennen geladen und manuell bestaetigt werden.'
             : 'Manuelle Zuordnung erst nach Codefreigabe.';
     }
-    if (unlocked) loadTankprofiStats();
+    if (unlocked) {
+        loadTankprofiStats();
+        renderDashcamRecordings().catch(() => null);
+    }
 }
 
 async function unlockTankIdAdmin() {
@@ -11243,14 +11254,21 @@ function bindEvents() {
     els.dashcamStop?.addEventListener('click', () => stopDashcamMode({ askSave: true }).catch(() => null));
     els.dashcamExit?.addEventListener('click', () => stopDashcamMode({ askSave: true }).catch(() => null));
     els.dashcamRecordingsButton?.addEventListener('click', () => {
-        if (!els.dashcamRecordings) return;
-        els.dashcamRecordings.hidden = false;
+        if (state.dashcamActive && els.dashcamRecordings) {
+            els.dashcamRecordings.hidden = false;
+        } else {
+            setAdminOpen(true);
+        }
         renderDashcamRecordings().catch(() => null);
     });
+    els.dashcamAdminRecordingsRefresh?.addEventListener('click', () => renderDashcamRecordings().catch(() => null));
     els.dashcamRecordingsClose?.addEventListener('click', () => {
         if (els.dashcamRecordings) els.dashcamRecordings.hidden = true;
     });
     els.dashcamRecordingsList?.addEventListener('click', (event) => {
+        handleDashcamRecordingAction(event).catch(() => showDashcamMessage('Aktion konnte nicht ausgefuehrt werden.'));
+    });
+    els.dashcamAdminRecordingsList?.addEventListener('click', (event) => {
         handleDashcamRecordingAction(event).catch(() => showDashcamMessage('Aktion konnte nicht ausgefuehrt werden.'));
     });
     els.results.addEventListener('pointerdown', () => {

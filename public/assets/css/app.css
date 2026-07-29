@@ -4737,6 +4737,33 @@ button.city-row:focus {
     gap: 12px;
 }
 
+.dashcam-admin-option {
+    margin-bottom: 10px;
+}
+
+.dashcam-admin-recordings-panel {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding: 12px;
+    border: 2px solid var(--line);
+    border-radius: 8px;
+    background: var(--white);
+}
+
+.dashcam-admin-recordings-panel > span {
+    color: var(--gray-700);
+    font-size: 0.88rem;
+    font-weight: 800;
+}
+
+#dashcamAdminRecordingsList {
+    display: grid;
+    gap: 10px;
+    max-height: min(48vh, 460px);
+    overflow: auto;
+}
+
 .dashcam-switches {
     grid-template-columns: 1fr;
 }
@@ -5088,7 +5115,8 @@ button.city-row:focus {
     font-weight: 950;
 }
 
-#dashcamRecordingsList {
+#dashcamRecordingsList,
+#dashcamAdminRecordingsList {
     display: grid;
     gap: 10px;
     overflow: auto;
