@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260729-drive-map-no-rubberband';
+const appVersion = '20260729-dashcam-recordings-dedupe-layout';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -1402,6 +1402,22 @@ async function getDashcamRecordings() {
     return rows.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
 }
 
+function uniqueDashcamRecordings(recordings) {
+    const seen = new Set();
+    return recordings.filter((recording) => {
+        const key = [
+            recording.street || '',
+            Number(recording.startedAt || recording.createdAt || 0),
+            Number(recording.endedAt || 0),
+            Number(recording.durationMs || 0),
+            Number(recording.size || 0),
+        ].join('|');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
 async function deleteDashcamRecording(id) {
     const db = await dashcamDb();
     await new Promise((resolve, reject) => {
@@ -1852,7 +1868,7 @@ function formatDashcamBytes(bytes) {
 }
 
 async function renderDashcamRecordings() {
-    const recordings = await getDashcamRecordings().catch(() => []);
+    const recordings = uniqueDashcamRecordings(await getDashcamRecordings().catch(() => []));
     state.dashcamSavedRecordings = recordings;
     const lists = [els.dashcamSettingsRecordingsList].filter(Boolean);
     if (!lists.length) return;

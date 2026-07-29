@@ -5314,12 +5314,13 @@ button.city-row:focus {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
-    gap: 8px;
-    padding: 8px;
+    gap: 10px;
+    min-height: 0;
+    padding: 8px 8px 10px;
     border: 2px solid var(--ink);
     border-radius: 8px;
     background: var(--white);
-    overflow: hidden;
+    overflow: visible;
 }
 
 .dashcam-recording-main {
@@ -5334,9 +5335,14 @@ button.city-row:focus {
     text-overflow: ellipsis;
 }
 
+.dashcam-recording-main strong {
+    line-height: 1.05;
+}
+
 .dashcam-recording-main small {
     color: var(--gray-700);
     font-weight: 850;
+    line-height: 1.12;
 }
 
 .dashcam-recording-actions {
@@ -5453,7 +5459,8 @@ button.city-row:focus {
 @media (max-width: 460px) {
     .dashcam-recording-row {
         grid-template-columns: 1fr;
-        gap: 8px;
+        gap: 6px;
+        padding: 8px 8px 9px;
     }
 
     .dashcam-recording-actions {
@@ -5463,6 +5470,8 @@ button.city-row:focus {
     }
 
     .dashcam-recording-actions .dashcam-recording-action {
+        min-height: 34px;
+        height: 34px;
         width: 100%;
     }
 }
