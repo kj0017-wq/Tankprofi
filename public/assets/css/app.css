@@ -4856,9 +4856,9 @@ button.city-row:focus {
     display: -webkit-box;
     overflow: hidden;
     max-width: 100%;
-    font-size: clamp(1.25rem, 4.4vw, 3.35rem);
+    font-size: clamp(0.88rem, 3.08vw, 2.35rem);
     font-weight: 950;
-    line-height: 1.02;
+    line-height: 1.08;
     text-overflow: ellipsis;
     white-space: normal;
     -webkit-box-orient: vertical;
@@ -4935,11 +4935,11 @@ button.city-row:focus {
     right: max(14px, env(safe-area-inset-right));
     bottom: max(14px, env(safe-area-inset-bottom));
     display: grid;
-    grid-template-columns: 42px minmax(0, 1fr);
+    grid-template-columns: 58px minmax(0, 1fr);
     align-items: center;
     justify-items: stretch;
     gap: 3px 10px;
-    max-width: min(36vw, 330px);
+    max-width: min(42vw, 380px);
     padding: 10px 14px;
     border: 3px solid rgba(255, 255, 255, 0.86);
     border-radius: 10px;
@@ -4991,17 +4991,17 @@ button.city-row:focus {
     grid-row: 1 / 4;
     display: grid;
     place-items: center;
-    width: 42px;
-    height: 42px;
+    width: 58px;
+    height: 58px;
 }
 
 .dashcam-cheapest-logo .brand-logo {
-    width: 40px;
-    height: 40px;
-    min-width: 40px;
+    width: 54px;
+    height: 54px;
+    min-width: 54px;
     border-width: 2px;
     box-shadow: none;
-    font-size: 0.62rem;
+    font-size: 0.72rem;
 }
 
 .dashcam-cheapest-logo img {
