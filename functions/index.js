@@ -2424,7 +2424,16 @@ async function handleReverse(req, res) {
   }
 
   const data = await response.json();
-  return sendJson(res, { label: data.display_name || 'Aktueller Standort' });
+  const address = data.address || {};
+  return sendJson(res, {
+    label: data.display_name || 'Aktueller Standort',
+    street: address.road || address.pedestrian || address.footway || address.cycleway || address.path || '',
+    ref: address.road_reference || address.highway || '',
+    city: address.city || address.town || address.village || address.municipality || '',
+    suburb: address.suburb || address.neighbourhood || address.city_district || '',
+    postcode: address.postcode || '',
+    source: 'nominatim',
+  });
 }
 
 async function handleSearch(req, res) {

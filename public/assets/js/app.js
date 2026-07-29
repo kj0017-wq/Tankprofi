@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260712-city-empty-rural-fallback';
+const appVersion = '20260729-dashcam-mode';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -23,7 +23,16 @@ const DRIVE_POSITION_EVALUATE_MS = 30000;
 const DRIVE_UPDATE_WATCHDOG_MS = 45 * 1000;
 const DRIVE_SPEED_STALE_MS = 2800;
 const DRIVE_SPEED_RESET_DELAY_MS = DRIVE_SPEED_STALE_MS + 250;
-const DRIVE_SPEED_DISPLAY_OFFSET_KMH = 3;
+const DRIVE_SPEED_DISPLAY_OFFSET_KMH = 4;
+const DASHCAM_SETTINGS_KEY = 'tankprofi_dashcam_settings_v1';
+const DASHCAM_DB_NAME = 'tankprofi_dashcam_v1';
+const DASHCAM_DB_STORE = 'recordings';
+const DASHCAM_LANDSCAPE_STABLE_MS = 2000;
+const DASHCAM_STREET_LOOKUP_MIN_MS = 7000;
+const DASHCAM_STREET_LOOKUP_MIN_KM = 0.04;
+const DASHCAM_STREET_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const DASHCAM_CONTROLS_HIDE_MS = 4500;
+const DASHCAM_PREFERRED_MIME_TYPES = ['video/mp4;codecs=h264', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
 const NORMAL_SEARCH_REFRESH_MS = 60 * 1000;
 const CITY_DRIVE_PRICE_REFRESH_MS = 60 * 1000;
 const DRIVE_HIGHWAY_LIVE_PRICE_LIMIT = 36;
@@ -357,6 +366,34 @@ const state = {
     wakeLock: null,
     drivingOrientationLocked: false,
     drivingMessage: 'Fahrmodus starten.',
+    dashcamActive: false,
+    dashcamPromptShown: false,
+    dashcamLandscapeTimer: null,
+    dashcamControlsTimer: null,
+    dashcamSettings: null,
+    dashcamStream: null,
+    dashcamWatchId: null,
+    dashcamRecorder: null,
+    dashcamMimeType: '',
+    dashcamRecordingStartedAt: null,
+    dashcamSegmentStartedAt: null,
+    dashcamSegmentTimer: null,
+    dashcamRecordTimer: null,
+    dashcamRecordDurationMs: 0,
+    dashcamChunks: [],
+    dashcamBuffer: [],
+    dashcamSavedRecordings: [],
+    dashcamWakeLock: null,
+    dashcamStreetCache: new Map(),
+    dashcamStableStreet: null,
+    dashcamCandidateStreet: null,
+    dashcamCandidateCount: 0,
+    dashcamLastConfirmedStreetAt: null,
+    dashcamLastLookupAt: 0,
+    dashcamLastLookupPosition: null,
+    dashcamStreetLookupInProgress: false,
+    dashcamMode: 'display',
+    dashcamMessageTimer: null,
     favoriteRefreshId: 0,
     navRequestId: 0,
     stationRequestId: 0,
@@ -456,6 +493,43 @@ const els = {
     viewButtons: document.querySelectorAll('.view-button'),
     bottomNavButtons: document.querySelectorAll('.bottom-nav-button'),
     template: document.querySelector('#stationTemplate'),
+    dashcamMode: document.querySelector('#dashcamMode'),
+    dashcamVideo: document.querySelector('#dashcamVideo'),
+    dashcamFallback: document.querySelector('#dashcamFallback'),
+    dashcamStreetName: document.querySelector('#dashcamStreetName'),
+    dashcamStreetMeta: document.querySelector('#dashcamStreetMeta'),
+    dashcamRecordDot: document.querySelector('#dashcamRecordDot'),
+    dashcamRecordStatus: document.querySelector('#dashcamRecordStatus'),
+    dashcamGpsStatus: document.querySelector('#dashcamGpsStatus'),
+    dashcamSpeedText: document.querySelector('#dashcamSpeedText'),
+    dashcamClockText: document.querySelector('#dashcamClockText'),
+    dashcamCountdownView: document.querySelector('#dashcamCountdownView'),
+    dashcamMessage: document.querySelector('#dashcamMessage'),
+    dashcamControls: document.querySelector('#dashcamControls'),
+    dashcamSave: document.querySelector('#dashcamSaveButton'),
+    dashcamPause: document.querySelector('#dashcamPauseButton'),
+    dashcamStop: document.querySelector('#dashcamStopButton'),
+    dashcamExit: document.querySelector('#dashcamExitButton'),
+    dashcamRecordings: document.querySelector('#dashcamRecordings'),
+    dashcamRecordingsButton: document.querySelector('#dashcamRecordingsButton'),
+    dashcamRecordingsClose: document.querySelector('#dashcamRecordingsClose'),
+    dashcamRecordingsList: document.querySelector('#dashcamRecordingsList'),
+    dashcamSettingsStatus: document.querySelector('#dashcamSettingsStatus'),
+    dashcamEnabled: document.querySelector('#dashcamEnabled'),
+    dashcamDisplayEnabled: document.querySelector('#dashcamDisplayEnabled'),
+    dashcamAutoStart: document.querySelector('#dashcamAutoStart'),
+    dashcamAutoRecord: document.querySelector('#dashcamAutoRecord'),
+    dashcamAudio: document.querySelector('#dashcamAudio'),
+    dashcamCountdown: document.querySelector('#dashcamCountdown'),
+    dashcamModeSelect: document.querySelector('#dashcamModeSelect'),
+    dashcamQuality: document.querySelector('#dashcamQualitySelect'),
+    dashcamSegment: document.querySelector('#dashcamSegmentSelect'),
+    dashcamBuffer: document.querySelector('#dashcamBufferSelect'),
+    dashcamExport: document.querySelector('#dashcamExportSelect'),
+    dashcamStreet: document.querySelector('#dashcamStreet'),
+    dashcamPlace: document.querySelector('#dashcamPlace'),
+    dashcamSpeed: document.querySelector('#dashcamSpeed'),
+    dashcamClock: document.querySelector('#dashcamClock'),
 };
 
 function updateViewportHeightVar() {
@@ -909,12 +983,790 @@ function scheduleDrivingSpeedReset() {
     clearDrivingSpeedResetTimer();
     state.drivingSpeedResetTimer = window.setTimeout(() => {
         state.drivingSpeedResetTimer = null;
-        if (state.listMode !== 'driving') return;
+        if (state.listMode !== 'driving' && !state.dashcamActive) return;
         state.drivingSpeedKmh = 0;
         state.drivingSpeedUpdatedAt = Date.now();
         updateDrivingMapSpeed();
-        if (state.view === 'list') renderDrivingModeList({ preserveScroll: true });
+        if (state.view === 'list' && state.listMode === 'driving') renderDrivingModeList({ preserveScroll: true });
+        renderDashcamOverlay();
     }, DRIVE_SPEED_RESET_DELAY_MS);
+}
+
+function defaultDashcamSettings() {
+    return {
+        enabled: false,
+        displayEnabled: true,
+        autoStart: false,
+        mode: 'record',
+        autoRecord: true,
+        audio: false,
+        countdown: true,
+        quality: '720p',
+        segmentSeconds: 60,
+        bufferMinutes: 5,
+        exportAction: 'local',
+        showStreet: true,
+        showPlace: true,
+        showSpeed: true,
+        showClock: true,
+    };
+}
+
+function loadDashcamSettings() {
+    try {
+        const stored = JSON.parse(localStorage.getItem(DASHCAM_SETTINGS_KEY) || 'null') || {};
+        state.dashcamSettings = { ...defaultDashcamSettings(), ...stored };
+    } catch {
+        localStorage.removeItem(DASHCAM_SETTINGS_KEY);
+        state.dashcamSettings = defaultDashcamSettings();
+    }
+    syncDashcamSettingsControls();
+}
+
+function saveDashcamSettings() {
+    if (!state.dashcamSettings) state.dashcamSettings = defaultDashcamSettings();
+    localStorage.setItem(DASHCAM_SETTINGS_KEY, JSON.stringify(state.dashcamSettings));
+    syncDashcamSettingsControls();
+}
+
+function updateDashcamSettingFromControls() {
+    const settings = state.dashcamSettings || defaultDashcamSettings();
+    state.dashcamSettings = {
+        ...settings,
+        enabled: Boolean(els.dashcamEnabled?.checked),
+        displayEnabled: Boolean(els.dashcamDisplayEnabled?.checked),
+        autoStart: Boolean(els.dashcamAutoStart?.checked),
+        mode: els.dashcamModeSelect?.value || settings.mode,
+        autoRecord: Boolean(els.dashcamAutoRecord?.checked),
+        audio: Boolean(els.dashcamAudio?.checked),
+        countdown: Boolean(els.dashcamCountdown?.checked),
+        quality: els.dashcamQuality?.value || settings.quality,
+        segmentSeconds: Number(els.dashcamSegment?.value || settings.segmentSeconds),
+        bufferMinutes: Number(els.dashcamBuffer?.value || settings.bufferMinutes),
+        exportAction: els.dashcamExport?.value || settings.exportAction,
+        showStreet: Boolean(els.dashcamStreet?.checked),
+        showPlace: Boolean(els.dashcamPlace?.checked),
+        showSpeed: Boolean(els.dashcamSpeed?.checked),
+        showClock: Boolean(els.dashcamClock?.checked),
+    };
+    saveDashcamSettings();
+    if (!state.dashcamSettings.enabled && state.dashcamActive && state.dashcamMode !== 'display') {
+        disableDashcamDuringUse();
+    }
+}
+
+function syncDashcamSettingsControls() {
+    const settings = state.dashcamSettings || defaultDashcamSettings();
+    if (els.dashcamEnabled) els.dashcamEnabled.checked = settings.enabled;
+    if (els.dashcamDisplayEnabled) els.dashcamDisplayEnabled.checked = settings.displayEnabled;
+    if (els.dashcamAutoStart) els.dashcamAutoStart.checked = settings.autoStart;
+    if (els.dashcamAutoRecord) els.dashcamAutoRecord.checked = settings.autoRecord;
+    if (els.dashcamAudio) els.dashcamAudio.checked = settings.audio;
+    if (els.dashcamCountdown) els.dashcamCountdown.checked = settings.countdown;
+    if (els.dashcamModeSelect) els.dashcamModeSelect.value = settings.mode;
+    if (els.dashcamQuality) els.dashcamQuality.value = settings.quality;
+    if (els.dashcamSegment) els.dashcamSegment.value = String(settings.segmentSeconds);
+    if (els.dashcamBuffer) els.dashcamBuffer.value = String(settings.bufferMinutes);
+    if (els.dashcamExport) els.dashcamExport.value = settings.exportAction;
+    if (els.dashcamStreet) els.dashcamStreet.checked = settings.showStreet;
+    if (els.dashcamPlace) els.dashcamPlace.checked = settings.showPlace;
+    if (els.dashcamSpeed) els.dashcamSpeed.checked = settings.showSpeed;
+    if (els.dashcamClock) els.dashcamClock.checked = settings.showClock;
+    if (els.dashcamSettingsStatus) {
+        els.dashcamSettingsStatus.textContent = settings.enabled || settings.displayEnabled
+            ? 'Querformat-Fahrmodus ist vorbereitet.'
+            : 'Querformat loest keine Sonderfunktion aus.';
+    }
+}
+
+function isLandscapeViewport() {
+    return window.matchMedia?.('(orientation: landscape)').matches || window.innerWidth > window.innerHeight;
+}
+
+function dashboardModeFromSettings() {
+    const settings = state.dashcamSettings || defaultDashcamSettings();
+    if (!settings.enabled) return settings.displayEnabled ? 'display' : 'off';
+    if (settings.mode === 'display') return 'display';
+    if (settings.mode === 'camera') return 'camera';
+    return settings.autoRecord ? 'record' : 'camera';
+}
+
+function requestDashcamInitialChoice() {
+    const choice = window.prompt('Soll TankProfi beim Drehen ins Querformat automatisch den Dashcam-Fahrmodus starten?\n1 = Aktivieren\n2 = Nur Fahranzeige ohne Aufnahme\n3 = Nicht aktivieren', '2');
+    const settings = state.dashcamSettings || defaultDashcamSettings();
+    state.dashcamPromptShown = true;
+    if (choice === '1') {
+        state.dashcamSettings = { ...settings, enabled: true, displayEnabled: true, autoStart: true, mode: 'record', autoRecord: true };
+    } else if (choice === '2') {
+        state.dashcamSettings = { ...settings, enabled: false, displayEnabled: true, autoStart: true, mode: 'display', autoRecord: false };
+    } else {
+        state.dashcamSettings = { ...settings, enabled: false, displayEnabled: false, autoStart: false };
+    }
+    saveDashcamSettings();
+}
+
+function maybeScheduleDashcamAutoStart() {
+    const settings = state.dashcamSettings || defaultDashcamSettings();
+    if (state.dashcamActive || !settings.autoStart || (!settings.enabled && !settings.displayEnabled) || !document.hasFocus?.()) return;
+    if (!isLandscapeViewport()) {
+        clearDashcamLandscapeTimer();
+        return;
+    }
+    if (state.dashcamLandscapeTimer) return;
+    state.dashcamLandscapeTimer = window.setTimeout(() => {
+        state.dashcamLandscapeTimer = null;
+        if (!isLandscapeViewport()) return;
+        if (!state.dashcamPromptShown && !localStorage.getItem(DASHCAM_SETTINGS_KEY)) requestDashcamInitialChoice();
+        const mode = dashboardModeFromSettings();
+        if (mode !== 'off') startDashcamMode(mode).catch((error) => showDashcamMessage(error.message || 'Dashcam konnte nicht gestartet werden.'));
+    }, DASHCAM_LANDSCAPE_STABLE_MS);
+}
+
+function clearDashcamLandscapeTimer() {
+    if (!state.dashcamLandscapeTimer) return;
+    clearTimeout(state.dashcamLandscapeTimer);
+    state.dashcamLandscapeTimer = null;
+}
+
+function dashcamVideoConstraints() {
+    const quality = state.dashcamSettings?.quality || '720p';
+    const height = quality === '1080p' ? 1080 : 720;
+    const width = quality === '1080p' ? 1920 : 1280;
+    return {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: width },
+        height: { ideal: height },
+        frameRate: { ideal: 30, max: 30 },
+    };
+}
+
+function supportedDashcamMimeType() {
+    if (!window.MediaRecorder) return '';
+    return DASHCAM_PREFERRED_MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type)) || '';
+}
+
+async function initDashcamCamera(mode) {
+    if (mode === 'display' || !state.dashcamSettings?.enabled) return null;
+    if (!navigator.mediaDevices?.getUserMedia) {
+        showDashcamMessage('Kamera nicht verfuegbar. Fahranzeige bleibt aktiv.');
+        return null;
+    }
+    const wantsAudio = Boolean(state.dashcamSettings.audio && mode === 'record');
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: dashcamVideoConstraints(),
+            audio: wantsAudio,
+        });
+        state.dashcamStream = stream;
+        if (els.dashcamVideo) {
+            els.dashcamVideo.srcObject = stream;
+            els.dashcamMode?.classList.add('has-camera');
+        }
+        return stream;
+    } catch (error) {
+        if (wantsAudio) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: dashcamVideoConstraints(),
+                    audio: false,
+                });
+                state.dashcamStream = stream;
+                if (els.dashcamVideo) {
+                    els.dashcamVideo.srcObject = stream;
+                    els.dashcamMode?.classList.add('has-camera');
+                }
+                showDashcamMessage('Mikrofonzugriff nicht erlaubt. Die Aufnahme wird ohne Ton fortgesetzt.');
+                return stream;
+            } catch {
+                // fall through to display mode
+            }
+        }
+        showDashcamMessage('Kamerazugriff wurde nicht erlaubt. Fahranzeige bleibt aktiv.');
+        return null;
+    }
+}
+
+function recordingStreamForDashcam() {
+    if (!state.dashcamStream) return null;
+    const audioEnabled = Boolean(state.dashcamSettings?.audio);
+    return new MediaStream([
+        ...state.dashcamStream.getVideoTracks(),
+        ...(audioEnabled ? state.dashcamStream.getAudioTracks() : []),
+    ]);
+}
+
+function resetDashcamSegment() {
+    state.dashcamChunks = [];
+    state.dashcamSegmentStartedAt = Date.now();
+}
+
+async function startDashcamRecording() {
+    if (!state.dashcamStream || !window.MediaRecorder) {
+        showDashcamMessage('Videoaufnahme wird von diesem Browser nicht unterstuetzt.');
+        return;
+    }
+    const stream = recordingStreamForDashcam();
+    if (!stream?.getVideoTracks().length) return;
+    const mimeType = supportedDashcamMimeType();
+    state.dashcamMimeType = mimeType || 'video/webm';
+    resetDashcamSegment();
+    const options = mimeType ? { mimeType } : undefined;
+    state.dashcamRecorder = new MediaRecorder(stream, options);
+    state.dashcamRecorder.ondataavailable = (event) => {
+        if (event.data?.size) state.dashcamChunks.push(event.data);
+    };
+    state.dashcamRecorder.onstop = () => finalizeDashcamSegment(false);
+    state.dashcamRecordingStartedAt = Date.now();
+    state.dashcamRecorder.start();
+    scheduleDashcamSegmentStop();
+    updateDashcamRecordingStatus();
+}
+
+function scheduleDashcamSegmentStop() {
+    clearDashcamSegmentTimer();
+    const seconds = Number(state.dashcamSettings?.segmentSeconds || 60);
+    state.dashcamSegmentTimer = window.setTimeout(() => {
+        if (state.dashcamRecorder?.state === 'recording') state.dashcamRecorder.stop();
+    }, Math.max(10, seconds) * 1000);
+}
+
+function clearDashcamSegmentTimer() {
+    if (!state.dashcamSegmentTimer) return;
+    clearTimeout(state.dashcamSegmentTimer);
+    state.dashcamSegmentTimer = null;
+}
+
+function finalizeDashcamSegment(stopCompletely = false) {
+    clearDashcamSegmentTimer();
+    if (state.dashcamChunks.length) {
+        const blob = new Blob(state.dashcamChunks, { type: state.dashcamMimeType || 'video/webm' });
+        state.dashcamBuffer.push({
+            id: `dashcam_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+            blob,
+            mimeType: blob.type || state.dashcamMimeType || 'video/webm',
+            startedAt: state.dashcamSegmentStartedAt || Date.now(),
+            endedAt: Date.now(),
+            streetStart: dashcamStreetTitle(state.dashcamStableStreet),
+            streetEnd: dashcamStreetTitle(state.dashcamStableStreet),
+            audio: Boolean(state.dashcamSettings?.audio),
+            startPosition: currentDrivingPosition() || state.selectedLocation || null,
+            endPosition: currentDrivingPosition() || state.selectedLocation || null,
+            maxSpeed: Math.max(0, Number(state.drivingSpeedKmh || 0)),
+        });
+        trimDashcamBuffer();
+    }
+    resetDashcamSegment();
+    if (!stopCompletely && state.dashcamActive && state.dashcamMode === 'record' && state.dashcamStream) {
+        startDashcamRecording().catch(() => showDashcamMessage('Aufnahme konnte nicht fortgesetzt werden.'));
+    } else {
+        updateDashcamRecordingStatus();
+    }
+}
+
+function trimDashcamBuffer() {
+    const maxSegments = Math.max(1, Math.ceil((Number(state.dashcamSettings?.bufferMinutes || 5) * 60) / Number(state.dashcamSettings?.segmentSeconds || 60)));
+    while (state.dashcamBuffer.length > maxSegments) state.dashcamBuffer.shift();
+}
+
+async function stopDashcamRecording({ keepSegment = true } = {}) {
+    clearDashcamSegmentTimer();
+    if (state.dashcamRecorder && state.dashcamRecorder.state !== 'inactive') {
+        const recorder = state.dashcamRecorder;
+        await new Promise((resolve) => {
+            recorder.onstop = () => {
+                if (keepSegment) finalizeDashcamSegment(true);
+                resolve();
+            };
+            recorder.stop();
+        });
+    }
+    state.dashcamRecorder = null;
+    updateDashcamRecordingStatus();
+}
+
+function dashcamDb() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DASHCAM_DB_NAME, 1);
+        request.onupgradeneeded = () => request.result.createObjectStore(DASHCAM_DB_STORE, { keyPath: 'id' });
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+async function putDashcamRecording(recording) {
+    const db = await dashcamDb();
+    await new Promise((resolve, reject) => {
+        const tx = db.transaction(DASHCAM_DB_STORE, 'readwrite');
+        tx.objectStore(DASHCAM_DB_STORE).put(recording);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+}
+
+async function getDashcamRecordings() {
+    const db = await dashcamDb();
+    const rows = await new Promise((resolve, reject) => {
+        const tx = db.transaction(DASHCAM_DB_STORE, 'readonly');
+        const request = tx.objectStore(DASHCAM_DB_STORE).getAll();
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => reject(request.error);
+    });
+    db.close();
+    return rows.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+}
+
+async function deleteDashcamRecording(id) {
+    const db = await dashcamDb();
+    await new Promise((resolve, reject) => {
+        const tx = db.transaction(DASHCAM_DB_STORE, 'readwrite');
+        tx.objectStore(DASHCAM_DB_STORE).delete(id);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+}
+
+function dashcamExtensionForMime(mimeType) {
+    return String(mimeType || '').includes('mp4') ? 'mp4' : 'webm';
+}
+
+function sanitizeFileNamePart(value) {
+    return String(value || '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9-_]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 60);
+}
+
+function dashcamFileName(recording) {
+    const date = new Date(recording.createdAt || Date.now()).toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-');
+    const street = sanitizeFileNamePart(recording.street || '');
+    return `TankProfi_${date}${street ? `_${street}` : ''}.${dashcamExtensionForMime(recording.mimeType)}`;
+}
+
+function downloadVideoFile(blob, fileName) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return { method: 'download', success: true };
+}
+
+async function exportDashcamRecording(recording, preferred = 'share') {
+    const fileName = dashcamFileName(recording);
+    const blob = recording.blob;
+    const file = new File([blob], fileName, { type: recording.mimeType || blob.type, lastModified: Date.now() });
+    let canShareFiles = false;
+    try {
+        canShareFiles = Boolean(preferred !== 'download' && navigator.share && navigator.canShare && navigator.canShare({ files: [file] }));
+    } catch {
+        canShareFiles = false;
+    }
+    if (canShareFiles) {
+        try {
+            await navigator.share({ files: [file], title: 'TankProfi Dashcam-Aufnahme' });
+            return { method: 'share', success: true };
+        } catch (error) {
+            if (error?.name === 'AbortError') return { method: 'share', success: false, aborted: true };
+            throw error;
+        }
+    }
+    return downloadVideoFile(blob, fileName);
+}
+
+async function saveDashcamSequence() {
+    if (state.dashcamRecorder?.state === 'recording') {
+        const chunks = state.dashcamChunks;
+        if (chunks.length) {
+            const blob = new Blob(chunks, { type: state.dashcamMimeType || 'video/webm' });
+            state.dashcamBuffer.push({
+                id: `dashcam_current_${Date.now()}`,
+                blob,
+                mimeType: blob.type || state.dashcamMimeType || 'video/webm',
+                startedAt: state.dashcamSegmentStartedAt || Date.now(),
+                endedAt: Date.now(),
+                streetStart: dashcamStreetTitle(state.dashcamStableStreet),
+                streetEnd: dashcamStreetTitle(state.dashcamStableStreet),
+                audio: Boolean(state.dashcamSettings?.audio),
+                startPosition: currentDrivingPosition() || state.selectedLocation || null,
+                endPosition: currentDrivingPosition() || state.selectedLocation || null,
+                maxSpeed: Math.max(0, Number(state.drivingSpeedKmh || 0)),
+            });
+            trimDashcamBuffer();
+        }
+    }
+    if (!state.dashcamBuffer.length) {
+        showDashcamMessage('Noch keine Videosequenz im Puffer.');
+        return null;
+    }
+    const mimeType = state.dashcamBuffer.at(-1)?.mimeType || state.dashcamMimeType || 'video/webm';
+    const blob = new Blob(state.dashcamBuffer.map((segment) => segment.blob), { type: mimeType });
+    const first = state.dashcamBuffer[0];
+    const last = state.dashcamBuffer.at(-1);
+    const recording = {
+        id: `dashcam_saved_${Date.now()}`,
+        blob,
+        mimeType,
+        createdAt: Date.now(),
+        startedAt: first.startedAt,
+        endedAt: last.endedAt,
+        durationMs: Math.max(0, Number(last.endedAt || 0) - Number(first.startedAt || 0)),
+        street: dashcamStreetTitle(state.dashcamStableStreet) || first.streetStart || last.streetEnd || '',
+        startPosition: first.startPosition || null,
+        endPosition: last.endPosition || null,
+        maxSpeed: Math.max(...state.dashcamBuffer.map((segment) => Number(segment.maxSpeed || 0))),
+        size: blob.size,
+        audio: state.dashcamBuffer.some((segment) => segment.audio),
+        exportStatus: 'Lokal gespeichert',
+    };
+    await putDashcamRecording(recording);
+    state.dashcamSavedRecordings = await getDashcamRecordings();
+    renderDashcamRecordings();
+    showDashcamMessage('Sequenz lokal gespeichert.');
+    if (state.dashcamSettings?.exportAction === 'share' || state.dashcamSettings?.exportAction === 'download') {
+        await exportDashcamRecording(recording, state.dashcamSettings.exportAction);
+    }
+    return recording;
+}
+
+function dashcamStreetTitle(street) {
+    if (!street) return '';
+    return street.name || street.ref || street.city || street.suburb || '';
+}
+
+function dashcamStreetMeta(street) {
+    if (!street) return 'GPS wird ermittelt';
+    const parts = [];
+    if (street.ref && street.ref !== street.name) parts.push(street.ref);
+    if (street.suburb) parts.push(street.suburb);
+    else if (street.city) parts.push(street.city);
+    return parts.join(' · ') || street.source || '';
+}
+
+function dashcamStreetCacheKey(position) {
+    return `${Number(position.lat).toFixed(4)}:${Number(position.lng).toFixed(4)}`;
+}
+
+function normalizeDashcamStreet(data) {
+    const label = String(data.label || '');
+    const street = String(data.street || '').trim();
+    const refMatch = label.match(/\b[ABLK]\s?\d{1,4}\b/i);
+    const ref = String(data.ref || refMatch?.[0] || '').replace(/\s+/g, '').toUpperCase();
+    const city = String(data.city || '').trim();
+    const suburb = String(data.suburb || '').trim();
+    return {
+        name: street || ref || city || suburb || '',
+        ref,
+        city,
+        suburb,
+        source: data.source || 'reverse',
+    };
+}
+
+function confirmDashcamStreet(street) {
+    if (!dashcamStreetTitle(street)) return;
+    const key = `${street.name}|${street.ref}|${street.city}|${street.suburb}`;
+    const current = state.dashcamCandidateStreet;
+    const currentKey = current ? `${current.name}|${current.ref}|${current.city}|${current.suburb}` : '';
+    if (key === currentKey) {
+        state.dashcamCandidateCount += 1;
+    } else {
+        state.dashcamCandidateStreet = street;
+        state.dashcamCandidateCount = 1;
+    }
+    if (!state.dashcamStableStreet || state.dashcamCandidateCount >= 2) {
+        state.dashcamStableStreet = street;
+        state.dashcamLastConfirmedStreetAt = Date.now();
+    }
+}
+
+async function updateDashcamStreet(position = currentDrivingPosition() || state.selectedLocation) {
+    if (!state.dashcamActive || !state.dashcamSettings?.showStreet || !position || state.dashcamStreetLookupInProgress) return;
+    const lat = Number(position.lat);
+    const lng = Number(position.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    const now = Date.now();
+    const movedKm = state.dashcamLastLookupPosition
+        ? routeDistanceKm(lat, lng, state.dashcamLastLookupPosition.lat, state.dashcamLastLookupPosition.lng)
+        : Number.POSITIVE_INFINITY;
+    if (state.dashcamLastLookupAt && now - state.dashcamLastLookupAt < DASHCAM_STREET_LOOKUP_MIN_MS && movedKm < DASHCAM_STREET_LOOKUP_MIN_KM) return;
+    const cacheKey = dashcamStreetCacheKey({ lat, lng });
+    const cached = state.dashcamStreetCache.get(cacheKey);
+    if (cached && now - cached.cachedAt < DASHCAM_STREET_CACHE_MAX_AGE_MS) {
+        confirmDashcamStreet(cached.street);
+        renderDashcamOverlay();
+        return;
+    }
+    state.dashcamStreetLookupInProgress = true;
+    try {
+        const params = new URLSearchParams({ lat: String(lat), lng: String(lng) });
+        const data = await fetchJson(`/api/reverse.php?${params.toString()}`, { progress: false, timeoutMs: 12000 });
+        const street = normalizeDashcamStreet(data);
+        state.dashcamStreetCache.set(cacheKey, { street, cachedAt: now });
+        state.dashcamLastLookupAt = now;
+        state.dashcamLastLookupPosition = { lat, lng };
+        confirmDashcamStreet(street);
+    } catch {
+        // Keep last stable street visible.
+    } finally {
+        state.dashcamStreetLookupInProgress = false;
+        renderDashcamOverlay();
+    }
+}
+
+function dashcamClockText() {
+    return new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+}
+
+function updateDashcamRecordingStatus() {
+    const recording = state.dashcamRecorder?.state === 'recording';
+    const paused = state.dashcamRecorder?.state === 'paused';
+    const duration = recording || paused
+        ? Math.max(0, Date.now() - Number(state.dashcamRecordingStartedAt || Date.now()))
+        : state.dashcamRecordDurationMs;
+    const mm = String(Math.floor(duration / 60000)).padStart(2, '0');
+    const ss = String(Math.floor((duration % 60000) / 1000)).padStart(2, '0');
+    els.dashcamRecordDot?.classList.toggle('recording', recording);
+    if (els.dashcamRecordStatus) {
+        els.dashcamRecordStatus.textContent = recording ? `REC ${mm}:${ss}` : paused ? `Pause ${mm}:${ss}` : 'Bereit';
+    }
+}
+
+function renderDashcamOverlay() {
+    const street = state.dashcamStableStreet;
+    if (els.dashcamStreetName) {
+        els.dashcamStreetName.textContent = state.dashcamSettings?.showStreet
+            ? (dashcamStreetTitle(street) || 'Strasse wird ermittelt')
+            : '';
+    }
+    if (els.dashcamStreetMeta) {
+        els.dashcamStreetMeta.textContent = state.dashcamSettings?.showPlace
+            ? dashcamStreetMeta(street)
+            : '';
+    }
+    if (els.dashcamSpeedText) {
+        els.dashcamSpeedText.textContent = state.dashcamSettings?.showSpeed ? drivingSpeedText() : '';
+    }
+    if (els.dashcamClockText) {
+        els.dashcamClockText.textContent = state.dashcamSettings?.showClock ? dashcamClockText() : '';
+    }
+    if (els.dashcamGpsStatus) {
+        els.dashcamGpsStatus.textContent = Number.isFinite(state.drivingAccuracy)
+            ? `GPS ${Math.round(state.drivingAccuracy)} m`
+            : 'GPS wird ermittelt';
+    }
+    updateDashcamRecordingStatus();
+}
+
+function showDashcamMessage(message, timeoutMs = 3200) {
+    if (!els.dashcamMessage) return;
+    clearTimeout(state.dashcamMessageTimer);
+    els.dashcamMessage.hidden = false;
+    els.dashcamMessage.textContent = message;
+    state.dashcamMessageTimer = window.setTimeout(() => {
+        els.dashcamMessage.hidden = true;
+    }, timeoutMs);
+}
+
+function revealDashcamControls() {
+    els.dashcamControls?.classList.remove('collapsed');
+    clearTimeout(state.dashcamControlsTimer);
+    state.dashcamControlsTimer = window.setTimeout(() => {
+        els.dashcamControls?.classList.add('collapsed');
+    }, DASHCAM_CONTROLS_HIDE_MS);
+}
+
+async function requestDashcamWakeLock() {
+    if (!navigator.wakeLock || state.dashcamWakeLock) return;
+    try {
+        state.dashcamWakeLock = await navigator.wakeLock.request('screen');
+        state.dashcamWakeLock.addEventListener('release', () => {
+            state.dashcamWakeLock = null;
+        });
+    } catch {
+        state.dashcamWakeLock = null;
+    }
+}
+
+function releaseDashcamWakeLock() {
+    state.dashcamWakeLock?.release?.().catch(() => null);
+    state.dashcamWakeLock = null;
+}
+
+function startDashcamPositionWatch() {
+    if (state.drivingActive || state.dashcamWatchId !== null || !navigator.geolocation) return;
+    state.dashcamWatchId = navigator.geolocation.watchPosition(handleDrivingPosition, () => {
+        if (els.dashcamGpsStatus) els.dashcamGpsStatus.textContent = 'Standort nicht freigegeben';
+    }, {
+        enableHighAccuracy: true,
+        maximumAge: 1000,
+        timeout: 12000,
+    });
+}
+
+function stopDashcamPositionWatch() {
+    if (state.dashcamWatchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(state.dashcamWatchId);
+    state.dashcamWatchId = null;
+}
+
+async function runDashcamCountdown() {
+    if (!state.dashcamSettings?.countdown || !els.dashcamCountdownView) return;
+    els.dashcamCountdownView.hidden = false;
+    for (const value of ['3', '2', '1']) {
+        els.dashcamCountdownView.textContent = value;
+        await new Promise((resolve) => window.setTimeout(resolve, 700));
+    }
+    els.dashcamCountdownView.hidden = true;
+}
+
+async function startDashcamMode(mode = dashboardModeFromSettings()) {
+    if (mode === 'off' || state.dashcamActive) return;
+    state.dashcamActive = true;
+    state.dashcamMode = mode;
+    state.dashcamBuffer = [];
+    state.dashcamStableStreet = null;
+    state.dashcamCandidateStreet = null;
+    state.dashcamCandidateCount = 0;
+    els.dashcamMode.hidden = false;
+    els.dashcamMode.classList.toggle('has-camera', false);
+    document.body.classList.add('dashcam-active');
+    startDashcamPositionWatch();
+    requestDashcamWakeLock();
+    revealDashcamControls();
+    renderDashcamOverlay();
+    await initDashcamCamera(mode);
+    if (mode === 'record' && state.dashcamStream) {
+        await runDashcamCountdown();
+        await startDashcamRecording();
+    }
+    state.dashcamRecordTimer = window.setInterval(() => {
+        renderDashcamOverlay();
+        updateDashcamStreet();
+    }, 1000);
+    updateDashcamStreet();
+}
+
+async function stopDashcamMode({ askSave = true } = {}) {
+    if (!state.dashcamActive) return;
+    if (askSave && state.dashcamRecorder?.state === 'recording') {
+        const save = window.confirm('Letzte Aufnahme sichern?');
+        if (save) await saveDashcamSequence().catch(() => showDashcamMessage('Sequenz konnte nicht gespeichert werden.'));
+    }
+    await stopDashcamRecording({ keepSegment: false }).catch(() => null);
+    state.dashcamStream?.getTracks?.().forEach((track) => track.stop());
+    state.dashcamStream = null;
+    if (els.dashcamVideo) els.dashcamVideo.srcObject = null;
+    clearInterval(state.dashcamRecordTimer);
+    state.dashcamRecordTimer = null;
+    clearDashcamSegmentTimer();
+    clearTimeout(state.dashcamControlsTimer);
+    releaseDashcamWakeLock();
+    stopDashcamPositionWatch();
+    state.dashcamActive = false;
+    state.dashcamMode = 'display';
+    els.dashcamMode?.classList.remove('has-camera');
+    if (els.dashcamMode) els.dashcamMode.hidden = true;
+    document.body.classList.remove('dashcam-active');
+}
+
+async function disableDashcamDuringUse() {
+    if (!state.dashcamActive) return;
+    const save = state.dashcamRecorder?.state === 'recording'
+        ? window.confirm('Letzte Aufnahme vor dem Ausschalten sichern?')
+        : false;
+    if (save) await saveDashcamSequence().catch(() => null);
+    await stopDashcamMode({ askSave: false });
+}
+
+async function toggleDashcamPause() {
+    const recorder = state.dashcamRecorder;
+    if (!recorder) return;
+    if (recorder.state === 'recording') recorder.pause();
+    else if (recorder.state === 'paused') recorder.resume();
+    updateDashcamRecordingStatus();
+}
+
+function formatDashcamDuration(ms) {
+    const seconds = Math.round(Number(ms || 0) / 1000);
+    const mm = Math.floor(seconds / 60);
+    const ss = String(seconds % 60).padStart(2, '0');
+    return `${mm}:${ss} min`;
+}
+
+function formatDashcamBytes(bytes) {
+    const value = Number(bytes || 0);
+    if (value > 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
+    return `${Math.round(value / 1024)} KB`;
+}
+
+async function renderDashcamRecordings() {
+    if (!els.dashcamRecordingsList) return;
+    const recordings = await getDashcamRecordings().catch(() => []);
+    state.dashcamSavedRecordings = recordings;
+    if (!recordings.length) {
+        els.dashcamRecordingsList.textContent = 'Noch keine Aufnahmen.';
+        return;
+    }
+    els.dashcamRecordingsList.innerHTML = recordings.map((recording) => `
+        <article class="dashcam-recording-row" data-dashcam-recording="${escapeHtml(recording.id)}">
+            <span class="dashcam-recording-main">
+                <strong>${escapeHtml(recording.street || 'Dashcam-Aufnahme')}</strong>
+                <small>${escapeHtml(new Date(recording.createdAt).toLocaleString('de-DE'))} · ${escapeHtml(formatDashcamDuration(recording.durationMs))} · ${escapeHtml(formatDashcamBytes(recording.size))}</small>
+                <small>${recording.audio ? 'Mit Ton' : 'Ohne Ton'} · ${escapeHtml(recording.exportStatus || 'Lokal gespeichert')}</small>
+            </span>
+            <span class="dashcam-recording-actions">
+                <button type="button" data-dashcam-play>Abspielen</button>
+                <button type="button" data-dashcam-share>In Mediathek sichern</button>
+                <button type="button" data-dashcam-download>Herunterladen</button>
+                <button type="button" data-dashcam-delete>Loeschen</button>
+            </span>
+        </article>
+    `).join('');
+}
+
+async function handleDashcamRecordingAction(event) {
+    const row = event.target.closest('[data-dashcam-recording]');
+    if (!row) return;
+    const recording = state.dashcamSavedRecordings.find((item) => item.id === row.dataset.dashcamRecording);
+    if (!recording) return;
+    if (event.target.closest('[data-dashcam-delete]')) {
+        await deleteDashcamRecording(recording.id);
+        renderDashcamRecordings();
+        return;
+    }
+    if (event.target.closest('[data-dashcam-play]')) {
+        const url = URL.createObjectURL(recording.blob);
+        window.open(url, '_blank', 'noopener');
+        window.setTimeout(() => URL.revokeObjectURL(url), 60 * 1000);
+        return;
+    }
+    if (event.target.closest('[data-dashcam-share]')) {
+        showDashcamMessage('iPhone: Im Teilen-Menue "Video sichern" waehlen.', 4800);
+        await exportDashcamRecording(recording, 'share').catch(() => showDashcamMessage('Export fehlgeschlagen.'));
+        return;
+    }
+    if (event.target.closest('[data-dashcam-download]')) {
+        await exportDashcamRecording(recording, 'download').catch(() => showDashcamMessage('Download fehlgeschlagen.'));
+    }
+}
+
+function handleDashcamOrientationChange() {
+    if (isLandscapeViewport()) {
+        maybeScheduleDashcamAutoStart();
+        return;
+    }
+    clearDashcamLandscapeTimer();
+    if (state.dashcamActive) {
+        stopDashcamMode({ askSave: true }).catch(() => null);
+    }
 }
 
 function isDrivingMoving() {
@@ -7076,7 +7928,11 @@ function rememberDrivingPosition(position, { triggerInitialUpdate = true } = {})
 }
 
 function handleDrivingPosition(position) {
-    rememberDrivingPosition(position);
+    const sample = rememberDrivingPosition(position);
+    if (state.dashcamActive) {
+        renderDashcamOverlay();
+        updateDashcamStreet(sample).catch(() => null);
+    }
     syncDrivingControlsVisibility();
     updateDrivingMapPositionOnly();
     if (
@@ -10233,6 +11089,9 @@ function bindEvents() {
     moveAdminContentIntoAdminSheet();
     updateViewportHeightVar();
     window.addEventListener('resize', updateViewportHeightVar);
+    window.addEventListener('resize', handleDashcamOrientationChange);
+    window.addEventListener('orientationchange', handleDashcamOrientationChange);
+    screen.orientation?.addEventListener?.('change', handleDashcamOrientationChange);
     window.visualViewport?.addEventListener('resize', updateViewportHeightVar);
     window.visualViewport?.addEventListener('scroll', updateViewportHeightVar);
     els.searchInput.addEventListener('focus', clearDeliveredSearchText);
@@ -10277,7 +11136,48 @@ function bindEvents() {
             setHelpOpen(false);
         }
     });
-    document.addEventListener('visibilitychange', handleDriveWakeLockVisibility);
+    document.addEventListener('visibilitychange', () => {
+        handleDriveWakeLockVisibility();
+        if (document.visibilityState === 'visible') {
+            if (state.dashcamActive) requestDashcamWakeLock();
+            maybeScheduleDashcamAutoStart();
+        }
+    });
+    [
+        els.dashcamEnabled,
+        els.dashcamDisplayEnabled,
+        els.dashcamAutoStart,
+        els.dashcamAutoRecord,
+        els.dashcamAudio,
+        els.dashcamCountdown,
+        els.dashcamModeSelect,
+        els.dashcamQuality,
+        els.dashcamSegment,
+        els.dashcamBuffer,
+        els.dashcamExport,
+        els.dashcamStreet,
+        els.dashcamPlace,
+        els.dashcamSpeed,
+        els.dashcamClock,
+    ].filter(Boolean).forEach((control) => {
+        control.addEventListener('change', updateDashcamSettingFromControls);
+    });
+    els.dashcamMode?.addEventListener('pointerdown', revealDashcamControls);
+    els.dashcamSave?.addEventListener('click', () => saveDashcamSequence().catch(() => showDashcamMessage('Sequenz konnte nicht gespeichert werden.')));
+    els.dashcamPause?.addEventListener('click', toggleDashcamPause);
+    els.dashcamStop?.addEventListener('click', () => stopDashcamMode({ askSave: true }).catch(() => null));
+    els.dashcamExit?.addEventListener('click', () => stopDashcamMode({ askSave: true }).catch(() => null));
+    els.dashcamRecordingsButton?.addEventListener('click', () => {
+        if (!els.dashcamRecordings) return;
+        els.dashcamRecordings.hidden = false;
+        renderDashcamRecordings().catch(() => null);
+    });
+    els.dashcamRecordingsClose?.addEventListener('click', () => {
+        if (els.dashcamRecordings) els.dashcamRecordings.hidden = true;
+    });
+    els.dashcamRecordingsList?.addEventListener('click', (event) => {
+        handleDashcamRecordingAction(event).catch(() => showDashcamMessage('Aktion konnte nicht ausgefuehrt werden.'));
+    });
     els.results.addEventListener('pointerdown', () => {
         if (state.listMode === 'driving' && state.view === 'list') revealDrivingControls();
     });
@@ -10636,6 +11536,7 @@ function bindEvents() {
 loadFavorites();
 startSplashScreen();
 restoreUserSettings();
+loadDashcamSettings();
 setVehicleMode(state.vehicleMode, { persist: false, silent: true });
 initInstallPrompt();
 registerServiceWorker();

@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
-    <link rel="stylesheet" href="assets/css/app.css?v=20260712-drive-highway-forward-cards">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260729-dashcam-mode">
 </head>
 <body>
     <section class="splash-screen" id="splashScreen" aria-label="Tankprofi wird geladen">
@@ -298,6 +298,98 @@
                         </label>
                     </div>
 
+                    <section class="share-panel dashcam-settings-panel" aria-label="Dashcam-Fahrmodus">
+                        <strong>Dashcam-Fahrmodus</strong>
+                        <span>Kamera und Aufnahmen bleiben lokal auf diesem Geraet. Querformat kann eine eigene Fahranzeige starten.</span>
+                        <div class="switch-row dashcam-switches">
+                            <label class="switch-label">
+                                <input id="dashcamEnabled" type="checkbox">
+                                <span>Dashcam-Funktion verwenden</span>
+                            </label>
+                            <label class="switch-label">
+                                <input id="dashcamDisplayEnabled" type="checkbox" checked>
+                                <span>Fahranzeige im Querformat verwenden</span>
+                            </label>
+                            <label class="switch-label">
+                                <input id="dashcamAutoStart" type="checkbox">
+                                <span>Automatisch bei Querformat starten</span>
+                            </label>
+                            <label class="switch-label">
+                                <input id="dashcamAutoRecord" type="checkbox" checked>
+                                <span>Videoaufnahme automatisch starten</span>
+                            </label>
+                            <label class="switch-label">
+                                <input id="dashcamAudio" type="checkbox">
+                                <span>Ton aufnehmen</span>
+                            </label>
+                            <label class="switch-label">
+                                <input id="dashcamCountdown" type="checkbox" checked>
+                                <span>Countdown</span>
+                            </label>
+                        </div>
+                        <div class="filter-grid dashcam-setting-grid">
+                            <div class="field-group">
+                                <label for="dashcamModeSelect">Standardmodus</label>
+                                <select id="dashcamModeSelect">
+                                    <option value="record">Dashcam mit Aufnahme</option>
+                                    <option value="camera">Kamera ohne Aufnahme</option>
+                                    <option value="display">Fahranzeige ohne Kamera</option>
+                                </select>
+                            </div>
+                            <div class="field-group">
+                                <label for="dashcamQualitySelect">Aufnahmequalitaet</label>
+                                <select id="dashcamQualitySelect">
+                                    <option value="720p" selected>720p</option>
+                                    <option value="1080p">1080p</option>
+                                </select>
+                            </div>
+                            <div class="field-group">
+                                <label for="dashcamSegmentSelect">Segmentlaenge</label>
+                                <select id="dashcamSegmentSelect">
+                                    <option value="30">30 s</option>
+                                    <option value="60" selected>60 s</option>
+                                    <option value="120">120 s</option>
+                                </select>
+                            </div>
+                            <div class="field-group">
+                                <label for="dashcamBufferSelect">Pufferdauer</label>
+                                <select id="dashcamBufferSelect">
+                                    <option value="2">2 min</option>
+                                    <option value="5" selected>5 min</option>
+                                    <option value="10">10 min</option>
+                                </select>
+                            </div>
+                            <div class="field-group">
+                                <label for="dashcamExportSelect">Nach dem Sichern</label>
+                                <select id="dashcamExportSelect">
+                                    <option value="local" selected>Nur lokal speichern</option>
+                                    <option value="share">Teilen-Menue anbieten</option>
+                                    <option value="download">Download anbieten</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="switch-row dashcam-switches">
+                            <label class="switch-label">
+                                <input id="dashcamStreet" type="checkbox" checked>
+                                <span>Strassenname anzeigen</span>
+                            </label>
+                            <label class="switch-label">
+                                <input id="dashcamPlace" type="checkbox" checked>
+                                <span>Ort anzeigen</span>
+                            </label>
+                            <label class="switch-label">
+                                <input id="dashcamSpeed" type="checkbox" checked>
+                                <span>Geschwindigkeit anzeigen</span>
+                            </label>
+                            <label class="switch-label">
+                                <input id="dashcamClock" type="checkbox" checked>
+                                <span>Uhrzeit anzeigen</span>
+                            </label>
+                        </div>
+                        <button class="text-button" id="dashcamRecordingsButton" type="button">Gesicherte Aufnahmen anzeigen</button>
+                        <span id="dashcamSettingsStatus">Dashcam startet erst nach deiner Freigabe.</span>
+                    </section>
+
                     <section class="share-panel" aria-label="App weitergeben">
                         <button class="home-install-button" id="homeInstallButton" type="button">
                             <span class="home-install-icon" aria-hidden="true">H</span>
@@ -434,6 +526,40 @@
         </aside>
     </div>
 
+    <section class="dashcam-mode" id="dashcamMode" aria-label="Dashcam-Fahrmodus" hidden>
+        <video class="dashcam-video" id="dashcamVideo" autoplay muted playsinline></video>
+        <div class="dashcam-display-fallback" id="dashcamFallback">Fahranzeige</div>
+        <div class="dashcam-shade" aria-hidden="true"></div>
+        <div class="dashcam-street-panel">
+            <strong id="dashcamStreetName">Strasse wird ermittelt</strong>
+            <small id="dashcamStreetMeta">GPS wird ermittelt</small>
+        </div>
+        <div class="dashcam-status-panel">
+            <span class="dashcam-record-dot" id="dashcamRecordDot"></span>
+            <strong id="dashcamRecordStatus">Bereit</strong>
+            <small id="dashcamGpsStatus">GPS offen</small>
+        </div>
+        <div class="dashcam-speed-panel">
+            <strong id="dashcamSpeedText">0 km/h</strong>
+            <small id="dashcamClockText">--:--</small>
+        </div>
+        <div class="dashcam-countdown" id="dashcamCountdownView" hidden>3</div>
+        <div class="dashcam-message" id="dashcamMessage" hidden></div>
+        <div class="dashcam-controls" id="dashcamControls">
+            <button class="dashcam-save-button" id="dashcamSaveButton" type="button">Sequenz sichern</button>
+            <button id="dashcamPauseButton" type="button">Pause</button>
+            <button id="dashcamStopButton" type="button">Beenden</button>
+            <button id="dashcamExitButton" type="button">Zurueck</button>
+        </div>
+        <div class="dashcam-recordings" id="dashcamRecordings" hidden>
+            <div class="dashcam-recordings-header">
+                <strong>Gesicherte Aufnahmen</strong>
+                <button id="dashcamRecordingsClose" type="button" aria-label="Aufnahmen schliessen">x</button>
+            </div>
+            <div id="dashcamRecordingsList">Noch keine Aufnahmen.</div>
+        </div>
+    </section>
+
     <template id="stationTemplate">
         <article class="station-item" tabindex="0">
             <div class="rank"></div>
@@ -453,7 +579,7 @@
     <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script type="module" src="assets/js/firebase-app.js?v=20260701-city-speed-display-plus3"></script>
-    <script src="assets/js/app.js?v=20260712-city-empty-rural-fallback" defer></script>
+    <script src="assets/js/app.js?v=20260729-dashcam-mode" defer></script>
 </body>
 </html>
 

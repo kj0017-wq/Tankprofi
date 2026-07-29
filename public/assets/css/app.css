@@ -4733,6 +4733,301 @@ button.city-row:focus {
     background: var(--yellow-300);
 }
 
+.dashcam-settings-panel {
+    gap: 12px;
+}
+
+.dashcam-switches {
+    grid-template-columns: 1fr;
+}
+
+.dashcam-setting-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashcam-mode {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: grid;
+    overflow: hidden;
+    color: var(--white);
+    background: #071018;
+    font-family: inherit;
+    touch-action: manipulation;
+}
+
+.dashcam-mode[hidden] {
+    display: none;
+}
+
+.dashcam-video,
+.dashcam-display-fallback,
+.dashcam-shade {
+    position: absolute;
+    inset: 0;
+}
+
+.dashcam-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: #071018;
+}
+
+.dashcam-display-fallback {
+    display: grid;
+    place-items: center;
+    color: rgba(255, 255, 255, 0.28);
+    font-size: clamp(2rem, 8vw, 6rem);
+    font-weight: 950;
+    letter-spacing: 0;
+    background:
+        linear-gradient(135deg, rgba(15, 92, 65, 0.58), rgba(10, 35, 70, 0.8)),
+        #071018;
+}
+
+.dashcam-mode.has-camera .dashcam-display-fallback {
+    display: none;
+}
+
+.dashcam-shade {
+    pointer-events: none;
+    background:
+        linear-gradient(180deg, rgba(0, 0, 0, 0.62), transparent 32%, transparent 62%, rgba(0, 0, 0, 0.68)),
+        linear-gradient(90deg, rgba(0, 0, 0, 0.36), transparent 35%, transparent 65%, rgba(0, 0, 0, 0.36));
+}
+
+.dashcam-street-panel,
+.dashcam-status-panel,
+.dashcam-speed-panel,
+.dashcam-controls,
+.dashcam-message,
+.dashcam-countdown,
+.dashcam-recordings {
+    position: relative;
+    z-index: 2;
+}
+
+.dashcam-street-panel {
+    align-self: start;
+    justify-self: center;
+    display: grid;
+    justify-items: center;
+    max-width: min(92vw, 980px);
+    margin-top: max(14px, env(safe-area-inset-top));
+    padding: 10px 20px 12px;
+    border: 3px solid rgba(255, 255, 255, 0.88);
+    border-radius: 10px;
+    color: #ffffff;
+    background: rgba(5, 12, 22, 0.72);
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.34);
+    text-align: center;
+}
+
+.dashcam-street-panel strong {
+    display: -webkit-box;
+    overflow: hidden;
+    max-width: 100%;
+    font-size: clamp(1.5rem, 5.4vw, 4rem);
+    font-weight: 950;
+    line-height: 1.02;
+    text-overflow: ellipsis;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.dashcam-street-panel small {
+    margin-top: 4px;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: clamp(0.82rem, 2vw, 1.25rem);
+    font-weight: 900;
+}
+
+.dashcam-status-panel {
+    position: absolute;
+    top: max(14px, env(safe-area-inset-top));
+    right: max(14px, env(safe-area-inset-right));
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    gap: 4px 8px;
+    padding: 8px 12px;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    border-radius: 10px;
+    background: rgba(5, 12, 22, 0.68);
+    font-weight: 950;
+}
+
+.dashcam-status-panel small {
+    grid-column: 1 / -1;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 0.75rem;
+}
+
+.dashcam-record-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #7b8794;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.18);
+}
+
+.dashcam-record-dot.recording {
+    background: #ef233c;
+    box-shadow: 0 0 0 3px rgba(239, 35, 60, 0.32), 0 0 18px rgba(239, 35, 60, 0.62);
+}
+
+.dashcam-speed-panel {
+    position: absolute;
+    left: max(14px, env(safe-area-inset-left));
+    bottom: max(14px, env(safe-area-inset-bottom));
+    display: grid;
+    gap: 2px;
+    padding: 10px 16px;
+    border: 3px solid rgba(255, 255, 255, 0.86);
+    border-radius: 10px;
+    background: rgba(5, 12, 22, 0.7);
+}
+
+.dashcam-speed-panel strong {
+    font-size: clamp(1.8rem, 6vw, 4.6rem);
+    font-weight: 950;
+    line-height: 1;
+}
+
+.dashcam-speed-panel small {
+    color: rgba(255, 255, 255, 0.82);
+    font-size: clamp(0.85rem, 2.2vw, 1.3rem);
+    font-weight: 900;
+}
+
+.dashcam-controls {
+    position: absolute;
+    left: 50%;
+    bottom: max(14px, env(safe-area-inset-bottom));
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transform: translateX(-50%);
+    transition: opacity 0.18s ease;
+}
+
+.dashcam-controls.collapsed {
+    pointer-events: none;
+    opacity: 0;
+}
+
+.dashcam-controls button {
+    min-height: 52px;
+    padding: 0 16px;
+    border: 3px solid var(--ink);
+    border-radius: 10px;
+    color: var(--ink);
+    background: var(--yellow-300);
+    box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.36);
+    font: inherit;
+    font-weight: 950;
+}
+
+.dashcam-controls .dashcam-save-button {
+    min-width: min(42vw, 360px);
+    background: #29c56f;
+}
+
+.dashcam-message {
+    align-self: center;
+    justify-self: center;
+    max-width: min(82vw, 760px);
+    padding: 12px 18px;
+    border: 2px solid rgba(255, 255, 255, 0.82);
+    border-radius: 10px;
+    background: rgba(5, 12, 22, 0.8);
+    font-weight: 900;
+    text-align: center;
+}
+
+.dashcam-countdown {
+    align-self: center;
+    justify-self: center;
+    font-size: clamp(4rem, 18vw, 11rem);
+    font-weight: 950;
+    text-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+}
+
+.dashcam-recordings {
+    position: absolute;
+    inset: 18px;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 12px;
+    padding: 16px;
+    border: 3px solid var(--ink);
+    border-radius: 10px;
+    color: var(--ink);
+    background: #f3f7fb;
+    overflow: hidden;
+}
+
+.dashcam-recordings[hidden] {
+    display: none;
+}
+
+.dashcam-recordings-header,
+.dashcam-recording-row,
+.dashcam-recording-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.dashcam-recordings-header {
+    justify-content: space-between;
+}
+
+.dashcam-recordings-header button,
+.dashcam-recording-actions button {
+    min-height: 38px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    background: var(--cream-100);
+    font: inherit;
+    font-weight: 950;
+}
+
+#dashcamRecordingsList {
+    display: grid;
+    gap: 10px;
+    overflow: auto;
+}
+
+.dashcam-recording-row {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    padding: 10px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    background: var(--white);
+}
+
+.dashcam-recording-main {
+    display: grid;
+    gap: 2px;
+    min-width: min(420px, 100%);
+}
+
+.dashcam-recording-main small {
+    color: var(--gray-700);
+    font-weight: 850;
+}
+
+@media (orientation: portrait) {
+    .dashcam-mode {
+        display: none;
+    }
+}
+
 .driving-mode.view-map .user-location-marker,
 .user-location-marker.driving-location-marker {
     width: 42px;
