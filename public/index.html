@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="assets/css/app.css?v=20260729-drive-maplibre-prototype">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260802-drive-street-header">
 </head>
 <body>
     <section class="splash-screen" id="splashScreen" aria-label="Tankprofi wird geladen">
@@ -110,6 +110,10 @@
                     <div id="drivingVectorMap" class="driving-vector-map" hidden></div>
                     <button class="driving-map-back" id="drivingMapBackButton" type="button">Liste</button>
                     <div class="driving-map-speed" id="drivingMapSpeed" aria-label="Geschwindigkeit">0 km/h</div>
+                    <div class="driving-map-zoom-controls" aria-label="Karte zoomen">
+                        <button id="drivingMapZoomInButton" type="button" aria-label="Karte vergroessern">+</button>
+                        <button id="drivingMapZoomOutButton" type="button" aria-label="Karte verkleinern">-</button>
+                    </div>
                     <div class="driving-map-nearest" id="drivingMapNearest" aria-live="polite"></div>
                     <div class="map-legend" aria-label="Marker Legende">
                         <span><i class="dot cheap"></i>günstig</span>
@@ -562,7 +566,11 @@
         <div class="dashcam-recordings-page-body">
             <span>Lokale Aufnahmen dieses Geraets. Abspielen, archivieren oder loeschen.</span>
             <div class="dashcam-settings-player" id="dashcamSettingsPlayer" hidden>
-                <video id="dashcamSettingsVideo" controls playsinline></video>
+                <div class="dashcam-settings-video-wrap">
+                    <video id="dashcamSettingsVideo" controls playsinline>
+                        <track id="dashcamPlaybackTrack" kind="subtitles" srclang="de" label="Fahrtdaten" default>
+                    </video>
+                </div>
                 <button class="text-button" id="dashcamSettingsPlayerClose" type="button">Player schliessen</button>
             </div>
             <div id="dashcamSettingsRecordingsList">Noch nicht geladen.</div>
@@ -605,6 +613,48 @@
         </div>
     </section>
 
+    <section class="trip-summary-screen" id="tripSummaryScreen" aria-label="Fahrtzusammenfassung" hidden>
+        <div class="trip-summary-card" role="dialog" aria-modal="true" aria-labelledby="tripSummaryTitle">
+            <span class="trip-summary-kicker">Fahrt beendet</span>
+            <strong id="tripSummaryTitle">Aktuelle Fahrt</strong>
+            <div class="trip-summary-grid">
+                <span>
+                    <small>Fahrt Start</small>
+                    <b id="tripSummaryStart">--:--</b>
+                </span>
+                <span>
+                    <small>Fahrtende</small>
+                    <b id="tripSummaryEnd">--:--</b>
+                </span>
+                <span class="trip-summary-wide">
+                    <small>Von</small>
+                    <b id="tripSummaryStreetStart">Strasse offen</b>
+                </span>
+                <span class="trip-summary-wide">
+                    <small>Nach</small>
+                    <b id="tripSummaryStreetEnd">Strasse offen</b>
+                </span>
+                <span>
+                    <small>Fahrzeit</small>
+                    <b id="tripSummaryDuration">0 s</b>
+                </span>
+                <span>
+                    <small>Strecke</small>
+                    <b id="tripSummaryDistance">0 m</b>
+                </span>
+                <span>
+                    <small>Geschwindigkeit</small>
+                    <b id="tripSummaryAverageSpeed">0 km/h</b>
+                </span>
+                <span class="trip-summary-wide">
+                    <small>Akku</small>
+                    <b id="tripSummaryBattery"></b>
+                </span>
+            </div>
+            <button class="text-button" id="tripSummaryCloseButton" type="button">Schliessen</button>
+        </div>
+    </section>
+
     <template id="stationTemplate">
         <article class="station-item" tabindex="0">
             <div class="rank"></div>
@@ -625,7 +675,7 @@
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script type="module" src="assets/js/firebase-app.js?v=20260701-city-speed-display-plus3"></script>
-    <script src="assets/js/app.js?v=20260729-drive-maplibre-prototype" defer></script>
+    <script src="assets/js/app.js?v=20260802-drive-street-header" defer></script>
 </body>
 </html>
 

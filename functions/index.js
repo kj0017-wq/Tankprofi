@@ -4654,9 +4654,31 @@ async function mergeRouteTankpointPrices(points) {
   }));
 }
 
+async function enrichRouteTankpointsWithAutobahnPrices(points, refreshPrices = false) {
+  const enriched = await enrichAutobahnStationsWithPrices(points, refreshPrices);
+  return enriched.map((station, index) => {
+    const point = points[index] || {};
+    const priceStationId = String(station.tankerkoenigId || station.priceStationId || point.priceStationId || '').trim();
+    return {
+      ...point,
+      stationId: priceStationId || point.stationId,
+      priceStationId,
+      missingPriceStationId: !priceStationId,
+      brand: station.brand || point.brand,
+      isOpen: station.isOpen ?? point.isOpen,
+      prices: station.prices || point.prices,
+      priceSource: station.priceSource || point.priceSource,
+      priceMatch: station.priceMatch || point.priceMatch || null,
+      lastUpdated: isoFromTimestamp(station.currentPricesUpdatedAt || point.lastUpdated) || point.lastUpdated,
+    };
+  });
+}
+
 async function handleRouteTankpoints(req, res) {
   const route = String(req.query.route || req.query.autobahn || 'ALL').trim().toUpperCase().replace(/\s+/g, '');
   if (route !== 'ALL' && !/^A\d+$/i.test(route)) return sendJson(res, { error: 'Unsupported route.' }, 422);
+  const includePrices = String(req.query.prices || '0') === '1';
+  const refreshPrices = includePrices && String(req.query.refresh || '0') === '1' && route !== 'ALL';
 
   const [prepared, unified] = await Promise.all([
     loadRouteTankpointsFromCollection('autobahnTankpunkte', route).catch(() => []),
@@ -4670,7 +4692,10 @@ async function handleRouteTankpoints(req, res) {
     byId.set(key, { ...existing, ...point });
   });
 
-  const tankpoints = await mergeRouteTankpointPrices([...byId.values()]);
+  let tankpoints = await mergeRouteTankpointPrices([...byId.values()]);
+  if (includePrices && route !== 'ALL') {
+    tankpoints = await enrichRouteTankpointsWithAutobahnPrices(tankpoints, refreshPrices);
+  }
   tankpoints.sort((a, b) => {
     const aSort = Number.isFinite(a.kmPosition) ? a.kmPosition : Number.isFinite(a.streckenIndex) ? a.streckenIndex : a.lat;
     const bSort = Number.isFinite(b.kmPosition) ? b.kmPosition : Number.isFinite(b.streckenIndex) ? b.streckenIndex : b.lat;

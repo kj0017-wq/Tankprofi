@@ -2,7 +2,7 @@ if (window.location.protocol === 'file:') {
     window.location.replace('http://localhost:8080/');
 }
 
-const appVersion = '20260729-drive-maplibre-prototype';
+const appVersion = '20260802-drive-street-header';
 const MAPTILER_API_KEY = 'U9TxjLpmNg3VlA1jqsRa';
 const DEFAULT_VEHICLE_MODE = 'combustion';
 const CHARGING_AUTOBAHN_CACHE_KEY = 'tankprofi_charging_autobahn_cache_v1';
@@ -17,6 +17,8 @@ const ELECTRIC_RURAL_RADIUS_KM = 50;
 const ELECTRIC_NEAREST_LIMIT = 100;
 const ELECTRIC_ROUTE_CORRIDOR_KM = 8;
 const DRIVE_HIGHWAY_PRICE_MAX_AGE_MS = 15 * 60 * 1000;
+const STORED_FUEL_OUTLIER_REF_AGE_MS = 48 * 60 * 60 * 1000;
+const STORED_FUEL_OUTLIER_GAP = 0.2;
 const USAGE_PRICE_MAX_AGE_MS = 30 * 60 * 1000;
 const DRIVE_UPDATE_INTERVAL_MS = 5000;
 const DRIVE_POSITION_EVALUATE_MS = 30000;
@@ -28,8 +30,8 @@ const DASHCAM_SETTINGS_KEY = 'tankprofi_dashcam_settings_v1';
 const DASHCAM_DB_NAME = 'tankprofi_dashcam_v1';
 const DASHCAM_DB_STORE = 'recordings';
 const DASHCAM_LANDSCAPE_STABLE_MS = 2000;
-const DASHCAM_STREET_LOOKUP_MIN_MS = 7000;
-const DASHCAM_STREET_LOOKUP_MIN_KM = 0.04;
+const DASHCAM_STREET_LOOKUP_MIN_MS = 4000;
+const DASHCAM_STREET_LOOKUP_MIN_KM = 0.025;
 const DASHCAM_STREET_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const DASHCAM_CONTROLS_HIDE_MS = 4500;
 const DASHCAM_PREFERRED_MIME_TYPES = ['video/mp4;codecs=h264', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
@@ -52,7 +54,7 @@ const DRIVE_ROUTE_STABLE_MAX_KM = 0.8;
 const DRIVE_ROUTE_LEFT_AFTER_MS = 45 * 1000;
 const DRIVE_ROUTE_HOLD_MS = 90 * 1000;
 const DRIVE_ROUTE_HOLD_MAX_KM = 4;
-const DRIVE_ROUTE_REFRESH_MS = 20 * 60 * 1000;
+const DRIVE_ROUTE_REFRESH_MS = 60 * 1000;
 const DRIVE_HIGHWAY_SPEED_CERTAIN_KMH = 100;
 const DRIVE_HIGHWAY_SPEED_ROUTE_MAX_KM = 3.5;
 const DRIVE_HIGHWAY_SPEED_ROUTE_RECENT_MAX_KM = 6;
@@ -60,18 +62,21 @@ const DRIVE_HIGHWAY_SPEED_MAX_BEARING_DELTA = 35;
 const DRIVE_POSITION_STALE_MS = 15 * 1000;
 const DRIVE_COMPASS_REFRESH_MS = 30 * 1000;
 const DRIVE_COMPASS_RENDER_FAST_MS = 1200;
-const DRIVE_MAP_FOLLOW_MIN_MS = 4800;
+const DRIVE_WAKE_LOCK_REFRESH_MS = 8000;
+const DRIVE_MAP_FOLLOW_MIN_MS = 900;
 const DRIVE_MAP_MANUAL_PAUSE_MS = 15 * 1000;
 const DRIVE_MAP_INITIAL_ZOOM_DELAY_MS = 5 * 1000;
 const DRIVE_MAP_NEAREST_OPEN_DELAY_MS = 1000;
-const DRIVE_MAP_FOLLOW_ZOOM = 17;
-const DRIVE_MAP_USER_VERTICAL_OFFSET_RATIO = 0.16;
-const DRIVE_MAP_BEARING_MIN_SPEED_KMH = 8;
-const DRIVE_MAP_BEARING_MIN_DELTA = 4;
-const DRIVE_MAP_BEARING_MAX_STEP = 24;
-const DRIVE_MAP_LOOKAHEAD_MIN_KM = 0.08;
-const DRIVE_MAP_LOOKAHEAD_MAX_KM = 0.34;
-const DRIVE_MAP_CENTER_MIN_MOVE_KM = 0.04;
+const DRIVE_MAP_FOLLOW_ZOOM = 15.4;
+const DRIVE_MAP_USER_VERTICAL_OFFSET_RATIO = 0;
+const DRIVE_MAP_BEARING_MIN_SPEED_KMH = 2;
+const DRIVE_MAP_BEARING_MIN_DELTA = 1;
+const DRIVE_MAP_BEARING_MAX_STEP = 60;
+const DRIVE_MAP_LOOKAHEAD_MIN_KM = 0;
+const DRIVE_MAP_LOOKAHEAD_MAX_KM = 0;
+const DRIVE_MAP_CENTER_MIN_MOVE_KM = 0.012;
+const DRIVE_VECTOR_MAP_PITCH = 0;
+const DRIVE_VECTOR_MAP_MARKER_OFFSET_Y = -115;
 const DRIVE_CITY_MAP_RADIUS_KM = 0.85;
 const DRIVE_CONTROL_REVEAL_MS = 10 * 1000;
 const DRIVE_CONTROL_MOVING_KMH = 5;
@@ -262,6 +267,8 @@ const state = {
     drivingMapLastAutoFitKey: null,
     drivingMapBearing: 0,
     drivingMapBearingAt: 0,
+    drivingMapZoomOverride: null,
+    drivingDistanceRenderAt: 0,
     drivingControlsVisibleUntil: 0,
     drivingControlsTimer: null,
     drivingListAutoTopTimer: null,
@@ -351,6 +358,20 @@ const state = {
     drivingSpeedKmh: null,
     drivingSpeedUpdatedAt: null,
     drivingSpeedResetTimer: null,
+    drivingWakeLockTimer: null,
+    drivingWakeFallbackVideo: null,
+    drivingWakeFallbackCanvas: null,
+    drivingWakeFallbackCtx: null,
+    drivingWakeFallbackTimer: null,
+    drivingWakeFallbackStream: null,
+    drivingTripStartedAt: null,
+    drivingTripEndedAt: null,
+    drivingTripDistanceKm: 0,
+    drivingTripLastPosition: null,
+    drivingTripStartStreet: '',
+    drivingTripEndStreet: '',
+    drivingBatteryStartLevel: null,
+    drivingBatteryStartCharging: null,
     drivingAccuracy: null,
     drivingNearestRouteDistanceKm: null,
     drivingCurrentRoutePosition: null,
@@ -381,12 +402,17 @@ const state = {
     drivingMessage: 'Fahrmodus starten.',
     dashcamActive: false,
     dashcamPromptShown: false,
+    dashcamStopping: false,
+    dashcamSavePromptActive: false,
     dashcamLandscapeTimer: null,
     dashcamControlsTimer: null,
     dashcamSettings: null,
     dashcamStream: null,
     dashcamWatchId: null,
     dashcamRecorder: null,
+    dashcamRecordingCanvas: null,
+    dashcamRecordingFrameId: null,
+    dashcamRecordingUsesOverlay: false,
     dashcamMimeType: '',
     dashcamRecordingStartedAt: null,
     dashcamPausedAt: null,
@@ -417,6 +443,7 @@ const state = {
     normalSearchLastMeta: null,
     normalSearchSnapshotBeforeDrive: null,
     normalSearchSnapshotBeforeSection: null,
+    drivingExitLocalSnapshot: null,
     installPrompt: null,
     splashStartedAt: 0,
     splashHidden: false,
@@ -498,6 +525,8 @@ const els = {
     resultCount: document.querySelector('#resultCount'),
     resultMeta: document.querySelector('#resultMeta'),
     drivingMapBack: document.querySelector('#drivingMapBackButton'),
+    drivingMapZoomIn: document.querySelector('#drivingMapZoomInButton'),
+    drivingMapZoomOut: document.querySelector('#drivingMapZoomOutButton'),
     drivingVectorMap: document.querySelector('#drivingVectorMap'),
     drivingMapSpeed: document.querySelector('#drivingMapSpeed'),
     drivingMapNearest: document.querySelector('#drivingMapNearest'),
@@ -552,10 +581,21 @@ const els = {
     dashcamCheapestName: document.querySelector('#dashcamCheapestName'),
     dashcamCheapestPrice: document.querySelector('#dashcamCheapestPrice'),
     dashcamCheapestDistance: document.querySelector('#dashcamCheapestDistance'),
+    tripSummaryScreen: document.querySelector('#tripSummaryScreen'),
+    tripSummaryStart: document.querySelector('#tripSummaryStart'),
+    tripSummaryEnd: document.querySelector('#tripSummaryEnd'),
+    tripSummaryStreetStart: document.querySelector('#tripSummaryStreetStart'),
+    tripSummaryStreetEnd: document.querySelector('#tripSummaryStreetEnd'),
+    tripSummaryDuration: document.querySelector('#tripSummaryDuration'),
+    tripSummaryDistance: document.querySelector('#tripSummaryDistance'),
+    tripSummaryAverageSpeed: document.querySelector('#tripSummaryAverageSpeed'),
+    tripSummaryBattery: document.querySelector('#tripSummaryBattery'),
+    tripSummaryClose: document.querySelector('#tripSummaryCloseButton'),
     dashcamSettingsRecordingsRefresh: document.querySelector('#dashcamSettingsRecordingsRefresh'),
     dashcamSettingsRecordingsList: document.querySelector('#dashcamSettingsRecordingsList'),
     dashcamSettingsPlayer: document.querySelector('#dashcamSettingsPlayer'),
     dashcamSettingsVideo: document.querySelector('#dashcamSettingsVideo'),
+    dashcamPlaybackTrack: document.querySelector('#dashcamPlaybackTrack'),
     dashcamSettingsPlayerClose: document.querySelector('#dashcamSettingsPlayerClose'),
 };
 
@@ -934,13 +974,21 @@ function selectedFuelPriceStand(station, fuel = els.fuel.value) {
         || null;
 }
 
+function selectedFuelStrictPriceStand(station, fuel = els.fuel.value) {
+    if (!isValidPriceValue(fuelPriceValue(station, fuel))) return null;
+    if (station.prices?.[fuel]?.recordedAt) return station.prices[fuel].recordedAt;
+    if (station.fuel_type === fuel && station.last_update) return station.last_update;
+    if (station.fuel_type === fuel && station.lastUpdated) return station.lastUpdated;
+    return null;
+}
+
 function validDateMs(value) {
     const ms = Date.parse(value || '');
     return Number.isFinite(ms) ? ms : null;
 }
 
 function hasCurrentDrivingPrice(station, fuel = els.fuel.value, maxAgeMs = DRIVE_HIGHWAY_PRICE_MAX_AGE_MS) {
-    const stand = validDateMs(selectedFuelPriceStand(station, fuel));
+    const stand = validDateMs(selectedFuelStrictPriceStand(station, fuel));
     if (stand === null) return false;
     return Date.now() - stand <= maxAgeMs;
 }
@@ -995,6 +1043,168 @@ function drivingSpeedText() {
     return Number.isFinite(displaySpeed)
         ? `${Math.round(displaySpeed)} km/h`
         : '0 km/h';
+}
+
+function formatDrivingTripDuration(ms) {
+    const totalSeconds = Math.max(0, Math.round(Number(ms || 0) / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours) return `${hours} h ${String(minutes).padStart(2, '0')} min`;
+    if (minutes) return `${minutes} min ${String(seconds).padStart(2, '0')} s`;
+    return `${seconds} s`;
+}
+
+function formatDrivingTripDistance(km) {
+    const distance = Number(km || 0);
+    if (!Number.isFinite(distance) || distance <= 0) return '0 m';
+    if (distance < 1) return `${Math.round(distance * 1000)} m`;
+    return `${distance.toFixed(1).replace('.', ',')} km`;
+}
+
+function batteryPercentText(level) {
+    const value = Number(level);
+    return Number.isFinite(value) ? `${Math.round(value * 100)} %` : '';
+}
+
+function drivingTripSnapshot() {
+    const currentStreet = dashcamStreetTitle(state.dashcamStableStreet);
+    return {
+        startedAt: state.drivingTripStartedAt,
+        endedAt: state.drivingTripEndedAt || Date.now(),
+        distanceKm: state.drivingTripDistanceKm,
+        startStreet: state.drivingTripStartStreet || currentStreet || '',
+        endStreet: state.drivingTripEndStreet || currentStreet || '',
+        batteryStartLevel: state.drivingBatteryStartLevel,
+        batteryStartCharging: state.drivingBatteryStartCharging,
+    };
+}
+
+async function readBatterySnapshot() {
+    if (typeof navigator === 'undefined' || typeof navigator.getBattery !== 'function') return null;
+    try {
+        const battery = await navigator.getBattery();
+        return {
+            level: Number(battery.level),
+            charging: Boolean(battery.charging),
+        };
+    } catch {
+        return null;
+    }
+}
+
+function batteryTripSummaryLine(trip, endBattery) {
+    if (!trip || !endBattery) return '';
+    const startLevel = Number(trip.batteryStartLevel);
+    const endLevel = Number(endBattery.level);
+    if (!Number.isFinite(startLevel) || !Number.isFinite(endLevel)) return '';
+    if (trip.batteryStartCharging || endBattery.charging) {
+        return `Akku: ${batteryPercentText(startLevel)} -> ${batteryPercentText(endLevel)} (Laden aktiv)`;
+    }
+    const usedPercent = Math.max(0, Math.round((startLevel - endLevel) * 100));
+    return `Akkuverbrauch: ${usedPercent} % (${batteryPercentText(startLevel)} -> ${batteryPercentText(endLevel)})`;
+}
+
+function batteryTripSummaryValue(trip, endBattery) {
+    if (!trip || !endBattery) return '';
+    const startLevel = Number(trip.batteryStartLevel);
+    const endLevel = Number(endBattery.level);
+    if (!Number.isFinite(startLevel) || !Number.isFinite(endLevel)) return '';
+    if (trip.batteryStartCharging || endBattery.charging) {
+        return `${batteryPercentText(startLevel)} -> ${batteryPercentText(endLevel)} (Laden aktiv)`;
+    }
+    const usedPercent = Math.max(0, Math.round((startLevel - endLevel) * 100));
+    return `${usedPercent} % verbraucht (${batteryPercentText(startLevel)} -> ${batteryPercentText(endLevel)})`;
+}
+
+function drivingTripSummaryText(prefix = 'Fahrt beendet', trip = drivingTripSnapshot(), endBattery = null) {
+    const durationMs = trip.startedAt ? Date.now() - Number(trip.startedAt) : 0;
+    const batteryLine = batteryTripSummaryLine(trip, endBattery);
+    return [
+        prefix,
+        `Fahrzeit: ${formatDrivingTripDuration(durationMs)}`,
+        `Strecke: ${formatDrivingTripDistance(trip.distanceKm)}`,
+        batteryLine,
+    ].filter(Boolean).join('\n');
+}
+
+function rememberDrivingTripDistance(sample) {
+    if (!state.drivingActive && !state.dashcamActive) return;
+    if (!state.drivingTripStartedAt) state.drivingTripStartedAt = Date.now();
+    const street = dashcamStreetTitle(state.dashcamStableStreet);
+    if (street && !state.drivingTripStartStreet) state.drivingTripStartStreet = street;
+    if (street) state.drivingTripEndStreet = street;
+    if (!Number.isFinite(sample.lat) || !Number.isFinite(sample.lng)) return;
+    if (Number(sample.accuracy) > 80) return;
+    const previous = state.drivingTripLastPosition;
+    state.drivingTripLastPosition = sample;
+    if (!previous) return;
+    const deltaKm = routeDistanceKm(previous.lat, previous.lng, sample.lat, sample.lng);
+    if (!Number.isFinite(deltaKm) || deltaKm < 0.005) return;
+    const deltaHours = Math.max(1, Number(sample.timestamp || Date.now()) - Number(previous.timestamp || Date.now())) / 3600000;
+    const impliedSpeedKmh = deltaKm / deltaHours;
+    if (impliedSpeedKmh > 230 || deltaKm > 2) return;
+    state.drivingTripDistanceKm += deltaKm;
+}
+
+function startDrivingBatteryTracking() {
+    state.drivingBatteryStartLevel = null;
+    state.drivingBatteryStartCharging = null;
+    readBatterySnapshot().then((battery) => {
+        if ((!state.drivingActive && !state.dashcamActive) || !battery) return;
+        state.drivingBatteryStartLevel = battery.level;
+        state.drivingBatteryStartCharging = battery.charging;
+    });
+}
+
+function hasTripSummaryData(trip) {
+    return Boolean(trip?.startedAt || Number(trip?.distanceKm) > 0);
+}
+
+function showDrivingTripSummary(prefix, trip = drivingTripSnapshot()) {
+    const hasTrip = trip.startedAt || trip.distanceKm > 0;
+    if (!hasTrip) return;
+    readBatterySnapshot().then((battery) => {
+        window.setTimeout(() => showTripSummaryScreen(trip, battery, prefix), 50);
+    });
+}
+
+function finalizeDrivingTripSummaryState() {
+    state.drivingTripEndedAt = Date.now();
+    const street = dashcamStreetTitle(state.dashcamStableStreet);
+    if (street) {
+        if (!state.drivingTripStartStreet) state.drivingTripStartStreet = street;
+        state.drivingTripEndStreet = street;
+    }
+}
+
+function showTripSummaryScreen(trip, battery, title = 'Fahrt beendet') {
+    if (!els.tripSummaryScreen) return;
+    const endedAt = Number(trip.endedAt || Date.now());
+    const durationMs = trip.startedAt ? endedAt - Number(trip.startedAt) : 0;
+    const averageSpeed = durationMs > 0
+        ? Number(trip.distanceKm || 0) / (durationMs / 3600000)
+        : 0;
+    const titleElement = document.querySelector('#tripSummaryTitle');
+    if (titleElement) titleElement.textContent = 'Aktuelle Fahrt';
+    if (els.tripSummaryStart) els.tripSummaryStart.textContent = trip.startedAt ? new Date(trip.startedAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+    if (els.tripSummaryEnd) els.tripSummaryEnd.textContent = new Date(endedAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    if (els.tripSummaryStreetStart) els.tripSummaryStreetStart.textContent = trip.startStreet || 'Strasse offen';
+    if (els.tripSummaryStreetEnd) els.tripSummaryStreetEnd.textContent = trip.endStreet || 'Strasse offen';
+    if (els.tripSummaryDuration) els.tripSummaryDuration.textContent = formatDrivingTripDuration(durationMs);
+    if (els.tripSummaryDistance) els.tripSummaryDistance.textContent = formatDrivingTripDistance(trip.distanceKm);
+    if (els.tripSummaryAverageSpeed) els.tripSummaryAverageSpeed.textContent = `${Math.round(Math.max(0, averageSpeed))} km/h`;
+    const batteryText = batteryTripSummaryValue(trip, battery);
+    const batteryRow = els.tripSummaryBattery?.closest('span');
+    if (els.tripSummaryBattery) els.tripSummaryBattery.textContent = batteryText;
+    if (batteryRow) batteryRow.hidden = !batteryText;
+    els.tripSummaryScreen.hidden = false;
+    document.body.classList.add('trip-summary-open');
+}
+
+function closeTripSummaryScreen() {
+    if (els.tripSummaryScreen) els.tripSummaryScreen.hidden = true;
+    document.body.classList.remove('trip-summary-open');
 }
 
 function updateDrivingMapSpeed() {
@@ -1145,9 +1355,11 @@ function requestDashcamInitialChoice() {
     saveDashcamSettings();
 }
 
-function maybeScheduleDashcamAutoStart() {
+function maybeScheduleDashcamAutoStart(options = {}) {
     const settings = state.dashcamSettings || defaultDashcamSettings();
-    if (state.dashcamActive || !settings.autoStart || (!settings.enabled && !settings.displayEnabled) || !document.hasFocus?.()) return;
+    const fromDrivingMode = Boolean(options.fromDrivingMode || state.drivingActive);
+    if (state.dashcamActive || !document.hasFocus?.()) return;
+    if (!fromDrivingMode && (!settings.autoStart || (!settings.enabled && !settings.displayEnabled))) return;
     if (!isLandscapeViewport()) {
         clearDashcamLandscapeTimer();
         return;
@@ -1244,8 +1456,106 @@ async function initDashcamCamera(mode) {
     }
 }
 
+function stopDashcamRecordingCanvas() {
+    if (state.dashcamRecordingFrameId) {
+        cancelAnimationFrame(state.dashcamRecordingFrameId);
+        state.dashcamRecordingFrameId = null;
+    }
+    state.dashcamRecordingCanvas = null;
+}
+
+function drawCoverVideo(ctx, video, width, height) {
+    const sourceWidth = video.videoWidth || width;
+    const sourceHeight = video.videoHeight || height;
+    const scale = Math.max(width / sourceWidth, height / sourceHeight);
+    const drawWidth = sourceWidth * scale;
+    const drawHeight = sourceHeight * scale;
+    const drawX = (width - drawWidth) / 2;
+    const drawY = (height - drawHeight) / 2;
+    ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
+}
+
+function dashcamRecordingOverlayLines() {
+    const now = new Date();
+    const date = now.toLocaleDateString('de-DE');
+    const time = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const street = dashcamStreetTitle(state.dashcamStableStreet) || 'Strasse wird ermittelt';
+    const speed = drivingSpeedText();
+    return {
+        top: [street],
+        side: [date, time, speed],
+    };
+}
+
+function drawDashcamRecordingOverlay(ctx, width, height) {
+    const lines = dashcamRecordingOverlayLines();
+    const pad = Math.max(18, Math.round(width * 0.018));
+    ctx.save();
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = 'rgba(5, 12, 22, 0.66)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+    ctx.lineWidth = 2;
+    ctx.font = `900 ${Math.max(22, Math.round(width * 0.028))}px Arial, sans-serif`;
+    const topText = lines.top[0] || '';
+    const metaText = lines.top[1] || '';
+    if (topText || metaText) {
+        const boxHeight = metaText ? 82 : 52;
+        ctx.fillRect(pad, pad, Math.min(width * 0.72, width - pad * 2), boxHeight);
+        ctx.strokeRect(pad, pad, Math.min(width * 0.72, width - pad * 2), boxHeight);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(topText, pad + 14, pad + 10, width - pad * 4);
+        if (metaText) {
+            ctx.font = `800 ${Math.max(16, Math.round(width * 0.018))}px Arial, sans-serif`;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.86)';
+            ctx.fillText(metaText, pad + 14, pad + 48, width - pad * 4);
+        }
+    }
+    if (lines.side.length) {
+        const boxWidth = Math.min(300, Math.round(width * 0.3));
+        const boxHeight = 132;
+        const x = width - pad - boxWidth;
+        ctx.fillStyle = 'rgba(5, 12, 22, 0.66)';
+        ctx.fillRect(x, pad, boxWidth, boxHeight);
+        ctx.strokeRect(x, pad, boxWidth, boxHeight);
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'right';
+        ctx.font = `900 ${Math.max(18, Math.round(width * 0.022))}px Arial, sans-serif`;
+        ctx.fillText(lines.side[0], width - pad - 14, pad + 10, boxWidth - 24);
+        ctx.fillText(lines.side[1], width - pad - 14, pad + 42, boxWidth - 24);
+        ctx.font = `950 ${Math.max(26, Math.round(width * 0.036))}px Arial, sans-serif`;
+        ctx.fillText(lines.side[2], width - pad - 14, pad + 78, boxWidth - 24);
+    }
+    ctx.restore();
+}
+
+function startDashcamRecordingCanvasStream() {
+    const video = els.dashcamVideo;
+    if (!video || typeof document.createElement !== 'function') return null;
+    const canvas = document.createElement('canvas');
+    const quality = state.dashcamSettings?.quality || '720p';
+    canvas.width = quality === '1080p' ? 1920 : 1280;
+    canvas.height = quality === '1080p' ? 1080 : 720;
+    const ctx = canvas.getContext('2d');
+    if (!ctx || typeof canvas.captureStream !== 'function') return null;
+    stopDashcamRecordingCanvas();
+    state.dashcamRecordingCanvas = canvas;
+    const draw = () => {
+        if (!state.dashcamRecordingCanvas) return;
+        ctx.fillStyle = '#071018';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        if (video.readyState >= 2) drawCoverVideo(ctx, video, canvas.width, canvas.height);
+        drawDashcamRecordingOverlay(ctx, canvas.width, canvas.height);
+        state.dashcamRecordingFrameId = requestAnimationFrame(draw);
+    };
+    draw();
+    return canvas.captureStream(30);
+}
+
 function recordingStreamForDashcam() {
     if (!state.dashcamStream) return null;
+    const canvasStream = startDashcamRecordingCanvasStream();
+    state.dashcamRecordingUsesOverlay = Boolean(canvasStream?.getVideoTracks().length);
+    if (state.dashcamRecordingUsesOverlay) return canvasStream;
     return new MediaStream([
         ...state.dashcamStream.getVideoTracks(),
     ]);
@@ -1310,6 +1620,7 @@ function clearDashcamSegmentTimer() {
 
 function finalizeDashcamSegment(stopCompletely = false) {
     clearDashcamSegmentTimer();
+    stopDashcamRecordingCanvas();
     if (state.dashcamChunks.length) {
         const blob = new Blob(state.dashcamChunks, { type: state.dashcamMimeType || 'video/webm' });
         state.dashcamBuffer.push({
@@ -1324,6 +1635,7 @@ function finalizeDashcamSegment(stopCompletely = false) {
             startPosition: currentDrivingPosition() || state.selectedLocation || null,
             endPosition: currentDrivingPosition() || state.selectedLocation || null,
             maxSpeed: Math.max(0, Number(state.drivingSpeedKmh || 0)),
+            overlayDataBurnedIn: Boolean(state.dashcamRecordingUsesOverlay),
         });
         trimDashcamBuffer();
     }
@@ -1373,6 +1685,7 @@ async function stopDashcamRecording({ keepSegment = true } = {}) {
             recorder.stop();
         });
     }
+    stopDashcamRecordingCanvas();
     state.dashcamRecorder = null;
     updateDashcamRecordingStatus();
 }
@@ -1456,6 +1769,114 @@ function dashcamFileName(recording) {
     return `TankProfi_${date}${street ? `_${street}` : ''}.${dashcamExtensionForMime(recording.mimeType)}`;
 }
 
+function dashcamDataFileName(recording) {
+    return dashcamFileName(recording).replace(/\.[^.]+$/, '_fahrtdaten.json');
+}
+
+function downloadTextFile(text, fileName, type = 'application/json') {
+    const blob = new Blob([text], { type });
+    return downloadVideoFile(blob, fileName);
+}
+
+function tripSummaryForRecording(first, last) {
+    const startedAt = Number(state.drivingTripStartedAt || first?.startedAt || Date.now());
+    const endedAt = Number(state.drivingTripEndedAt || last?.endedAt || Date.now());
+    const durationMs = Math.max(0, endedAt - startedAt);
+    const averageSpeedKmh = durationMs > 0
+        ? Number(state.drivingTripDistanceKm || 0) / (durationMs / 3600000)
+        : 0;
+    const currentStreet = dashcamStreetTitle(state.dashcamStableStreet);
+    return {
+        startedAt,
+        endedAt,
+        startTime: new Date(startedAt).toISOString(),
+        endTime: new Date(endedAt).toISOString(),
+        durationMs,
+        durationText: formatDrivingTripDuration(durationMs),
+        distanceKm: Number(state.drivingTripDistanceKm || 0),
+        distanceText: formatDrivingTripDistance(state.drivingTripDistanceKm),
+        averageSpeedKmh: Math.max(0, averageSpeedKmh),
+        averageSpeedText: `${Math.round(Math.max(0, averageSpeedKmh))} km/h`,
+        startStreet: state.drivingTripStartStreet || first?.streetStart || currentStreet || '',
+        endStreet: state.drivingTripEndStreet || last?.streetEnd || currentStreet || '',
+    };
+}
+
+function dashcamRouteSummaryLine(summary) {
+    if (!summary) return '';
+    const start = String(summary.startStreet || '').trim();
+    const end = String(summary.endStreet || '').trim();
+    if (start && end && start !== end) return `${start} -> ${end}`;
+    return start || end || '';
+}
+
+function dashcamRecordingListMeta(recording) {
+    if (!recording?.tripSummary) return recording?.audio ? 'Mit Ton' : 'Ohne Ton';
+    const summary = recording.tripSummary;
+    return [
+        dashcamRouteSummaryLine(summary),
+        summary.distanceText || '',
+        summary.averageSpeedText || '',
+    ].filter(Boolean).join(' - ');
+}
+
+function recordingDataExport(recording) {
+    return {
+        id: recording.id,
+        fileName: dashcamFileName(recording),
+        createdAt: recording.createdAt ? new Date(recording.createdAt).toISOString() : null,
+        startedAt: recording.startedAt ? new Date(recording.startedAt).toISOString() : null,
+        endedAt: recording.endedAt ? new Date(recording.endedAt).toISOString() : null,
+        durationMs: recording.durationMs || 0,
+        street: recording.street || '',
+        startPosition: recording.startPosition || null,
+        endPosition: recording.endPosition || null,
+        maxSpeedKmh: Number(recording.maxSpeed || 0),
+        overlayDataBurnedIn: Boolean(recording.overlayDataBurnedIn),
+        tripSummary: recording.tripSummary || null,
+        timeline: recording.timeline || [],
+    };
+}
+
+async function exportDashcamRecordingData(recording) {
+    const text = JSON.stringify(recordingDataExport(recording), null, 2);
+    const fileName = dashcamDataFileName(recording);
+    const file = new File([text], fileName, { type: 'application/json', lastModified: Date.now() });
+    if (navigator.share && navigator.canShare) {
+        try {
+            if (navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: 'TankProfi Fahrtdaten' });
+                return { method: 'share', success: true };
+            }
+        } catch (error) {
+            if (error?.name === 'AbortError') return { method: 'share', success: false, aborted: true };
+            throw error;
+        }
+    }
+    return downloadTextFile(text, fileName);
+}
+
+function dashcamSegmentMeta(segment, offsetMs = 0) {
+    return {
+        startMs: Math.max(0, Number(offsetMs || 0)),
+        endMs: Math.max(0, Number(offsetMs || 0) + Math.max(0, Number(segment.endedAt || 0) - Number(segment.startedAt || 0))),
+        streetStart: segment.streetStart || '',
+        streetEnd: segment.streetEnd || '',
+        maxSpeed: Math.max(0, Number(segment.maxSpeed || 0)),
+        startPosition: segment.startPosition || null,
+        endPosition: segment.endPosition || null,
+    };
+}
+
+function dashcamTimelineFromSegments(segments) {
+    let offsetMs = 0;
+    return [...(segments || [])].map((segment) => {
+        const item = dashcamSegmentMeta(segment, offsetMs);
+        offsetMs = item.endMs;
+        return item;
+    });
+}
+
 function downloadVideoFile(blob, fileName) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -1473,10 +1894,7 @@ async function exportDashcamRecording(recording, preferred = 'share') {
     const fileName = dashcamFileName(recording);
     const blob = recording.blob;
     const file = new File([blob], fileName, { type: recording.mimeType || blob.type, lastModified: Date.now() });
-    const needsShareSheet = preferred === 'share';
-    if (preferred === 'download' && (isIOSDevice() || isStandaloneApp())) {
-        return { method: 'download', success: false, unsupported: true };
-    }
+    const needsShareSheet = preferred === 'share' || (preferred === 'download' && (isIOSDevice() || isStandaloneApp()));
     let canShareFiles = false;
     try {
         canShareFiles = Boolean(needsShareSheet && navigator.share && navigator.canShare && navigator.canShare({ files: [file] }));
@@ -1516,6 +1934,7 @@ async function saveDashcamSequence() {
                 startPosition: currentDrivingPosition() || state.selectedLocation || null,
                 endPosition: currentDrivingPosition() || state.selectedLocation || null,
                 maxSpeed: Math.max(0, Number(state.drivingSpeedKmh || 0)),
+                overlayDataBurnedIn: Boolean(state.dashcamRecordingUsesOverlay),
             });
             trimDashcamBuffer();
             state.dashcamChunks = [];
@@ -1533,6 +1952,8 @@ async function saveDashcamSequence() {
     const blob = new Blob(state.dashcamBuffer.map((segment) => segment.blob), { type: mimeType });
     const first = state.dashcamBuffer[0];
     const last = state.dashcamBuffer.at(-1);
+    finalizeDrivingTripSummaryState();
+    const tripSummary = tripSummaryForRecording(first, last);
     const recording = {
         id: `dashcam_saved_${Date.now()}`,
         blob,
@@ -1545,6 +1966,9 @@ async function saveDashcamSequence() {
         startPosition: first.startPosition || null,
         endPosition: last.endPosition || null,
         maxSpeed: Math.max(...state.dashcamBuffer.map((segment) => Number(segment.maxSpeed || 0))),
+        tripSummary,
+        timeline: dashcamTimelineFromSegments(state.dashcamBuffer),
+        overlayDataBurnedIn: state.dashcamBuffer.some((segment) => segment.overlayDataBurnedIn),
         size: blob.size,
         audio: false,
         exportStatus: 'Lokal archiviert',
@@ -1611,7 +2035,9 @@ function confirmDashcamStreet(street) {
 }
 
 async function updateDashcamStreet(position = currentDrivingPosition() || state.selectedLocation) {
-    if (!state.dashcamActive || !state.dashcamSettings?.showStreet || !position || state.dashcamStreetLookupInProgress) return;
+    const shouldTrackStreet = state.dashcamActive || state.drivingActive;
+    const shouldRenderDashcam = state.dashcamActive && state.dashcamSettings?.showStreet;
+    if (!shouldTrackStreet || !position || state.dashcamStreetLookupInProgress) return;
     const lat = Number(position.lat);
     const lng = Number(position.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
@@ -1624,7 +2050,8 @@ async function updateDashcamStreet(position = currentDrivingPosition() || state.
     const cached = state.dashcamStreetCache.get(cacheKey);
     if (cached && now - cached.cachedAt < DASHCAM_STREET_CACHE_MAX_AGE_MS) {
         confirmDashcamStreet(cached.street);
-        renderDashcamOverlay();
+        if (shouldRenderDashcam) renderDashcamOverlay();
+        if (state.drivingActive && !isDrivingDestinationInputActive()) renderDrivingModeList();
         return;
     }
     state.dashcamStreetLookupInProgress = true;
@@ -1640,7 +2067,8 @@ async function updateDashcamStreet(position = currentDrivingPosition() || state.
         // Keep last stable street visible.
     } finally {
         state.dashcamStreetLookupInProgress = false;
-        renderDashcamOverlay();
+        if (shouldRenderDashcam) renderDashcamOverlay();
+        if (state.drivingActive && !isDrivingDestinationInputActive()) renderDrivingModeList();
     }
 }
 
@@ -1671,14 +2099,18 @@ function updateDashcamRecordingStatus() {
 function dashcamCheapestStation() {
     if (!state.dashcamSettings?.showCheapestStation || state.drivingVehicleMode === 'electric') return null;
     const fuel = els.fuel.value;
-    return [...(state.stations || [])]
-        .map((station) => ({
-            station,
-            price: Number(fuelPriceValue(station, fuel)),
-            distance: Number(station.distance || station.dist || Number.POSITIVE_INFINITY),
-        }))
-        .filter((item) => isValidPriceValue(item.price))
-        .sort((a, b) => a.price - b.price || a.distance - b.distance)[0] || null;
+    const currentPosition = currentDrivingPosition() || state.selectedLocation;
+    const station = drivingMapNearestStation(drivingMapStationsToShow(currentPosition));
+    if (!station) return null;
+    const price = Number(fuelPriceValue(station, fuel));
+    if (!isValidPriceValue(price)) return null;
+    return {
+        station,
+        price,
+        distance: Number.isFinite(Number(station.mapDistance))
+            ? Number(station.mapDistance)
+            : Number(station.distance || station.dist || Number.POSITIVE_INFINITY),
+    };
 }
 
 function openDashcamCheapestNavigation(event) {
@@ -1779,7 +2211,7 @@ function startDashcamPositionWatch() {
         if (els.dashcamGpsStatus) els.dashcamGpsStatus.textContent = 'Standort nicht freigegeben';
     }, {
         enableHighAccuracy: true,
-        maximumAge: 1000,
+        maximumAge: 250,
         timeout: 12000,
     });
 }
@@ -1802,6 +2234,15 @@ async function runDashcamCountdown() {
 async function startDashcamMode(mode = dashboardModeFromSettings()) {
     if (mode === 'off' || state.dashcamActive) return;
     state.dashcamActive = true;
+    if (!state.drivingTripStartedAt) {
+        state.drivingTripStartedAt = Date.now();
+        state.drivingTripEndedAt = null;
+        state.drivingTripDistanceKm = 0;
+        state.drivingTripLastPosition = null;
+        state.drivingTripStartStreet = dashcamStreetTitle(state.dashcamStableStreet) || '';
+        state.drivingTripEndStreet = state.drivingTripStartStreet;
+        startDrivingBatteryTracking();
+    }
     state.dashcamMode = mode;
     state.dashcamBuffer = [];
     state.dashcamStableStreet = null;
@@ -1830,34 +2271,54 @@ async function startDashcamMode(mode = dashboardModeFromSettings()) {
     updateDashcamStreet();
 }
 
-async function stopDashcamMode({ askSave = true } = {}) {
+async function stopDashcamMode({ askSave = true, showTripSummary = false } = {}) {
     if (!state.dashcamActive) return;
-    if (askSave && state.dashcamRecorder && state.dashcamRecorder.state !== 'inactive') {
-        const save = window.confirm('Letzte Aufnahme archivieren?');
-        if (save) await saveDashcamSequence().catch(() => showDashcamMessage('Sequenz konnte nicht archiviert werden.'));
+    if (state.dashcamStopping) return;
+    state.dashcamStopping = true;
+    try {
+        if (showTripSummary) finalizeDrivingTripSummaryState();
+        const trip = showTripSummary ? drivingTripSnapshot() : null;
+        if (askSave && state.dashcamRecorder && state.dashcamRecorder.state !== 'inactive' && !state.dashcamSavePromptActive) {
+            state.dashcamSavePromptActive = true;
+            const save = window.confirm('Letzte Aufnahme archivieren?');
+            state.dashcamSavePromptActive = false;
+            if (save) await saveDashcamSequence().catch(() => showDashcamMessage('Sequenz konnte nicht archiviert werden.'));
+        }
+        await stopDashcamRecording({ keepSegment: false }).catch(() => null);
+        state.dashcamStream?.getTracks?.().forEach((track) => track.stop());
+        state.dashcamStream = null;
+        if (els.dashcamVideo) els.dashcamVideo.srcObject = null;
+        clearInterval(state.dashcamRecordTimer);
+        state.dashcamRecordTimer = null;
+        clearDashcamSegmentTimer();
+        clearTimeout(state.dashcamControlsTimer);
+        releaseDashcamWakeLock();
+        stopDashcamPositionWatch();
+        state.dashcamActive = false;
+        state.dashcamMode = 'display';
+        els.dashcamMode?.classList.remove('has-camera');
+        if (els.dashcamMode) els.dashcamMode.hidden = true;
+        document.body.classList.remove('dashcam-active');
+        if (state.drivingActive) {
+            requestDriveWakeLock();
+            startDriveWakeFallback();
+            startDriveWakeLockRefresh();
+        }
+        if (showTripSummary && hasTripSummaryData(trip)) showDrivingTripSummary('Aktuelle Fahrt', trip);
+    } finally {
+        state.dashcamSavePromptActive = false;
+        state.dashcamStopping = false;
     }
-    await stopDashcamRecording({ keepSegment: false }).catch(() => null);
-    state.dashcamStream?.getTracks?.().forEach((track) => track.stop());
-    state.dashcamStream = null;
-    if (els.dashcamVideo) els.dashcamVideo.srcObject = null;
-    clearInterval(state.dashcamRecordTimer);
-    state.dashcamRecordTimer = null;
-    clearDashcamSegmentTimer();
-    clearTimeout(state.dashcamControlsTimer);
-    releaseDashcamWakeLock();
-    stopDashcamPositionWatch();
-    state.dashcamActive = false;
-    state.dashcamMode = 'display';
-    els.dashcamMode?.classList.remove('has-camera');
-    if (els.dashcamMode) els.dashcamMode.hidden = true;
-    document.body.classList.remove('dashcam-active');
 }
 
 async function disableDashcamDuringUse() {
-    if (!state.dashcamActive) return;
-    const save = state.dashcamRecorder?.state === 'recording'
-        ? window.confirm('Letzte Aufnahme vor dem Ausschalten archivieren?')
-        : false;
+    if (!state.dashcamActive || state.dashcamStopping) return;
+    let save = false;
+    if (state.dashcamRecorder?.state === 'recording' && !state.dashcamSavePromptActive) {
+        state.dashcamSavePromptActive = true;
+        save = window.confirm('Letzte Aufnahme vor dem Ausschalten archivieren?');
+        state.dashcamSavePromptActive = false;
+    }
     if (save) await saveDashcamSequence().catch(() => null);
     await stopDashcamMode({ askSave: false });
 }
@@ -1905,14 +2366,15 @@ async function renderDashcamRecordings() {
     const html = recordings.map((recording) => `
         <article class="dashcam-recording-row" data-dashcam-recording="${escapeHtml(recording.id)}">
             <span class="dashcam-recording-main">
-                <strong>${escapeHtml(recording.street || 'Dashcam-Aufnahme')}</strong>
-                <small>${escapeHtml(new Date(recording.createdAt).toLocaleString('de-DE'))} - ${escapeHtml(formatDashcamDuration(recording.durationMs))} - ${escapeHtml(formatDashcamBytes(recording.size))}</small>
-                <small>${recording.audio ? 'Mit Ton' : 'Ohne Ton'} - ${escapeHtml(recording.exportStatus || 'Lokal archiviert')}</small>
+                <strong class="dashcam-recording-title">${escapeHtml(recording.street || 'Dashcam-Aufnahme')}</strong>
+                <small class="dashcam-recording-meta">${escapeHtml(new Date(recording.createdAt).toLocaleString('de-DE'))} - ${escapeHtml(formatDashcamDuration(recording.durationMs))} - ${escapeHtml(formatDashcamBytes(recording.size))}</small>
+                <small class="dashcam-recording-trip">${escapeHtml(dashcamRecordingListMeta(recording))}</small>
             </span>
             <span class="dashcam-recording-actions">
                 <button class="dashcam-recording-action play" type="button" data-dashcam-play aria-label="Abspielen" title="Abspielen"><span aria-hidden="true"></span></button>
                 <button class="dashcam-recording-action share" type="button" data-dashcam-share aria-label="In Mediathek sichern" title="In Mediathek sichern"><span aria-hidden="true"></span></button>
                 <button class="dashcam-recording-action download" type="button" data-dashcam-download aria-label="Herunterladen" title="Herunterladen"><span aria-hidden="true"></span></button>
+                <button class="dashcam-recording-action data" type="button" data-dashcam-data aria-label="Fahrtdaten exportieren" title="Fahrtdaten exportieren"><span aria-hidden="true"></span></button>
                 <button class="dashcam-recording-action delete danger" type="button" data-dashcam-delete aria-label="Loeschen" title="Loeschen"><span aria-hidden="true"></span></button>
             </span>
         </article>
@@ -1926,13 +2388,119 @@ function closeDashcamSettingsPlayer() {
     const video = els.dashcamSettingsVideo;
     if (video) {
         const url = video.dataset.objectUrl || '';
+        const trackUrl = video.dataset.trackObjectUrl || '';
         video.pause();
         video.removeAttribute('src');
         video.load();
         if (url) URL.revokeObjectURL(url);
+        if (trackUrl) URL.revokeObjectURL(trackUrl);
         delete video.dataset.objectUrl;
+        delete video.dataset.trackObjectUrl;
+    }
+    if (els.dashcamPlaybackTrack) {
+        els.dashcamPlaybackTrack.removeAttribute('src');
     }
     if (els.dashcamSettingsPlayer) els.dashcamSettingsPlayer.hidden = true;
+}
+
+function vttTime(ms) {
+    const totalMs = Math.max(0, Math.round(Number(ms || 0)));
+    const hours = Math.floor(totalMs / 3600000);
+    const minutes = Math.floor((totalMs % 3600000) / 60000);
+    const seconds = Math.floor((totalMs % 60000) / 1000);
+    const millis = totalMs % 1000;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
+}
+
+function vttText(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\r?\n/g, ' ');
+}
+
+function dashcamCueText(recording, item = {}) {
+    const street = item.streetEnd || item.streetStart || recording.street || 'Strasse unbekannt';
+    const maxSpeed = Math.max(0, Number(item.maxSpeed || recording.maxSpeed || 0));
+    return [
+        street,
+        maxSpeed ? `max. ${Math.round(maxSpeed)} km/h` : '',
+    ].filter(Boolean).map(vttText).join('\n');
+}
+
+function dashcamPlaybackVttLegacy(recording) {
+    const durationMs = Math.max(1000, Number(recording.durationMs || 0));
+    const timeline = Array.isArray(recording.timeline) && recording.timeline.length
+        ? recording.timeline
+        : [{ startMs: 0, endMs: durationMs, streetStart: recording.street || '', streetEnd: recording.street || '', maxSpeed: recording.maxSpeed || 0 }];
+    const summary = recording.tripSummary;
+    const summaryCue = summary
+        ? [[
+            '0',
+            `${vttTime(0)} --> ${vttTime(Math.min(durationMs, 6000))}`,
+            [
+                `${summary.startStreet || 'Start offen'} -> ${summary.endStreet || 'Ende offen'}`,
+                `${summary.distanceText || ''} · Ø ${summary.averageSpeedText || ''}`.trim(),
+            ].filter(Boolean).map(vttText).join('\n'),
+        ].join('\n')]
+        : [];
+    const cues = timeline.map((item, index) => {
+        const startMs = Math.max(0, Math.min(durationMs - 500, Number(item.startMs || 0)));
+        const endMs = Math.max(startMs + 500, Math.min(durationMs, Number(item.endMs || durationMs)));
+        return [
+            String(index + 1),
+            `${vttTime(startMs)} --> ${vttTime(endMs)}`,
+            dashcamCueText(recording, item),
+        ].join('\n');
+    });
+    return `WEBVTT\n\n${[...summaryCue, ...cues].join('\n\n')}\n`;
+}
+
+function dashcamPlaybackVtt(recording) {
+    const durationMs = Math.max(1000, Number(recording.durationMs || 0));
+    const timeline = Array.isArray(recording.timeline) && recording.timeline.length
+        ? recording.timeline
+        : [{ startMs: 0, endMs: durationMs, streetStart: recording.street || '', streetEnd: recording.street || '', maxSpeed: recording.maxSpeed || 0 }];
+    const summary = recording.tripSummary;
+    const summaryLines = summary
+        ? [
+            dashcamRouteSummaryLine(summary),
+            [
+                summary.distanceText || '',
+                summary.averageSpeedText ? `Durchschnitt ${summary.averageSpeedText}` : '',
+                summary.durationText || '',
+            ].filter(Boolean).join(' - '),
+        ].filter(Boolean)
+        : [];
+    const summaryCue = summary
+        ? [[
+            '0',
+            `${vttTime(0)} --> ${vttTime(Math.min(durationMs, 6000))}`,
+            summaryLines.map(vttText).join('\n'),
+        ].join('\n')]
+        : [];
+    if (recording.overlayDataBurnedIn) return `WEBVTT\n\n${summaryCue.join('\n\n')}\n`;
+    const cues = timeline.map((item, index) => {
+        const startMs = Math.max(0, Math.min(durationMs - 500, Number(item.startMs || 0)));
+        const endMs = Math.max(startMs + 500, Math.min(durationMs, Number(item.endMs || durationMs)));
+        return [
+            String(index + 1),
+            `${vttTime(startMs)} --> ${vttTime(endMs)}`,
+            dashcamCueText(recording, item),
+        ].join('\n');
+    });
+    return `WEBVTT\n\n${[...summaryCue, ...cues].join('\n\n')}\n`;
+}
+
+function attachDashcamPlaybackTrack(recording) {
+    if (!els.dashcamPlaybackTrack || !els.dashcamSettingsVideo) return;
+    const blob = new Blob([dashcamPlaybackVtt(recording)], { type: 'text/vtt' });
+    const url = URL.createObjectURL(blob);
+    els.dashcamPlaybackTrack.src = url;
+    els.dashcamSettingsVideo.dataset.trackObjectUrl = url;
+    const track = els.dashcamPlaybackTrack.track;
+    if (track) track.mode = 'showing';
 }
 
 function openDashcamSettingsPlayer(recording) {
@@ -1941,8 +2509,10 @@ function openDashcamSettingsPlayer(recording) {
     const url = URL.createObjectURL(recording.blob);
     els.dashcamSettingsVideo.src = url;
     els.dashcamSettingsVideo.dataset.objectUrl = url;
+    attachDashcamPlaybackTrack(recording);
     els.dashcamSettingsPlayer.hidden = false;
     els.dashcamSettingsPlayer.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    if (isLandscapeViewport()) requestDashcamPlayerFullscreen();
     els.dashcamSettingsVideo.play?.().catch(() => null);
 }
 
@@ -1986,13 +2556,52 @@ async function handleDashcamRecordingAction(event) {
     }
     if (event.target.closest('[data-dashcam-download]')) {
         const result = await exportDashcamRecording(recording, 'download').catch(() => null);
-        if (result?.unsupported) showDashcamMessage('Datei-Download ist in der iPhone-App nicht verfuegbar. Mediathek separat nutzen.');
+        if (result?.success && result.method === 'share') showDashcamMessage('Teilen-Menue geoeffnet. Dort Video sichern waehlen.', 4200);
+        else if (result?.success) showDashcamMessage('Download gestartet.');
+        else if (result?.unsupported) showDashcamMessage('Download/Teilen ist auf diesem Browser nicht verfuegbar.');
         else if (!result?.aborted && result === null) showDashcamMessage('Download fehlgeschlagen.');
+        return;
     }
+    if (event.target.closest('[data-dashcam-data]')) {
+        const result = await exportDashcamRecordingData(recording).catch(() => null);
+        if (result?.success && result.method === 'share') showDashcamMessage('Fahrtdaten im Teilen-Menue bereit.', 3600);
+        else if (result?.success) showDashcamMessage('Fahrtdaten-Download gestartet.');
+        else if (!result?.aborted) showDashcamMessage('Fahrtdaten konnten nicht exportiert werden.');
+    }
+}
+
+function isDashcamPlayerVisible() {
+    return Boolean(els.dashcamSettingsPlayer && !els.dashcamSettingsPlayer.hidden && els.dashcamSettingsVideo?.src);
+}
+
+function requestDashcamPlayerFullscreen() {
+    if (!isDashcamPlayerVisible()) return false;
+    clearDashcamLandscapeTimer();
+    const video = els.dashcamSettingsVideo;
+    const target = video || els.dashcamSettingsPlayer;
+    try {
+        if (document.fullscreenElement === target || document.webkitFullscreenElement === target) return true;
+        if (typeof video.webkitEnterFullscreen === 'function') {
+            video.webkitEnterFullscreen();
+            return true;
+        }
+        if (typeof target.requestFullscreen === 'function') {
+            target.requestFullscreen().catch(() => null);
+            return true;
+        }
+        if (typeof target.webkitRequestFullscreen === 'function') {
+            target.webkitRequestFullscreen();
+            return true;
+        }
+    } catch {
+        return false;
+    }
+    return false;
 }
 
 function handleDashcamOrientationChange() {
     if (isLandscapeViewport()) {
+        if (requestDashcamPlayerFullscreen()) return;
         maybeScheduleDashcamAutoStart();
         return;
     }
@@ -2275,12 +2884,13 @@ function tankRastBadgeHtml(station) {
 }
 
 function markerClass(station, thresholds) {
+    const displayPrice = comparableStationPrice(station);
     if (station.priceCategory) {
         return ({ cheap: 'green-dark', medium: 'yellow-light', mid: 'yellow-light', expensive: 'red-dark', high: 'red-dark' })[station.priceCategory] || 'yellow-light';
     }
-    if (station.is_open === false || !isValidPriceValue(station.price)) return 'muted';
+    if (station.is_open === false || !isValidPriceValue(displayPrice)) return 'muted';
     if (thresholds?.prices?.length > 1) {
-        const price = Number(station.price);
+        const price = Number(displayPrice);
         const prices = thresholds.prices;
         let first = -1;
         let last = -1;
@@ -2301,7 +2911,7 @@ function markerClass(station, thresholds) {
         }
     }
     if (!Number.isFinite(thresholds.range) || thresholds.range <= 0) return 'green-dark';
-    const ratio = Math.max(0, Math.min(1, (Number(station.price) - thresholds.low) / thresholds.range));
+    const ratio = Math.max(0, Math.min(1, (Number(displayPrice) - thresholds.low) / thresholds.range));
     if (ratio <= 0.1667) return 'green-dark';
     if (ratio <= 0.3334) return 'green-light';
     if (ratio <= 0.5001) return 'yellow-dark';
@@ -2339,8 +2949,8 @@ function categoryForDelta(delta) {
 
 function thresholdsFor(stations) {
     const prices = stations
-        .filter((station) => station.is_open !== false && isValidPriceValue(station.price))
-        .map((station) => Number(station.price))
+        .filter((station) => station.is_open !== false && isValidPriceValue(comparableStationPrice(station)))
+        .map((station) => Number(comparableStationPrice(station)))
         .filter(isValidPriceValue)
         .sort((a, b) => a - b);
 
@@ -2360,8 +2970,8 @@ function sortStations() {
     state.stations.sort((a, b) => {
         const distanceA = Number.isFinite(Number(a.distance)) ? Number(a.distance) : Number.MAX_VALUE;
         const distanceB = Number.isFinite(Number(b.distance)) ? Number(b.distance) : Number.MAX_VALUE;
-        const priceA = isValidPriceValue(a.price) ? Number(a.price) : Number.MAX_VALUE;
-        const priceB = isValidPriceValue(b.price) ? Number(b.price) : Number.MAX_VALUE;
+        const priceA = isValidPriceValue(comparableStationPrice(a)) ? Number(comparableStationPrice(a)) : Number.MAX_VALUE;
+        const priceB = isValidPriceValue(comparableStationPrice(b)) ? Number(comparableStationPrice(b)) : Number.MAX_VALUE;
         if (byDistance) {
             return distanceA - distanceB || priceA - priceB;
         }
@@ -2372,9 +2982,7 @@ function sortStations() {
 
 function iconFor(station, thresholds, selected = false) {
     const selectedFuel = els.fuel.value;
-    const displayPrice = isValidPriceValue(station.price)
-        ? Number(station.price)
-        : Number(fuelPriceValue(station, selectedFuel));
+    const displayPrice = Number(comparableStationPrice(station, selectedFuel));
     const priceText = isValidPriceValue(displayPrice)
         ? `${displayPrice.toFixed(3).replace('.', ',')} €`
         : '-';
@@ -2495,7 +3103,7 @@ function stableDrivingMapBearing({ force = false } = {}) {
 }
 
 function userLocationIcon() {
-    const bearing = state.listMode === 'driving' && state.view === 'map' ? 0 : drivingMapHeading(currentDrivingPosition());
+    const bearing = drivingUserMarkerBearing(currentDrivingPosition());
     const style = Number.isFinite(bearing) ? ` style="--user-bearing:${bearing}deg"` : '';
     const isDrivingMarker = state.listMode === 'driving';
     const size = isDrivingMarker ? 42 : 38;
@@ -2722,6 +3330,9 @@ function setView(view) {
     });
     updateBottomNav();
     if (state.listMode === 'driving') {
+        requestDriveWakeLock();
+        startDriveWakeFallback();
+        startDriveWakeLockRefresh();
         window.requestAnimationFrame(() => {
             if (state.listMode === 'driving') renderDrivingModeList();
         });
@@ -3083,11 +3694,19 @@ function initDrivingVectorMap() {
             center: [10.4515, 51.1657],
             zoom: 6,
             bearing: 0,
-            pitch: 38,
-            interactive: false,
+            pitch: DRIVE_VECTOR_MAP_PITCH,
+            interactive: true,
+            dragRotate: false,
+            pitchWithRotate: false,
+            touchPitch: false,
             attributionControl: false,
         });
         state.drivingVectorMap.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+        state.drivingVectorMap.touchZoomRotate?.disableRotation?.();
+        state.drivingVectorMap.on('dragstart', pauseDrivingMapFollow);
+        state.drivingVectorMap.on('zoomstart', () => {
+            if (!state.drivingMapProgrammaticMove) pauseDrivingMapFollow();
+        });
         state.drivingVectorMap.on('load', () => {
             state.drivingVectorReady = true;
             if (state.listMode === 'driving' && state.view === 'map') updateDrivingModeMapMarkers();
@@ -3113,14 +3732,21 @@ function renderDrivingVectorUserMarker(userPosition) {
     const lat = Number(userPosition?.lat);
     const lng = Number(userPosition?.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    const bearing = drivingUserMarkerBearing(userPosition);
     if (!state.drivingVectorUserMarker) {
         const element = document.createElement('span');
-        element.className = 'user-location-marker driving-location-marker vector-driving-location-marker';
-        element.innerHTML = '<i></i>';
+        element.className = 'vector-driving-location-marker';
+        element.style.zIndex = '50';
+        element.innerHTML = '<span class="user-location-marker driving-location-marker vector-driving-location-arrow"><i></i></span>';
+        const arrow = element.querySelector('.vector-driving-location-arrow');
+        if (arrow && Number.isFinite(bearing)) arrow.style.setProperty('--user-bearing', `${bearing}deg`);
         state.drivingVectorUserMarker = new maplibregl.Marker({ element, anchor: 'center' })
             .setLngLat([lng, lat])
             .addTo(state.drivingVectorMap);
     } else {
+        const element = state.drivingVectorUserMarker.getElement?.();
+        const arrow = element?.querySelector?.('.vector-driving-location-arrow') || element;
+        if (arrow && Number.isFinite(bearing)) arrow.style.setProperty('--user-bearing', `${bearing}deg`);
         state.drivingVectorUserMarker.setLngLat([lng, lat]);
     }
 }
@@ -3154,18 +3780,32 @@ function drivingVectorMarkerHtml(station, thresholds, selected = false) {
 function renderDrivingVectorMarkers(stationsToShow) {
     if (!state.drivingVectorMap || !state.drivingVectorReady) return;
     clearDrivingVectorMarkers();
-    const thresholds = driveMapThresholdsFor(stationsToShow);
-    stationsToShow
+    const markerStations = (Array.isArray(stationsToShow) && stationsToShow.length ? stationsToShow : state.stations)
         .filter((station) => Number.isFinite(Number(station.lat)) && Number.isFinite(Number(station.lng)))
+        .slice(0, DRIVE_ROUTE_DESTINATION_PREVIEW_LIMIT);
+    const thresholds = driveMapThresholdsFor(markerStations);
+    markerStations
         .forEach((station) => {
+            const element = drivingVectorMarkerHtml(station, thresholds, station.tankerkoenig_id === state.selectedId);
+            element.style.zIndex = station.tankerkoenig_id === state.selectedId ? '45' : '30';
             const marker = new maplibregl.Marker({
-                element: drivingVectorMarkerHtml(station, thresholds, station.tankerkoenig_id === state.selectedId),
+                element,
                 anchor: 'center',
             })
                 .setLngLat([Number(station.lng), Number(station.lat)])
                 .addTo(state.drivingVectorMap);
             state.drivingVectorMarkers.push(marker);
         });
+}
+
+function drivingMapAutoZoomForSpeed(speedKmh) {
+    const speed = Number(speedKmh);
+    return Number.isFinite(speed) && speed > 85 ? 14.4 : Number.isFinite(speed) && speed > 45 ? 14.9 : 15.4;
+}
+
+function drivingMapFollowZoomForSpeed(speedKmh) {
+    const override = Number(state.drivingMapZoomOverride);
+    return Number.isFinite(override) ? override : drivingMapAutoZoomForSpeed(speedKmh);
 }
 
 function updateDrivingVectorCamera(userPosition, { force = false } = {}) {
@@ -3177,16 +3817,25 @@ function updateDrivingVectorCamera(userPosition, { force = false } = {}) {
     const lng = Number(target?.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
     const speed = Number(state.drivingSpeedKmh);
-    const zoom = Number.isFinite(speed) && speed > 85 ? 15.8 : Number.isFinite(speed) && speed > 45 ? 16.4 : 17;
+    const zoom = drivingMapFollowZoomForSpeed(speed);
+    const now = Date.now();
+    if (!force && now - Number(state.drivingMapFollowAt || 0) < DRIVE_MAP_FOLLOW_MIN_MS) return;
+    state.drivingMapFollowAt = now;
+    state.drivingMapProgrammaticMove = true;
+    const duration = force ? 0 : 260;
     state.drivingVectorMap.easeTo({
         center: [lng, lat],
         zoom,
         bearing: stableDrivingMapBearing({ force }),
-        pitch: 38,
-        duration: force ? 0 : 950,
+        pitch: DRIVE_VECTOR_MAP_PITCH,
+        offset: [0, DRIVE_VECTOR_MAP_MARKER_OFFSET_Y],
+        duration,
         easing: (t) => t,
-        padding: { top: 70, bottom: 210, left: 40, right: 40 },
+        padding: { top: 0, bottom: 0, left: 0, right: 0 },
     });
+    window.setTimeout(() => {
+        state.drivingMapProgrammaticMove = false;
+    }, duration + 80);
 }
 
 function renderDrivingVectorMap(stationsToShow, userPosition) {
@@ -3201,30 +3850,16 @@ function renderDrivingVectorMap(stationsToShow, userPosition) {
     setDrivingVectorMapVisible(true);
     state.drivingVectorMap.resize();
     if (!state.drivingVectorReady) return true;
-    renderDrivingVectorUserMarker(userPosition || state.selectedLocation);
-    renderDrivingVectorMarkers(stationsToShow);
+    const markerStations = Array.isArray(stationsToShow) && stationsToShow.length
+        ? stationsToShow
+        : drivingMapStationsToShow(userPosition || state.selectedLocation);
     updateDrivingVectorCamera(userPosition, { force: !state.drivingMapFollowAt });
+    renderDrivingVectorUserMarker(userPosition || state.selectedLocation);
+    renderDrivingVectorMarkers(markerStations);
     return true;
 }
 
-function updateDrivingMapNearestBox(stations = state.stations) {
-    if (!els.drivingMapNearest) return;
-    if (state.listMode !== 'driving' || state.view !== 'map' || els.detail.classList.contains('visible')) {
-        clearDrivingMapNearestBox();
-        return;
-    }
-    const delayMs = Number(state.drivingMapNearestDelayUntil || 0) - Date.now();
-    if (delayMs > 0) {
-        els.drivingMapNearest.innerHTML = '';
-        els.drivingMapNearest.classList.remove('visible', 'entering', 'leaving');
-        clearDrivingMapNearestDelayTimer();
-        state.drivingMapNearestDelayTimer = window.setTimeout(() => {
-            state.drivingMapNearestDelayTimer = null;
-            state.drivingMapNearestDelayUntil = 0;
-            updateDrivingMapNearestBox(drivingMapStationsToShow(currentDrivingPosition() || state.selectedLocation));
-        }, delayMs + 20);
-        return;
-    }
+function drivingMapNearestStation(stations = state.stations) {
     const currentPosition = currentDrivingPosition() || state.selectedLocation;
     const drivingBearing = visualDrivingBearing();
     const stationsWithDistance = [...(stations || [])].map((station) => {
@@ -3263,7 +3898,28 @@ function updateDrivingMapNearestBox(stations = state.stations) {
         || !station.mapBehindDrivingDirection
         || Number(station.mapDistance) <= localDriveBehindKeepKm(station.drivingContext)
     ));
-    const nearest = directionalStations[0] || finiteStations[0];
+    return directionalStations[0] || finiteStations[0] || null;
+}
+
+function updateDrivingMapNearestBox(stations = state.stations) {
+    if (!els.drivingMapNearest) return;
+    if (state.listMode !== 'driving' || state.view !== 'map' || els.detail.classList.contains('visible')) {
+        clearDrivingMapNearestBox();
+        return;
+    }
+    const delayMs = Number(state.drivingMapNearestDelayUntil || 0) - Date.now();
+    if (delayMs > 0) {
+        els.drivingMapNearest.innerHTML = '';
+        els.drivingMapNearest.classList.remove('visible', 'entering', 'leaving');
+        clearDrivingMapNearestDelayTimer();
+        state.drivingMapNearestDelayTimer = window.setTimeout(() => {
+            state.drivingMapNearestDelayTimer = null;
+            state.drivingMapNearestDelayUntil = 0;
+            updateDrivingMapNearestBox(drivingMapStationsToShow(currentDrivingPosition() || state.selectedLocation));
+        }, delayMs + 20);
+        return;
+    }
+    const nearest = drivingMapNearestStation(stations);
     if (!nearest) {
         clearDrivingMapNearestBox();
         return;
@@ -3417,6 +4073,16 @@ function drivingMapHeading(position) {
     return Number.isFinite(state.drivingMapBearing) ? state.drivingMapBearing : 0;
 }
 
+function drivingUserMarkerBearing(position) {
+    const heading = drivingMapHeading(position);
+    if (!Number.isFinite(heading)) return null;
+    if (state.listMode !== 'driving' || state.view !== 'map') return heading;
+    const mapBearing = normalizedBearing(state.drivingMapBearing);
+    if (!Number.isFinite(mapBearing)) return heading;
+    const relativeBearing = signedBearingDelta(mapBearing, heading);
+    return Number.isFinite(relativeBearing) ? relativeBearing : heading;
+}
+
 function drivingMapHasUsablePosition() {
     return hasValidCoordinates(state.drivingSamples[state.drivingSamples.length - 1])
         || hasValidCoordinates(state.selectedLocation);
@@ -3477,6 +4143,32 @@ function pauseDrivingMapFollow() {
     state.drivingMapUserPanUntil = Date.now() + DRIVE_MAP_MANUAL_PAUSE_MS;
 }
 
+function currentDrivingMapZoom() {
+    const vectorZoom = Number(state.drivingVectorMap?.getZoom?.());
+    if (Number.isFinite(vectorZoom)) return vectorZoom;
+    const leafletZoom = Number(state.map?.getZoom?.());
+    if (Number.isFinite(leafletZoom)) return leafletZoom;
+    const speed = Number(state.drivingSpeedKmh);
+    return drivingMapFollowZoomForSpeed(speed);
+}
+
+function applyDrivingMapZoom(delta) {
+    if (state.listMode !== 'driving' || state.view !== 'map') return;
+    const nextZoom = Math.max(12, Math.min(18, currentDrivingMapZoom() + Number(delta || 0)));
+    state.drivingMapZoomOverride = nextZoom;
+    state.drivingMapFollowAt = 0;
+    state.drivingMapProgrammaticMove = true;
+    const position = currentDrivingPosition() || state.selectedLocation;
+    if (state.drivingVectorMap && state.drivingVectorReady) {
+        updateDrivingVectorCamera(position, { force: true });
+    } else if (state.map && state.map.type !== 'fallback') {
+        focusDrivingMapByHeading(drivingMapStationsToShow(position), position, { force: true });
+    }
+    window.setTimeout(() => {
+        state.drivingMapProgrammaticMove = false;
+    }, 380);
+}
+
 function drivingMapBoundsAround(lat, lng, radiusKm) {
     const latDelta = radiusKm / 111.32;
     const cosLat = Math.max(0.18, Math.cos((lat * Math.PI) / 180));
@@ -3491,7 +4183,8 @@ function liftDrivingMapUserMarker({ animate = false } = {}) {
     if (!state.map || state.map.type === 'fallback' || state.listMode !== 'driving' || state.view !== 'map') return;
     const mapElement = state.map.getContainer?.();
     const height = Number(mapElement?.clientHeight || 0);
-    const offsetY = Math.round(Math.max(96, Math.min(190, height * DRIVE_MAP_USER_VERTICAL_OFFSET_RATIO)));
+    const offsetY = Math.round(Math.max(0, Math.min(190, height * DRIVE_MAP_USER_VERTICAL_OFFSET_RATIO)));
+    if (!offsetY) return;
     state.map.panBy([0, offsetY], { animate });
 }
 
@@ -3539,12 +4232,13 @@ function focusDrivingMapByHeading(stationsToShow, userPosition, { force = false 
     if (!force && Number.isFinite(centerMoveKm) && centerMoveKm < DRIVE_MAP_CENTER_MIN_MOVE_KM) return;
     state.drivingMapFollowAt = now;
     state.drivingMapProgrammaticMove = true;
+    const followZoom = drivingMapFollowZoomForSpeed(speed);
     if (isMoving) {
         const currentZoom = Number(state.map.getZoom?.());
-        if (!Number.isFinite(currentZoom) || currentZoom < DRIVE_MAP_FOLLOW_ZOOM) {
-            state.map.setView([targetLat, targetLng], DRIVE_MAP_FOLLOW_ZOOM, { animate: false });
+        if (!Number.isFinite(currentZoom) || Math.abs(currentZoom - followZoom) > 0.05) {
+            state.map.setView([targetLat, targetLng], followZoom, { animate: false });
         } else {
-            state.map.panTo([targetLat, targetLng], { animate: true, duration: 0.65, easeLinearity: 0.35 });
+            state.map.panTo([targetLat, targetLng], { animate: true, duration: 0.28, easeLinearity: 0.75 });
         }
     } else if (state.drivingContext === 'city') {
         state.map.fitBounds(drivingMapBoundsAround(lat, lng, DRIVE_CITY_MAP_RADIUS_KM), {
@@ -3553,8 +4247,10 @@ function focusDrivingMapByHeading(stationsToShow, userPosition, { force = false 
             maxZoom: 17,
         });
     } else {
-        const targetZoom = Number.isFinite(speed) && speed > 40 ? 15 : 16;
-        const zoom = Math.max(state.map.getZoom() || targetZoom, targetZoom);
+        const targetZoom = drivingMapFollowZoomForSpeed(speed);
+        const zoom = Number.isFinite(Number(state.drivingMapZoomOverride))
+            ? targetZoom
+            : Math.max(state.map.getZoom() || targetZoom, targetZoom);
         state.map.setView([targetLat, targetLng], zoom, { animate: false });
     }
     window.setTimeout(() => {
@@ -4038,11 +4734,47 @@ function stationDetailExtraHtml(station) {
     `;
 }
 
-function fuelPriceValue(station, fuel) {
+function rawFuelPriceValue(station, fuel) {
     if (station?.cityMode && fuel === els.fuel.value && isValidPriceValue(station.price)) {
         return Number(station.price);
     }
     return station?.prices?.[fuel]?.price ?? station?.[fuel] ?? (station?.fuel_type === fuel ? station.price : null);
+}
+
+function fuelPriceRecordedAt(station, fuel) {
+    return station?.prices?.[fuel]?.recordedAt || null;
+}
+
+function isSuspiciousStoredFuelPrice(station, fuel, price) {
+    if (!['e5', 'e10'].includes(fuel) || !isValidPriceValue(price)) return false;
+    const fuelStand = validDateMs(fuelPriceRecordedAt(station, fuel));
+    if (fuelStand === null) return false;
+    const referenceTimes = ['diesel', 'e5', 'e10']
+        .filter((item) => item !== fuel)
+        .map((item) => validDateMs(fuelPriceRecordedAt(station, item)))
+        .filter((value) => value !== null);
+    const newestReference = referenceTimes.length ? Math.max(...referenceTimes) : null;
+    if (newestReference === null || newestReference - fuelStand < STORED_FUEL_OUTLIER_REF_AGE_MS) return false;
+
+    const diesel = Number(rawFuelPriceValue(station, 'diesel'));
+    const e10 = Number(rawFuelPriceValue(station, 'e10'));
+    if (fuel === 'e10' && isValidPriceValue(diesel) && Number(price) < diesel - STORED_FUEL_OUTLIER_GAP) return true;
+    if (fuel === 'e5' && isValidPriceValue(e10) && Number(price) < e10 - 0.02) return true;
+    return false;
+}
+
+function fuelPriceValue(station, fuel) {
+    const price = rawFuelPriceValue(station, fuel);
+    if (isSuspiciousStoredFuelPrice(station, fuel, price)) return null;
+    return price;
+}
+
+function comparableStationPrice(station, fuel = els.fuel.value) {
+    const selectedPrice = fuelPriceValue(station, fuel);
+    if (isValidPriceValue(selectedPrice)) return Number(selectedPrice);
+    return isValidPriceValue(station?.price) && !isSuspiciousStoredFuelPrice(station, fuel, station.price)
+        ? Number(station.price)
+        : null;
 }
 
 function stationFuelPriceGridHtml(station) {
@@ -4795,7 +5527,8 @@ function renderCachedNormalSearch() {
     state.listMode = 'results';
     updateFavoritesButton();
     sortStations();
-    els.resultCount.textContent = `${state.stations.length} Treffer`;
+    const visibleStations = getVisibleStations();
+    els.resultCount.textContent = `${visibleStations.length} Treffer`;
     const meta = state.normalSearchLastMeta;
     els.resultMeta.textContent = meta?.fallback
         ? `Gespeichert · ${fuelShortLabel(els.fuel.value)} · ${els.radius.value} km`
@@ -4810,8 +5543,13 @@ function renderCachedNormalSearch() {
 
 function captureNormalSearchBeforeDrive() {
     if (state.listMode !== 'results' || !state.stations.length) return;
+    const stations = state.stations.filter(isNormalSearchStation);
+    if (!stations.length) {
+        state.normalSearchSnapshotBeforeDrive = null;
+        return;
+    }
     state.normalSearchSnapshotBeforeDrive = {
-        stations: state.stations.map((station) => ({ ...station })),
+        stations: stations.map((station) => ({ ...station })),
         selectedLocation: state.selectedLocation ? { ...state.selectedLocation } : null,
         searchInputValue: els.searchInput?.value || '',
         selectedId: state.selectedId,
@@ -4858,18 +5596,68 @@ function restoreNormalSearchAfterSection() {
     return restoreNormalSearchSnapshot(state.normalSearchSnapshotBeforeSection);
 }
 
+function captureLocalDriveExitSnapshot() {
+    if (!isLocalDrivingContext(state.drivingContext) || !Array.isArray(state.stations) || !state.stations.length) {
+        state.drivingExitLocalSnapshot = null;
+        return;
+    }
+    const position = currentDrivingPosition() || state.selectedLocation || null;
+    state.drivingExitLocalSnapshot = {
+        context: state.drivingContext,
+        stations: state.stations.map((station) => ({ ...station })),
+        selectedLocation: position ? { ...position } : null,
+        searchInputValue: els.searchInput?.value || position?.label || '',
+        fuel: els.fuel.value,
+        createdAt: Date.now(),
+    };
+}
+
+function renderLocalDriveExitSnapshot() {
+    const snapshot = state.drivingExitLocalSnapshot;
+    if (!snapshot?.stations?.length || !isLocalDrivingContext(snapshot.context)) return false;
+    state.listMode = 'results';
+    state.stations = snapshot.stations.map((station) => ({
+        ...station,
+        drivingContext: station.drivingContext || snapshot.context,
+        drivingMode: true,
+    }));
+    state.selectedLocation = snapshot.selectedLocation ? { ...snapshot.selectedLocation } : state.selectedLocation;
+    state.selectedId = null;
+    if (els.searchInput) els.searchInput.value = snapshot.searchInputValue || state.selectedLocation?.label || '';
+    updateFavoritesButton();
+    sortStations();
+    setView('list');
+    const contextLabel = snapshot.context === 'rural' ? 'Landmodus' : 'Stadtmodus';
+    const radiusText = snapshot.context === 'rural' ? 'bis 25 km' : 'bis 5 km';
+    els.resultCount.textContent = `${state.stations.length} Treffer`;
+    els.resultMeta.textContent = `${contextLabel} · ${fuelShortLabel(snapshot.fuel || els.fuel.value)} · ${radiusText}`;
+    renderResults();
+    renderDetail(null);
+    setStatus('Drive');
+    hideSplashScreen();
+    return true;
+}
+
 function restoreNormalSearchAfterDrive() {
     const snapshot = state.normalSearchSnapshotBeforeDrive;
     if (!snapshot?.stations?.length) {
+        if (renderLocalDriveExitSnapshot()) return true;
+        state.listMode = 'results';
+        setView('list');
+        renderNormalSearchLoading('Tankstellenliste wird wieder geladen ...');
         restoreStoredStartState();
-        return;
+        return false;
     }
     restoreNormalSearchSnapshot(snapshot);
 
     const stale = !state.normalSearchLastLoadedAt || Date.now() - state.normalSearchLastLoadedAt >= NORMAL_SEARCH_REFRESH_MS;
-    if (stale && state.selectedLocation) {
-        refreshNormalSearchInBackground().catch(() => null);
+    const visibleStations = getVisibleStations();
+    if (state.selectedLocation && (!visibleStations.length || stale)) {
+        if (!visibleStations.length && renderLocalDriveExitSnapshot()) return true;
+        if (!visibleStations.length) renderNormalSearchLoading('Tankstellenliste wird wieder geladen ...');
+        loadStations({ force: true }).catch(() => refreshNormalSearchInBackground().catch(() => null));
     }
+    return Boolean(visibleStations.length);
 }
 
 async function loadStations(options = {}) {
@@ -5935,7 +6723,7 @@ function detectDrivingBearing(samples = state.drivingSamples) {
         .filter((sample) => Number.isFinite(sample.lat) && Number.isFinite(sample.lng))
         .slice(-5);
     const last = usable.at(-1);
-    if (last && Number.isFinite(last.heading) && last.heading >= 0 && last.heading <= 360 && Number(last.speedKmh || 0) >= 8) {
+    if (last && Number.isFinite(last.heading) && last.heading >= 0 && last.heading <= 360 && Number(last.speedKmh || 0) >= 2) {
         state.drivingLastBearing = last.heading;
         state.drivingLastBearingAt = Date.now();
         return last.heading;
@@ -5952,7 +6740,7 @@ function detectDrivingBearing(samples = state.drivingSamples) {
     const speedKmh = Number.isFinite(last.speedKmh) && last.speedKmh > 0 ? last.speedKmh : calculatedSpeed;
     state.drivingAccuracy = last.accuracy;
     const hasRecentBearing = Date.now() - Number(state.drivingLastBearingAt || 0) <= DRIVE_BEARING_MEMORY_MS;
-    if (speedKmh < 10 || Number(last.accuracy) > 100 || distance < 0.03) {
+    if (speedKmh < 3 || Number(last.accuracy) > 100 || distance < 0.008) {
         return hasRecentBearing ? state.drivingLastBearing : null;
     }
     const bearing = calculateBearing(first, last);
@@ -6077,22 +6865,85 @@ function dedupeRouteTankpoints(points) {
     return [...byKey.values()];
 }
 
+function projectPointOnAxisNodes(point, nodes) {
+    if (!point || !Array.isArray(nodes) || !nodes.length) return null;
+    if (nodes.length === 1) {
+        return {
+            distanceKm: routeDistanceKm(point.lat, point.lng, nodes[0].lat, nodes[0].lng),
+            axisDistanceKm: nodes[0].axisDistanceKm,
+            segmentIndex: 0,
+            segmentBearing: null,
+        };
+    }
+
+    const latScale = 111.32;
+    const lngScale = 111.32 * Math.max(0.2, Math.cos((Number(point.lat) * Math.PI) / 180));
+    const px = Number(point.lng) * lngScale;
+    const py = Number(point.lat) * latScale;
+    let best = null;
+    for (let index = 1; index < nodes.length; index += 1) {
+        const start = nodes[index - 1];
+        const end = nodes[index];
+        const ax = Number(start.lng) * lngScale;
+        const ay = Number(start.lat) * latScale;
+        const bx = Number(end.lng) * lngScale;
+        const by = Number(end.lat) * latScale;
+        const dx = bx - ax;
+        const dy = by - ay;
+        const lengthSquared = dx * dx + dy * dy;
+        if (!lengthSquared) continue;
+        const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSquared));
+        const x = ax + t * dx;
+        const y = ay + t * dy;
+        const distanceKm = Math.sqrt((px - x) ** 2 + (py - y) ** 2);
+        const axisDistanceKm = start.axisDistanceKm + t * (end.axisDistanceKm - start.axisDistanceKm);
+        if (!best || distanceKm < best.distanceKm) {
+            best = {
+                distanceKm,
+                axisDistanceKm,
+                segmentIndex: index - 1,
+                segmentBearing: calculateBearing(start, end),
+            };
+        }
+    }
+    return best;
+}
+
 function routeAxisFor(routeId) {
-    const points = routeTankpointsFor(routeId)
-        .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
-        .sort((a, b) => routeSortValue(a) - routeSortValue(b));
+    const spinePoints = autobahnRouteSpinePoints(routeId);
+    const sourcePoints = spinePoints.length >= 2
+        ? spinePoints.map(([lat, lng], index) => ({
+            id: `spine:${routeId}:${index}`,
+            lat,
+            lng,
+            kmPosition: null,
+            streckenIndex: null,
+        }))
+        : routeTankpointsFor(routeId)
+            .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
+            .sort((a, b) => routeSortValue(a) - routeSortValue(b));
     let cumulativeKm = 0;
     const axisByKey = new Map();
-    const nodes = points.map((point, index) => {
+    const nodes = sourcePoints.map((point, index) => {
         if (index > 0) {
-            cumulativeKm += routeDistanceKm(points[index - 1].lat, points[index - 1].lng, point.lat, point.lng);
+            cumulativeKm += routeDistanceKm(sourcePoints[index - 1].lat, sourcePoints[index - 1].lng, point.lat, point.lng);
         }
-        const explicit = !routeUsesLatFallback(routeId) && Number.isFinite(routeSortValue(point));
+        const explicit = spinePoints.length < 2 && !routeUsesLatFallback(routeId) && Number.isFinite(routeSortValue(point));
         const axisDistanceKm = explicit ? routeSortValue(point) : cumulativeKm;
         const node = { ...point, axisDistanceKm };
         axisByKey.set(routePointKey(point), axisDistanceKm);
         return node;
     });
+    if (spinePoints.length >= 2) {
+        routeTankpointsFor(routeId)
+            .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
+            .forEach((point) => {
+                const projection = projectPointOnAxisNodes(point, nodes);
+                if (projection && Number.isFinite(projection.axisDistanceKm)) {
+                    axisByKey.set(routePointKey(point), projection.axisDistanceKm);
+                }
+            });
+    }
     return { nodes, axisByKey };
 }
 
@@ -6126,49 +6977,8 @@ function projectPositionToRouteAxis(position, routeId) {
     const axis = routeAxisFor(routeId);
     const points = axis.nodes;
     if (!position || !points.length) return null;
-    if (points.length === 1) {
-        return {
-            routeId,
-            distanceKm: routeDistanceKm(position.lat, position.lng, points[0].lat, points[0].lng),
-            axisDistanceKm: points[0].axisDistanceKm,
-            segmentIndex: 0,
-            axis,
-        };
-    }
-
-    const latScale = 111.32;
-    const lngScale = 111.32 * Math.max(0.2, Math.cos((Number(position.lat) * Math.PI) / 180));
-    const px = Number(position.lng) * lngScale;
-    const py = Number(position.lat) * latScale;
-    let best = null;
-    for (let index = 1; index < points.length; index += 1) {
-        const start = points[index - 1];
-        const end = points[index];
-        const ax = Number(start.lng) * lngScale;
-        const ay = Number(start.lat) * latScale;
-        const bx = Number(end.lng) * lngScale;
-        const by = Number(end.lat) * latScale;
-        const dx = bx - ax;
-        const dy = by - ay;
-        const lengthSquared = dx * dx + dy * dy;
-        if (!lengthSquared) continue;
-        const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSquared));
-        const x = ax + t * dx;
-        const y = ay + t * dy;
-        const distanceKm = Math.sqrt((px - x) ** 2 + (py - y) ** 2);
-        const axisDistanceKm = start.axisDistanceKm + t * (end.axisDistanceKm - start.axisDistanceKm);
-        if (!best || distanceKm < best.distanceKm) {
-            best = {
-                routeId,
-                distanceKm,
-                axisDistanceKm,
-                segmentIndex: index - 1,
-                segmentBearing: calculateBearing(start, end),
-                axis,
-            };
-        }
-    }
-    return best;
+    const best = projectPointOnAxisNodes(position, points);
+    return best ? { routeId, ...best, axis } : null;
 }
 
 function routeLabel(routeId = state.drivingDetectedRouteId || state.drivingRouteId) {
@@ -6608,6 +7418,15 @@ function hasAnyFuelPrice(point) {
     return ['diesel', 'e5', 'e10'].some((fuel) => isValidPriceValue(fuelPriceValue(point, fuel)));
 }
 
+function canShowHighwayDriveStation(station) {
+    return hasDrivingPrice(station, els.fuel.value) || canRetryDrivingPrice(station);
+}
+
+function highwayDriveStationsForDisplay(stations, limit = 10) {
+    const filtered = stations.filter(canShowHighwayDriveStation);
+    return (filtered.length ? filtered : stations).slice(0, limit);
+}
+
 function routeHasEnoughDetectionPoints(routeId, minCount = 2) {
     return routeTankpointsFor(routeId)
         .filter((point) => Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lng)))
@@ -6741,10 +7560,26 @@ function routeAxisValueForPoint(point, axis) {
     return axis?.axisByKey?.get(routePointKey(point)) ?? routeSortValue(point);
 }
 
-function routePointDistanceAheadKm(point, currentPosition, axis) {
+function isKnownRouteDirection(direction = state.drivingDirection || state.drivingStableDirection) {
+    return direction === 'Muenchen' || direction === 'Berlin';
+}
+
+function routePointDeltaAheadKm(point, currentPosition, axis, direction = state.drivingDirection || state.drivingStableDirection) {
     const value = routeAxisValueForPoint(point, axis);
     if (!Number.isFinite(value) || !Number.isFinite(currentPosition)) return null;
+    if (direction === 'Muenchen') return value - currentPosition;
+    if (direction === 'Berlin') return currentPosition - value;
     return Math.abs(value - currentPosition);
+}
+
+function routePointDistanceAheadKm(point, currentPosition, axis, { allowBehindKm = DRIVE_ROUTE_PREVIEW_BEHIND_KM } = {}) {
+    const direction = String(state.drivingDirection || state.drivingStableDirection || '');
+    const delta = routePointDeltaAheadKm(point, currentPosition, axis, direction);
+    if (Number.isFinite(delta)) {
+        if (isKnownRouteDirection(direction) && delta < -allowBehindKm) return null;
+        return Math.max(0, delta);
+    }
+    return null;
 }
 
 function projectPointToRouteGeometry(point, geometry = state.drivingRouteGeometry) {
@@ -6858,13 +7693,19 @@ function getRoutePreviewTankpoints(position, limit = 120) {
     if (hasRouteGeometry) {
         const currentProjection = position ? projectPointToRouteGeometry(position) : null;
         const currentRouteKm = Number.isFinite(currentProjection?.routeKm) ? currentProjection.routeKm : 0;
+        const direction = String(state.drivingDirection || state.drivingStableDirection || '');
         const projectedTankpoints = routeTankpointsFor(activeRouteId)
             .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
             .map((point) => {
                 const projection = projectPointToRouteGeometry(point);
-                if (!projection || !Number.isFinite(projection.routeKm) || projection.routeKm < currentRouteKm - DRIVE_ROUTE_PREVIEW_BEHIND_KM) return null;
+                if (!projection || !Number.isFinite(projection.routeKm)) return null;
+                const routeDelta = direction === 'Berlin'
+                    ? currentRouteKm - projection.routeKm
+                    : projection.routeKm - currentRouteKm;
+                if (isKnownRouteDirection(direction) && routeDelta < -DRIVE_ROUTE_PREVIEW_BEHIND_KM) return null;
+                if (!isKnownRouteDirection(direction) && projection.routeKm < currentRouteKm - DRIVE_ROUTE_PREVIEW_BEHIND_KM) return null;
                 if (projection.distanceKm > DRIVE_ROUTE_PREVIEW_CORRIDOR_KM) return null;
-                const routeDistance = Math.max(0, projection.routeKm - currentRouteKm) + projection.distanceKm;
+                const routeDistance = Math.max(0, routeDelta) + projection.distanceKm;
                 return {
                     ...point,
                     drivingContext: 'route-preview',
@@ -6918,15 +7759,20 @@ function getRoutePreviewTankpoints(position, limit = 120) {
     return routeTankpointsFor(activeRouteId)
         .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
         .filter((point) => {
-            if (!hasDestinationSegment) return true;
             const axisValue = routeAxisValueForPoint(point, axis);
             if (!Number.isFinite(axisValue)) return false;
+            if (!hasDestinationSegment) {
+                if (!Number.isFinite(startAxisKm)) return true;
+                const routeDistance = routePointDistanceAheadKm(point, startAxisKm, axis);
+                return Number.isFinite(routeDistance);
+            }
             return axisValue >= segmentMin - 1 && axisValue <= segmentMax + 1;
         })
         .map((point) => {
             const axisValue = routeAxisValueForPoint(point, axis);
+            const aheadDistance = routePointDistanceAheadKm(point, startAxisKm, axis);
             const routeDistance = Number.isFinite(startAxisKm) && Number.isFinite(axisValue)
-                ? accessDistanceKm + Math.abs(axisValue - startAxisKm)
+                ? accessDistanceKm + (Number.isFinite(aheadDistance) ? aheadDistance : Math.abs(axisValue - startAxisKm))
                 : (position ? routeDistanceKm(position.lat, position.lng, point.lat, point.lng) : 0);
             return {
                 ...point,
@@ -6970,13 +7816,67 @@ function updateRoutePreviewDistancesFromPosition(stations, position) {
         .map((station) => {
             const routePreviewKm = Number(station.routePreviewKm);
             if (!Number.isFinite(routePreviewKm)) return station;
+            const direction = String(state.drivingDirection || state.drivingStableDirection || '');
+            const routeDelta = direction === 'Berlin'
+                ? currentProjection.routeKm - routePreviewKm
+                : routePreviewKm - currentProjection.routeKm;
+            if (isKnownRouteDirection(direction) && routeDelta < -DRIVE_ROUTE_PREVIEW_BEHIND_KM) return null;
             return {
                 ...station,
-                distance: Math.max(0, routePreviewKm - currentProjection.routeKm)
+                distance: Math.max(0, routeDelta)
                     + Math.max(0, Number(station.routeDistanceFromGeometryKm || 0)),
             };
         })
+        .filter(Boolean)
         .sort((a, b) => Number(a.routePreviewKm || a.distance || 0) - Number(b.routePreviewKm || b.distance || 0));
+}
+
+function refreshDrivingStationDistances(position, stations = state.stations) {
+    if (!position || !Array.isArray(stations) || !stations.length) return stations || [];
+    const lat = Number(position.lat);
+    const lng = Number(position.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return stations;
+
+    const geometryProjection = projectPointToRouteGeometry(position);
+    const activeRouteId = state.drivingDetectedRouteId || state.drivingRouteId;
+    const axis = state.drivingRouteProjection?.axis || routeAxisFor(activeRouteId);
+    const currentRoutePosition = estimateCurrentRoutePosition(position);
+
+    return stations
+        .map((station) => {
+            let distance = null;
+            const stationContext = station.drivingContext || state.drivingContext;
+            const isLocalStation = isLocalDrivingContext(stationContext);
+            if (isLocalStation) {
+                if (Number.isFinite(Number(station.lat)) && Number.isFinite(Number(station.lng))) {
+                    distance = routeDistanceKm(lat, lng, station.lat, station.lng);
+                }
+                return Number.isFinite(distance) ? { ...station, distance } : station;
+            }
+            const isHighwayStation = state.drivingContext === 'highway'
+                || station.drivingContext === 'route-preview'
+                || Boolean(station.routeId || station.autobahn || station.highway || station.kmPosition || station.streckenIndex);
+            const routePreviewKm = Number(station.routePreviewKm);
+            if (Number.isFinite(routePreviewKm) && Number.isFinite(geometryProjection?.routeKm)) {
+                const direction = String(state.drivingDirection || state.drivingStableDirection || '');
+                const routeDelta = direction === 'Berlin'
+                    ? geometryProjection.routeKm - routePreviewKm
+                    : routePreviewKm - geometryProjection.routeKm;
+                if (isKnownRouteDirection(direction) && routeDelta < -DRIVE_ROUTE_PREVIEW_BEHIND_KM) return null;
+                distance = Math.max(0, routeDelta) + Math.max(0, Number(station.routeDistanceFromGeometryKm || 0));
+            }
+            if (!Number.isFinite(distance) && Number.isFinite(currentRoutePosition)) {
+                const axisDistance = routePointDistanceAheadKm(station, currentRoutePosition, axis);
+                if (Number.isFinite(axisDistance)) distance = axisDistance;
+                else if (isHighwayStation && isKnownRouteDirection()) return null;
+            }
+            if (!Number.isFinite(distance) && !isHighwayStation && Number.isFinite(Number(station.lat)) && Number.isFinite(Number(station.lng))) {
+                distance = routeDistanceKm(lat, lng, station.lat, station.lng);
+            }
+            return Number.isFinite(distance) ? { ...station, distance } : station;
+        })
+        .filter(Boolean)
+        .sort((a, b) => Number(a.distance || Number.POSITIVE_INFINITY) - Number(b.distance || Number.POSITIVE_INFINITY));
 }
 
 function buildDrivingRoutePreviewCache(position, limit = 120) {
@@ -7528,10 +8428,12 @@ function normalizeRouteTankpoint(point) {
 
 async function loadRouteTankpoints(routeId = state.drivingRouteId, options = {}) {
     const requestRouteId = drivingRouteRequestId(routeId, options.ignoreTemplate);
-    const loadKey = `route:${requestRouteId}`;
+    const withPrices = options.includePrices === true && requestRouteId !== 'ALL';
+    const loadKey = `route:${requestRouteId}:prices:${withPrices ? '1' : '0'}`;
     const freshMs = state.drivingRouteLoadedAt ? Date.now() - state.drivingRouteLoadedAt : Number.POSITIVE_INFINITY;
     if (!options.force && state.drivingRouteTankpoints.length && state.drivingRouteLoadKey === loadKey && freshMs < DRIVE_ROUTE_REFRESH_MS) return state.drivingRouteTankpoints;
-    const data = await fetchJson(`/api/route/tankpoints.php?route=${encodeURIComponent(requestRouteId)}`);
+    const priceQuery = withPrices ? '&prices=1&refresh=1' : '';
+    const data = await fetchJson(`/api/route/tankpoints.php?route=${encodeURIComponent(requestRouteId)}${priceQuery}`);
     state.drivingRouteTankpoints = dedupeRouteTankpoints((data.tankpoints || [])
         .map(normalizeRouteTankpoint)
         .filter((point) => point.tankerkoenig_id && Number.isFinite(point.lat) && Number.isFinite(point.lng)));
@@ -7618,6 +8520,8 @@ function routeTankpointExitName(station) {
 
 function drivingTankpointRowHtml(station, rank, thresholds) {
     const cls = markerClass(station, thresholds);
+    const distance = Number(station.distance);
+    const distanceValue = Number.isFinite(distance) ? distance.toFixed(1).replace('.', ',') : '-';
     const typeLabel = routeTankpointTypeLabel(station.typ);
     const access = station.direktAnAutobahn
         ? 'direkt an Autobahn'
@@ -7633,7 +8537,7 @@ function drivingTankpointRowHtml(station, rank, thresholds) {
                 <small>${escapeHtml(typeLabel)} · ${escapeHtml(access)}${exit ? ` · ${escapeHtml(exit)}` : ''}</small>
                 <small>Diesel ${money(fuelPriceValue(station, 'diesel'))} · E5 ${money(fuelPriceValue(station, 'e5'))} · E10 ${money(fuelPriceValue(station, 'e10'))}</small>
             </span>
-            <span class="driving-distance">${Number(station.distance || 0).toFixed(1).replace('.', ',')} km</span>
+            <span class="driving-distance">${distanceValue} km</span>
             <span class="driving-status">${station.is_open === false ? 'geschlossen' : station.is_open === true ? 'geöffnet' : 'Status offen'}</span>
         </button>
     `;
@@ -7642,6 +8546,8 @@ function drivingTankpointRowHtml(station, rank, thresholds) {
 function drivingTankpointCardHtml(station, rank, thresholds) {
     if (station.chargingMode) {
         const mode = station.acDc || (station.fastCharging ? 'DC' : 'AC');
+        const distance = Number(station.distance);
+        const distanceValue = Number.isFinite(distance) ? distance.toFixed(1).replace('.', ',') : '-';
         const isRouteCharging = station.drivingContext === 'charging-route';
         const directionHtml = `<span class="driving-direction">${drivingTankpointDirectionHtml(station, rank)}</span>`;
         const statusClass = /betrieb/i.test(station.status || '') ? 'live' : 'missing';
@@ -7663,7 +8569,7 @@ function drivingTankpointCardHtml(station, rank, thresholds) {
                 </span>
                 ${directionHtml}
                 <span class="driving-distance">
-                    <strong>${Number(station.distance || 0).toFixed(1).replace('.', ',')}</strong>
+                    <strong>${distanceValue}</strong>
                     <small>${isRouteCharging ? 'km voraus' : 'km entfernt'}</small>
                 </span>
                 <span class="driving-selected-price price-rank-green-light">
@@ -7674,6 +8580,8 @@ function drivingTankpointCardHtml(station, rank, thresholds) {
         `;
     }
     const cls = markerClass(station, thresholds);
+    const distance = Number(station.distance);
+    const distanceValue = Number.isFinite(distance) ? distance.toFixed(1).replace('.', ',') : '-';
     const typeLabel = routeTankpointTypeLabel(station.typ);
     const isCity = isLocalDrivingContext() || isLocalDrivingContext(station.drivingContext);
     const isRoutePreview = station.drivingContext === 'route-preview';
@@ -7724,7 +8632,7 @@ function drivingTankpointCardHtml(station, rank, thresholds) {
             </span>
             ${directionHtml}
             <span class="driving-distance">
-                <strong>${Number(station.distance || 0).toFixed(1).replace('.', ',')}</strong>
+                <strong>${distanceValue}</strong>
                 <small>${isCity || isRoutePreview ? 'km entfernt' : 'km voraus'}</small>
             </span>
             <span class="driving-selected-price ${selectedPriceClass}">
@@ -7894,6 +8802,7 @@ function renderDrivingModeList() {
     if (destinationFocusState) state.drivingDestinationQuery = destinationFocusState.value;
     const directionLabel = state.drivingDirection === 'Muenchen' ? 'Richtung Sueden' : state.drivingDirection === 'Berlin' ? 'Richtung Norden' : 'wird ermittelt';
     const speed = drivingSpeedText();
+    const currentStreetName = dashcamStreetTitle(state.dashcamStableStreet);
     const accuracy = Number.isFinite(state.drivingAccuracy) ? `GPS ${Math.round(state.drivingAccuracy)} m` : 'GPS wird ermittelt';
     const routeDistance = Number.isFinite(state.drivingNearestRouteDistanceKm)
         ? `${state.drivingNearestRouteDistanceKm.toFixed(1).replace('.', ',')} km zur Route`
@@ -7940,6 +8849,7 @@ function renderDrivingModeList() {
             <strong>${escapeHtml(driveContextText)}</strong>
         </span>
         <span class="drive-speed-chip" aria-label="Geschwindigkeit">${escapeHtml(speed)}</span>
+        <span class="drive-street-chip" aria-label="Aktuelle Strasse">${escapeHtml(currentStreetName || 'Strasse wird ermittelt')}</span>
         ${mapListButton}
     `;
     updateSectionHeaderTone();
@@ -8052,7 +8962,7 @@ function renderDrivingModeList() {
         renderDrivingModeList();
         evaluateDrivingModeList();
     });
-    els.results.querySelector('[data-driving-stop]')?.addEventListener('click', stopDrivingMode);
+    els.results.querySelector('[data-driving-stop]')?.addEventListener('click', () => stopDrivingMode(true, { showSummary: true }));
     els.results.querySelector('[data-driving-test-form]')?.addEventListener('submit', (event) => {
         event.preventDefault();
         applyDrivingTestPosition(new FormData(event.currentTarget)).catch((error) => {
@@ -8217,12 +9127,21 @@ async function updateDrivingMode(options = {}) {
     }
 
     state.selectedLocation = { label: 'Aktuelle Position', lat: position.lat, lng: position.lng };
+    updateDashcamStreet(position).catch(() => {});
     if (state.drivingVehicleMode === 'electric') {
         await updateElectricDrivingMode(position);
         return;
     }
     await loadRouteTankpoints(state.drivingRouteId);
-    const route = stabilizedDrivingRoute(applySpeedHighwayHeuristic(detectCurrentRoute(position, state.drivingRouteId)), position);
+    const hasDestinationRoute = Boolean(state.drivingDestination && state.drivingRouteSuggestion);
+    let route = stabilizedDrivingRoute(applySpeedHighwayHeuristic(detectCurrentRoute(position, state.drivingRouteId)), position);
+    if (!hasDestinationRoute && route.onRoute && route.routeId && state.drivingRouteId !== route.routeId) {
+        state.drivingRouteId = route.routeId;
+        await loadRouteTankpoints(route.routeId, { force: true, ignoreTemplate: true, includePrices: true });
+        route = stabilizedDrivingRoute(applySpeedHighwayHeuristic(detectCurrentRoute(position, route.routeId)), position);
+    } else if (!hasDestinationRoute && route.onRoute && route.routeId) {
+        await loadRouteTankpoints(route.routeId, { ignoreTemplate: true, includePrices: true });
+    }
     if (route.projection && state.drivingSamples.length) {
         state.drivingSamples[state.drivingSamples.length - 1] = {
             ...state.drivingSamples[state.drivingSamples.length - 1],
@@ -8236,7 +9155,6 @@ async function updateDrivingMode(options = {}) {
         ? (detectDrivingDirectionOnRoute() || detectRouteAxisDirectionFromBearing(route) || detectDrivingDirection() || templateDirection)
         : detectDrivingDirection();
     state.drivingDirection = direction;
-    const hasDestinationRoute = Boolean(state.drivingDestination && state.drivingRouteSuggestion);
     const hasRoutePreviewCache = Boolean(state.drivingRoutePreviewCache?.stations?.length);
     const confirmedDestinationHighway = isConfirmedDestinationHighwayRoute(route);
     const showRoutePreview = hasDestinationRoute && (route.onRoute || route.held || confirmedDestinationHighway);
@@ -8267,7 +9185,7 @@ async function updateDrivingMode(options = {}) {
         }
         const currentRoutePreviewStations = routePreviewStations
             .filter((station) => hasCurrentDrivingPrice(station, els.fuel.value, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS));
-        state.stations = routePreviewStations.slice(0, routePreviewDisplayLimit);
+        state.stations = highwayDriveStationsForDisplay(routePreviewStations, routePreviewDisplayLimit);
         state.drivingStatus = state.stations.length ? 'ready' : 'empty';
         state.drivingMessage = state.stations.length
             ? (state.drivingLivePriceMessage || `${currentRoutePreviewStations.length}/${state.stations.length} Tankpunkte mit aktuellen Preisen an der Strecke`)
@@ -8295,7 +9213,7 @@ async function updateDrivingMode(options = {}) {
         }
         const currentStationsAhead = stationsAhead
             .filter((station) => hasCurrentDrivingPrice(station, els.fuel.value, DRIVE_HIGHWAY_PRICE_MAX_AGE_MS));
-        state.stations = stationsAhead.slice(0, 10);
+        state.stations = highwayDriveStationsForDisplay(stationsAhead, 10);
         state.drivingStatus = state.stations.length ? 'ready' : 'empty';
         state.drivingMessage = state.stations.length
             ? (state.drivingLivePriceMessage || (currentStationsAhead.length
@@ -8360,8 +9278,26 @@ function drivingSampleFromPosition(position) {
 }
 
 function rememberDrivingPosition(position, { triggerInitialUpdate = true } = {}) {
-    const sample = drivingSampleFromPosition(position);
+    let sample = drivingSampleFromPosition(position);
     if (!Number.isFinite(sample.lat) || !Number.isFinite(sample.lng)) return;
+    const activeRouteId = state.drivingDetectedRouteId || state.drivingRouteId;
+    const projection = state.drivingActive && activeRouteId
+        ? projectPositionToRouteAxis(sample, activeRouteId)
+        : null;
+    if (projection && Number.isFinite(projection.axisDistanceKm)) {
+        sample = {
+            ...sample,
+            routeId: activeRouteId,
+            routeAxisDistanceKm: projection.axisDistanceKm,
+            routeDistanceKm: projection.distanceKm,
+        };
+        state.drivingRouteProjection = {
+            ...projection,
+            axis: projection.axis || routeAxisFor(activeRouteId),
+        };
+        state.drivingCurrentRoutePosition = projection.axisDistanceKm;
+    }
+    rememberDrivingTripDistance(sample);
     const previousCount = state.drivingSamples.length;
     state.drivingSamples.push(sample);
     state.drivingSamples = state.drivingSamples.slice(-5);
@@ -8379,6 +9315,14 @@ function rememberDrivingPosition(position, { triggerInitialUpdate = true } = {})
 
 function handleDrivingPosition(position) {
     const sample = rememberDrivingPosition(position);
+    requestDriveWakeLock();
+    if (state.drivingActive && sample && state.stations.length) {
+        state.stations = refreshDrivingStationDistances(sample, state.stations);
+        if (state.listMode === 'driving' && state.view === 'list' && Date.now() - Number(state.drivingDistanceRenderAt || 0) > 1800) {
+            state.drivingDistanceRenderAt = Date.now();
+            if (!isDrivingDestinationInputActive()) renderDrivingModeList();
+        }
+    }
     if (state.dashcamActive) {
         renderDashcamOverlay();
         updateDashcamStreet(sample).catch(() => null);
@@ -8411,15 +9355,90 @@ function refreshDrivingCurrentPosition() {
 }
 
 async function requestDriveWakeLock() {
-    if (!state.drivingActive || state.wakeLock || !navigator.wakeLock || document.visibilityState !== 'visible') return;
+    if (!state.drivingActive || state.wakeLock || !navigator.wakeLock || document.visibilityState !== 'visible') {
+        if (state.drivingActive && document.visibilityState === 'visible') startDriveWakeFallback();
+        return;
+    }
     try {
         state.wakeLock = await navigator.wakeLock.request('screen');
         state.wakeLock.addEventListener('release', () => {
             state.wakeLock = null;
+            if (state.drivingActive && document.visibilityState === 'visible') {
+                window.setTimeout(() => requestDriveWakeLock(), 250);
+            }
         });
     } catch {
         state.wakeLock = null;
+        startDriveWakeFallback();
     }
+}
+
+function startDriveWakeFallback() {
+    if (!state.drivingActive || state.drivingWakeFallbackVideo || typeof document === 'undefined') return;
+    const canvas = document.createElement('canvas');
+    canvas.width = 2;
+    canvas.height = 2;
+    const ctx = canvas.getContext('2d');
+    if (!ctx || typeof canvas.captureStream !== 'function') return;
+    const video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.autoplay = true;
+    video.loop = true;
+    video.setAttribute('muted', '');
+    video.setAttribute('playsinline', '');
+    video.setAttribute('aria-hidden', 'true');
+    video.style.position = 'fixed';
+    video.style.left = '0';
+    video.style.bottom = '0';
+    video.style.width = '1px';
+    video.style.height = '1px';
+    video.style.opacity = '0.01';
+    video.style.pointerEvents = 'none';
+    video.style.zIndex = '-1';
+    const draw = () => {
+        const phase = Date.now() % 2000 < 1000 ? '#000000' : '#010101';
+        ctx.fillStyle = phase;
+        ctx.fillRect(0, 0, 2, 2);
+    };
+    draw();
+    const stream = canvas.captureStream(1);
+    video.srcObject = stream;
+    document.body.appendChild(video);
+    state.drivingWakeFallbackVideo = video;
+    state.drivingWakeFallbackCanvas = canvas;
+    state.drivingWakeFallbackCtx = ctx;
+    state.drivingWakeFallbackStream = stream;
+    state.drivingWakeFallbackTimer = window.setInterval(draw, 1000);
+    video.play?.().catch(() => null);
+}
+
+function stopDriveWakeFallback() {
+    if (state.drivingWakeFallbackTimer) {
+        window.clearInterval(state.drivingWakeFallbackTimer);
+        state.drivingWakeFallbackTimer = null;
+    }
+    state.drivingWakeFallbackStream?.getTracks?.().forEach((track) => track.stop());
+    state.drivingWakeFallbackVideo?.pause?.();
+    state.drivingWakeFallbackVideo?.remove?.();
+    state.drivingWakeFallbackVideo = null;
+    state.drivingWakeFallbackCanvas = null;
+    state.drivingWakeFallbackCtx = null;
+    state.drivingWakeFallbackStream = null;
+}
+
+function startDriveWakeLockRefresh() {
+    if (state.drivingWakeLockTimer) return;
+    state.drivingWakeLockTimer = window.setInterval(() => {
+        requestDriveWakeLock();
+        startDriveWakeFallback();
+    }, DRIVE_WAKE_LOCK_REFRESH_MS);
+}
+
+function stopDriveWakeLockRefresh() {
+    if (!state.drivingWakeLockTimer) return;
+    window.clearInterval(state.drivingWakeLockTimer);
+    state.drivingWakeLockTimer = null;
 }
 
 async function requestPortraitOrientationLock() {
@@ -8464,7 +9483,7 @@ async function releaseDriveWakeLock() {
 function handleDriveWakeLockVisibility() {
     if (document.visibilityState === 'visible' && state.drivingActive) {
         requestDriveWakeLock();
-        requestPortraitOrientationLock();
+        maybeScheduleDashcamAutoStart({ fromDrivingMode: true });
     }
 }
 
@@ -8525,7 +9544,6 @@ function stopDrivingCompass() {
 
 async function startDrivingMode(routeId = 'ALL', options = {}) {
     captureNormalSearchBeforeDrive();
-    requestPortraitOrientationLock();
     const requestedVehicleMode = options.vehicleMode || state.vehicleMode || DEFAULT_VEHICLE_MODE;
     state.drivingControlsVisibleUntil = Date.now() + DRIVE_CONTROL_REVEAL_MS;
     state.listMode = 'driving';
@@ -8539,6 +9557,14 @@ async function startDrivingMode(routeId = 'ALL', options = {}) {
     state.drivingSpeedUpdatedAt = null;
     state.drivingLastUpdateAt = 0;
     state.drivingUpdateStartedAt = 0;
+    state.drivingDistanceRenderAt = 0;
+    state.drivingTripStartedAt = Date.now();
+    state.drivingTripEndedAt = null;
+    state.drivingTripDistanceKm = 0;
+    state.drivingTripLastPosition = null;
+    state.drivingTripStartStreet = dashcamStreetTitle(state.dashcamStableStreet) || '';
+    state.drivingTripEndStreet = state.drivingTripStartStreet;
+    startDrivingBatteryTracking();
     state.drivingMapReadyPending = false;
     state.drivingMapLastAutoFitKey = null;
     state.drivingMapFocusKey = null;
@@ -8560,7 +9586,10 @@ async function startDrivingMode(routeId = 'ALL', options = {}) {
     renderDetail(null);
     renderDrivingModeList();
     requestDriveWakeLock();
+    startDriveWakeFallback();
+    startDriveWakeLockRefresh();
     startDrivingCompass();
+    maybeScheduleDashcamAutoStart({ fromDrivingMode: true });
 
     if (!navigator.geolocation) {
         state.drivingStatus = 'blocked';
@@ -8576,7 +9605,7 @@ async function startDrivingMode(routeId = 'ALL', options = {}) {
         renderDrivingModeList();
     }, {
         enableHighAccuracy: true,
-        maximumAge: 1000,
+        maximumAge: 250,
         timeout: 12000,
     });
     if (state.drivingUpdateTimer !== null) window.clearInterval(state.drivingUpdateTimer);
@@ -8597,7 +9626,12 @@ async function startDrivingMode(routeId = 'ALL', options = {}) {
     }
 }
 
-function stopDrivingMode(restore = true) {
+function stopDrivingMode(restore = true, options = {}) {
+    if (options.showSummary) finalizeDrivingTripSummaryState();
+    if (options.showSummary) showDrivingTripSummary('Fahrt beendet');
+    if (restore) captureLocalDriveExitSnapshot();
+    stopDriveWakeLockRefresh();
+    stopDriveWakeFallback();
     releasePortraitOrientationLock();
     releaseDriveWakeLock();
     stopDrivingCompass();
@@ -8629,6 +9663,15 @@ function stopDrivingMode(restore = true) {
     state.drivingLastBearingAt = null;
     state.drivingSpeedKmh = null;
     state.drivingSpeedUpdatedAt = null;
+    state.drivingDistanceRenderAt = 0;
+    state.drivingTripStartedAt = null;
+    state.drivingTripEndedAt = null;
+    state.drivingTripDistanceKm = 0;
+    state.drivingTripLastPosition = null;
+    state.drivingTripStartStreet = '';
+    state.drivingTripEndStreet = '';
+    state.drivingBatteryStartLevel = null;
+    state.drivingBatteryStartCharging = null;
     state.drivingAccuracy = null;
     state.drivingNearestRouteDistanceKm = null;
     state.drivingCurrentRoutePosition = null;
@@ -8644,10 +9687,15 @@ function stopDrivingMode(restore = true) {
     state.listMode = 'results';
     renderDetail(null);
     if (restore) {
-        restoreNormalSearchAfterDrive();
+        const restored = restoreNormalSearchAfterDrive();
+        if (!restored && state.selectedLocation) {
+            renderNormalSearchLoading('Tankstellenliste wird wieder geladen ...');
+        }
     } else {
         state.stations = [];
         state.selectedLocation = null;
+        setView('list');
+        renderResults();
     }
     updateBottomNav();
 }
@@ -11473,8 +12521,14 @@ function restoreStoredStartState(lastLocation = loadLastLocation()) {
 function loadStartupFallbackList() {
     if (state.startupLocationPending) return;
     if (state.listMode !== 'results' || els.detail.classList.contains('visible')) return;
-    if (state.stations.length && state.stations.every((station) => !station.cityMode && !station.autobahnMode)) return;
-    if (state.selectedLocation) return;
+    const hasVisibleNormalStations = state.stations.length
+        && state.stations.some((station) => !station.cityMode && !station.autobahnMode && !station.drivingMode);
+    if (hasVisibleNormalStations) return;
+    if (state.selectedLocation) {
+        els.resultMeta.textContent = 'Tankstellen werden geladen ...';
+        loadStations({ startup: true, force: true });
+        return;
+    }
 
     state.selectedLocation = { ...startupFallbackLocation };
     els.searchInput.value = state.selectedLocation.label;
@@ -11502,27 +12556,17 @@ function restoreStartState() {
         timeoutMs: lastLocation ? 6200 : 6800,
         updateOnlyIfMovedKm: 0,
         onFail: () => {
-            state.selectedLocation = null;
-            if (els.searchInput) els.searchInput.value = '';
             setStatus('Bereit');
-            els.resultCount.textContent = 'Standort offen';
-            els.resultMeta.textContent = 'Standort konnte nicht ermittelt werden.';
-            els.results.innerHTML = '<div class="empty-state">Bitte Standort antippen. Die letzte Adresse wird beim Start nicht automatisch geladen.</div>';
-            hideSplashScreen();
+            setStartupInteractionLock(false);
+            restoreStoredStartState(lastLocation);
         },
     });
 
     window.setTimeout(() => {
         if (state.startupLocationPending && lastLocation) {
             state.startupLocationPending = false;
-            state.selectedLocation = null;
-            if (els.searchInput) els.searchInput.value = '';
             setStartupInteractionLock(false);
-            setStatus('Bereit');
-            els.resultCount.textContent = 'Standort offen';
-            els.resultMeta.textContent = 'Standort dauert zu lange.';
-            els.results.innerHTML = '<div class="empty-state">Bitte Standort antippen. Keine alte Adresse wird automatisch geladen.</div>';
-            hideSplashScreen();
+            restoreStoredStartState(lastLocation);
             return;
         }
         loadStartupFallbackList();
@@ -11591,6 +12635,9 @@ function bindEvents() {
         if (event.key === 'Escape' && !els.dashcamRecordingsPage?.hidden) {
             setDashcamRecordingsPageOpen(false);
         }
+        if (event.key === 'Escape' && !els.tripSummaryScreen?.hidden) {
+            closeTripSummaryScreen();
+        }
     });
     document.addEventListener('visibilitychange', () => {
         handleDriveWakeLockVisibility();
@@ -11623,7 +12670,7 @@ function bindEvents() {
     els.dashcamCheapestPanel?.addEventListener('click', openDashcamCheapestNavigation);
     els.dashcamSave?.addEventListener('click', () => saveDashcamSequence().catch(() => showDashcamMessage('Sequenz konnte nicht archiviert werden.')));
     els.dashcamPause?.addEventListener('click', toggleDashcamPause);
-    els.dashcamStop?.addEventListener('click', () => stopDashcamMode({ askSave: true }).catch(() => null));
+    els.dashcamStop?.addEventListener('click', () => stopDashcamMode({ askSave: true, showTripSummary: true }).catch(() => null));
     els.dashcamExit?.addEventListener('click', () => stopDashcamMode({ askSave: true }).catch(() => null));
     els.dashcamRecordingsButton?.addEventListener('click', () => {
         setDashcamRecordingsPageOpen(true);
@@ -11631,6 +12678,10 @@ function bindEvents() {
     els.dashcamRecordingsBack?.addEventListener('click', () => setDashcamRecordingsPageOpen(false));
     els.dashcamSettingsRecordingsRefresh?.addEventListener('click', () => renderDashcamRecordings().catch(() => null));
     els.dashcamSettingsPlayerClose?.addEventListener('click', closeDashcamSettingsPlayer);
+    els.tripSummaryClose?.addEventListener('click', closeTripSummaryScreen);
+    els.tripSummaryScreen?.addEventListener('click', (event) => {
+        if (event.target === els.tripSummaryScreen) closeTripSummaryScreen();
+    });
     els.dashcamSettingsRecordingsList?.addEventListener('click', (event) => {
         handleDashcamRecordingAction(event).catch(() => showDashcamMessage('Aktion konnte nicht ausgefuehrt werden.'));
     });
@@ -11893,6 +12944,16 @@ function bindEvents() {
         setView('list');
         renderDrivingModeList();
     });
+    els.drivingMapZoomIn?.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        applyDrivingMapZoom(0.5);
+    });
+    els.drivingMapZoomOut?.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        applyDrivingMapZoom(-0.5);
+    });
     els.driveMode?.addEventListener('click', () => {
         if (state.drivingActive) {
             if (state.listMode === 'driving' && state.view === 'map') {
@@ -11900,7 +12961,7 @@ function bindEvents() {
                 renderDrivingModeList();
                 return;
             }
-            stopDrivingMode(true);
+            stopDrivingMode(true, { showSummary: true });
             return;
         }
         const startsFromElectricArea = state.listMode === 'charging'
